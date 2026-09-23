@@ -848,6 +848,16 @@ internal static class Contrato
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
         Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
         Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
+
+        // ── Spec 046: fotos de estudios de cardiología → resumen y preguntas ────────────────────
+        Prueba("346. la respuesta del modelo da UN resultado por foto: el JSON se encuentra aunque venga envuelto en ``` o con texto alrededor, se empareja por id y, si el id no casa, por orden; y una foto de la que no volvió nada queda «sin leer», ni cardiológica ni omitida", UnResultadoPorFoto);
+        Prueba("347. de una foto no cardiológica solo se conserva el motivo: aunque el modelo devuelva tipo, hallazgos o valores, se descartan en código y no llegan ni al resumen ni a las preguntas", LoNoCardiologicoSeDescartaEnCodigo);
+        Prueba("348. las fotos viajan al modelo en lotes de 3, cada imagen precedida de «Imagen n — id: X» y con store:false; el resumen y las preguntas no llevan ninguna imagen, y una pregunta lleva solo las extracciones cardiológicas, el resumen, las últimas 10 vueltas y la pregunta", LasFotosViajanEnLotesYLasPreguntasSinFotos);
+        Prueba("349. una foto se prepara a lado mayor 1600 px sin agrandar nunca, en JPEG sobre fondo blanco; y una que no se puede leer se nombra («No se pudo leer X. Expórtala como JPG») sin tumbar a las demás", UnaFotoSePreparaYUnaIlegibleSeNombra);
+        Prueba("350. la sesión caduca 24 h después de la PRIMERA foto, no de la última: al cargarla caducada se borra entera —fotos, lecturas, resumen y chat— y no queda nada en disco; y lo guardado no se lee como texto claro", LaSesionCaducaDesdeLaPrimeraFoto);
+        Prueba("351. el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal", ElResumenSePintaSinEjecutarMarcado);
+        Prueba("352. el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…»", ElBotonYElProgresoDicenLaVerdad);
+        Prueba("353. si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó", SiElModeloFallaLoLeidoSeConserva);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -13453,6 +13463,416 @@ internal static class Contrato
         var (r4, ms4, _) = Pulsa(Mundo(), "uia:name=Guardar;ct=Button", "Guardar");
         Debe(r4.SePudo && ms4 >= Presupuesto - 100, $"un botón sigue esperando el presupuesto entero: {ms4} ms de {Presupuesto}");
         Debe(!r4.Cuenta.Contains("campo"), $"y no se le llama campo a lo que no lo es: «{r4.Cuenta}»");
+    }
+
+    // ── Spec 046: fotos de estudios de cardiología → resumen y preguntas ─────────────────────────
+    //
+    // Todo se pide por NOMBRE (flujo-sdd.md): el contrato tiene que compilar contra un núcleo que aún
+    // no tiene U.WindowsClient.Cardio, y ahí cada promesa dice PENDIENTE, que cuenta como incumplida.
+    // El modelo es de mentira y ANOTA lo que recibe: sin red, sin clave y sin pantalla.
+
+    private static Type? Cardio(string nombre) => Capacidad("U.WindowsClient.Cardio." + nombre);
+
+    private static MethodInfo? MetodoCardio(Type? t, string nombre, int aridad) =>
+        t?.GetMethods().FirstOrDefault(m => m.Name == nombre && m.GetParameters().Length == aridad);
+
+    /// <summary>Una respuesta con la forma de la Responses API: el texto va en output[].content[].text.</summary>
+    private static string RespuestaDeOpenAI(string texto) =>
+        JsonSerializer.Serialize(new
+        {
+            output = new object[]
+            {
+                new { type = "reasoning", summary = Array.Empty<object>() },
+                new { type = "message", content = new object[] { new { type = "output_text", text = texto } } },
+            },
+        });
+
+    /// <summary>Cuántas imágenes lleva un cuerpo de petición, y los ids que anuncian sus etiquetas.</summary>
+    private static (int Imagenes, List<string> Ids) LoQueLleva(string cuerpo)
+    {
+        int imagenes = 0;
+        var ids = new List<string>();
+        using var doc = JsonDocument.Parse(cuerpo);
+        if (!doc.RootElement.TryGetProperty("input", out var entrada)) return (0, ids);
+        foreach (var mensaje in entrada.EnumerateArray())
+        {
+            if (!mensaje.TryGetProperty("content", out var contenido) || contenido.ValueKind != JsonValueKind.Array) continue;
+            foreach (var parte in contenido.EnumerateArray())
+            {
+                string tipo = parte.TryGetProperty("type", out var ti) ? ti.GetString() ?? "" : "";
+                if (tipo == "input_image") imagenes++;
+                if (tipo == "input_text")
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(parte.GetProperty("text").GetString() ?? "", @"^Imagen \d+ — id: (\S+)$");
+                    if (m.Success) ids.Add(m.Groups[1].Value);
+                }
+            }
+        }
+        return (imagenes, ids);
+    }
+
+    /// <summary>
+    /// Una sesión con <paramref name="n"/> fotos f1..fn. La foto «f2» es una selfie: el modelo de
+    /// mentira la marca no cardiológica y AUN ASÍ le devuelve contenido, que es lo que la 347 juzga.
+    /// </summary>
+    private static dynamic? SesionConFotos(int n, DateTime primera)
+    {
+        var tSesion = Cardio("SesionCardio");
+        var tFoto = Cardio("FotoCardio");
+        if (tSesion == null || tFoto == null) return null;
+        dynamic s = Activator.CreateInstance(tSesion)!;
+        for (int i = 1; i <= n; i++)
+        {
+            dynamic f = Activator.CreateInstance(tFoto)!;
+            f.Id = "f" + i;
+            f.Nombre = $"foto{i}.jpg";
+            f.Jpeg = new byte[] { 0xFF, 0xD8, (byte)i, 0xFF, 0xD9 };
+            s.Agregar(f, primera.AddMinutes(i));
+        }
+        return s;
+    }
+
+    /// <summary>El modelo de mentira. Anota cada cuerpo; <paramref name="fallaEn"/> hace fallar esa llamada (1-based).</summary>
+    private static Func<string, CancellationToken, Task<string>> ModeloDeMentira(List<string> cuerpos, Func<int, bool>? fallaEn = null)
+    {
+        return (cuerpo, _) =>
+        {
+            cuerpos.Add(cuerpo);
+            if (fallaEn != null && fallaEn(cuerpos.Count)) throw new HttpRequestException("503 Service Unavailable (de mentira)");
+            var (imagenes, ids) = LoQueLleva(cuerpo);
+            if (imagenes == 0)
+                return Task.FromResult(RespuestaDeOpenAI("## Estudios revisados\n- ECG de 12 derivaciones (2026-09-10)\n\n## Hallazgos clave\n- **Ritmo sinusal**"));
+            var resultados = ids.Select(id => id == "f2"
+                ? (object)new { id, cardiologia = false, motivo_omision = "foto personal", tipo = "Selfie en Cartagena", hallazgos = new[] { "Juan Pérez sonriendo" }, valores = new[] { new { nombre = "edad", valor = "45", unidad = "años" } }, alertas = new[] { "PLAYA" } }
+                : new { id, cardiologia = true, tipo = "ECG de 12 derivaciones", fecha = "2026-09-10", hallazgos = new[] { "Ritmo sinusal" }, valores = new[] { new { nombre = "FC", valor = "72", unidad = "lpm" } }, alertas = Array.Empty<string>(), confianza = "alta" });
+            return Task.FromResult(RespuestaDeOpenAI("```json\n" + JsonSerializer.Serialize(new { resultados }) + "\n```"));
+        };
+    }
+
+    private static void UnResultadoPorFoto()
+    {
+        var t = Cardio("LecturaCardio");
+        var emparejar = MetodoCardio(t, "Emparejar", 2);
+        if (emparejar == null) { Pendiente("Cardio.LecturaCardio.Emparejar(respuesta, ids)", "346", "046"); return; }
+        List<dynamic> Emparejar(string respuesta, params string[] ids) =>
+            ((System.Collections.IEnumerable)emparejar.Invoke(null, new object[] { respuesta, ids })!).Cast<dynamic>().ToList();
+
+        // 1. ENVUELTO EN ``` Y CON TEXTO ALREDEDOR, fuera de orden y con una foto de la que no volvió nada.
+        var r = Emparejar("Aquí tienes:\n```json\n{\"resultados\":[{\"id\":\"c\",\"cardiologia\":true,\"tipo\":\"ECG\"},"
+                          + "{\"id\":\"a\",\"cardiologia\":false,\"motivo_omision\":\"selfie\"}]}\n```\nListo.", "a", "b", "c");
+        Debe(r.Count == 3, $"un resultado por foto, ni más ni menos: salieron {r.Count} de 3");
+        if (r.Count != 3) return;
+        Debe((string)r[0].Id == "a" && (string)r[1].Id == "b" && (string)r[2].Id == "c",
+            $"en el orden de las fotos, no en el del modelo: [{string.Join(", ", r.Select(x => (string)x.Id))}]");
+        Debe(r[2].Estado.ToString() == "Cardiologia" && (string)r[2].Tipo == "ECG", $"«c» se empareja por su id: {r[2].Estado} «{r[2].Tipo}»");
+        Debe(r[0].Estado.ToString() == "Omitida", $"«a» es la omitida: {r[0].Estado}");
+        Debe(r[1].Estado.ToString() == "SinLeer",
+            $"de «b» no volvió nada, y eso es «sin leer» —ni cardiológica ni omitida—: {r[1].Estado}");
+
+        // 2. SI LOS IDS NO CASAN, POR ORDEN. El modelo a veces devuelve «imagen 1» en vez del id.
+        var p = Emparejar("{\"resultados\":[{\"id\":\"imagen 1\",\"cardiologia\":true,\"tipo\":\"Eco\"},{\"id\":\"imagen 2\",\"cardiologia\":false}]}", "x", "y");
+        Debe(p.Count == 2 && p[0].Estado.ToString() == "Cardiologia" && (string)p[0].Tipo == "Eco" && p[1].Estado.ToString() == "Omitida",
+            $"con ids que no casan se empareja por orden: [{string.Join(", ", p.Select(x => $"{x.Id}={x.Estado}"))}]");
+
+        // 3. BASURA NO TUMBA NADA: todas quedan sin leer y se pueden reintentar.
+        var b = Emparejar("Lo siento, no puedo ayudar con eso.", "m", "n");
+        Debe(b.Count == 2 && b.All(x => x.Estado.ToString() == "SinLeer"),
+            $"una respuesta sin JSON deja las fotos sin leer, sin excepción: [{string.Join(", ", b.Select(x => (string)x.Estado.ToString()))}]");
+    }
+
+    private static void LoNoCardiologicoSeDescartaEnCodigo()
+    {
+        var t = Cardio("LecturaCardio");
+        var emparejar = MetodoCardio(t, "Emparejar", 2);
+        var resumir = MetodoCardio(t, "CuerpoResumir", 2);
+        var preguntar = MetodoCardio(t, "CuerpoPreguntar", 5);
+        var tVuelta = Cardio("VueltaDeChat");
+        if (emparejar == null || resumir == null || preguntar == null || tVuelta == null)
+        {
+            Pendiente("Cardio.LecturaCardio.Emparejar + CuerpoResumir + CuerpoPreguntar + VueltaDeChat", "347", "046");
+            return;
+        }
+
+        const string respuesta = "{\"resultados\":["
+            + "{\"id\":\"a\",\"cardiologia\":false,\"motivo_omision\":\"foto personal\",\"tipo\":\"Selfie en Cartagena\","
+            + "\"hallazgos\":[\"Juan Pérez sonriendo\"],\"valores\":[{\"nombre\":\"edad\",\"valor\":\"45\",\"unidad\":\"años\"}],\"alertas\":[\"PLAYA\"]},"
+            + "{\"id\":\"b\",\"cardiologia\":false,\"tipo\":\"Rx de rodilla\",\"hallazgos\":[\"Gonartrosis\"]},"
+            + "{\"id\":\"c\",\"cardiologia\":true,\"tipo\":\"Ecocardiograma\",\"fecha\":\"2026-09-10\",\"valores\":[{\"nombre\":\"FEVI\",\"valor\":\"45\",\"unidad\":\"%\"}]}]}";
+        var lista = emparejar.Invoke(null, new object[] { respuesta, new[] { "a", "b", "c" } })!;
+        var r = ((System.Collections.IEnumerable)lista).Cast<dynamic>().ToList();
+
+        // 1. DE LA OMITIDA SOLO QUEDA EL MOTIVO, aunque el modelo haya devuelto su contenido.
+        var a = r[0];
+        Debe((string)a.Tipo == "" && ((System.Collections.ICollection)a.Hallazgos).Count == 0
+             && ((System.Collections.ICollection)a.Valores).Count == 0 && ((System.Collections.ICollection)a.Alertas).Count == 0,
+            $"de una no cardiológica no se guarda tipo, hallazgos, valores ni alertas (tipo «{a.Tipo}», {((System.Collections.ICollection)a.Hallazgos).Count} hallazgo(s))");
+        Debe((string)a.Motivo == "foto personal", $"y sí su motivo: «{a.Motivo}»");
+        Debe(!string.IsNullOrWhiteSpace((string)r[1].Motivo), $"sin motivo del modelo, se pone uno: «{r[1].Motivo}»");
+
+        // 2. Y AUNQUE ALGUIEN LLENE A MANO UNA OMITIDA, no viaja ni al resumen ni a la pregunta.
+        a.Tipo = "Selfie en Cartagena";
+        a.Hallazgos.Add("Juan Pérez sonriendo");
+        a.Motivo = "Juan Pérez en la playa";
+        string cuerpoResumen = (string)resumir.Invoke(null, new object[] { "modelo-x", lista })!;
+        var historial = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tVuelta))!;
+        string cuerpoPregunta = (string)preguntar.Invoke(null, new object[] { "modelo-x", lista, "## Resumen", historial, "¿Qué FEVI tiene?" })!;
+        foreach (var (nombre, cuerpo) in new[] { ("el resumen", cuerpoResumen), ("la pregunta", cuerpoPregunta) })
+        {
+            var fuga = new[] { "Cartagena", "Juan", "PLAYA", "rodilla", "Gonartrosis" }.Where(x => cuerpo.Contains(x)).ToList();
+            Debe(fuga.Count == 0, $"nada de las omitidas llega a {nombre}; se coló: [{string.Join(", ", fuga)}]");
+            Debe(cuerpo.Contains("FEVI") && cuerpo.Contains("Ecocardiograma"), $"y lo cardiológico sí llega a {nombre}");
+        }
+    }
+
+    private static void LasFotosViajanEnLotesYLasPreguntasSinFotos()
+    {
+        var tCliente = Cardio("ClienteCardio");
+        var tVuelta = Cardio("VueltaDeChat");
+        var ctor = tCliente?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var generar = MetodoCardio(tCliente, "GenerarAsync", 3);
+        var preguntar = MetodoCardio(tCliente, "PreguntarAsync", 3);
+        dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
+        if (ctor == null || generar == null || preguntar == null || tVuelta == null || s == null)
+        {
+            Pendiente("Cardio.ClienteCardio(enviar, modelo) + GenerarAsync + PreguntarAsync + SesionCardio", "348", "046");
+            return;
+        }
+
+        var cuerpos = new List<string>();
+        var cliente = ctor.Invoke(new object[] { ModeloDeMentira(cuerpos), "modelo-x" });
+        ((Task)generar.Invoke(cliente, new object[] { s, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
+
+        // 1. LOTES DE 3, con cada imagen anunciada por su id.
+        var conFotos = cuerpos.Select(LoQueLleva).Where(x => x.Imagenes > 0).ToList();
+        Debe(conFotos.Select(x => x.Imagenes).SequenceEqual(new[] { 3, 3, 1 }),
+            $"7 fotos viajan en lotes de 3: [{string.Join(", ", conFotos.Select(x => x.Imagenes))}]");
+        Debe(conFotos.All(x => x.Ids.Count == x.Imagenes)
+             && conFotos.SelectMany(x => x.Ids).SequenceEqual(Enumerable.Range(1, 7).Select(i => "f" + i)),
+            $"cada imagen va precedida de «Imagen n — id: X»: [{string.Join(", ", conFotos.SelectMany(x => x.Ids))}]");
+        Debe(cuerpos.All(c => JsonDocument.Parse(c).RootElement.TryGetProperty("store", out var st) && st.ValueKind == JsonValueKind.False),
+            "todas las peticiones piden store:false");
+        Debe(cuerpos.Count == 4 && LoQueLleva(cuerpos[3]).Imagenes == 0,
+            $"el resumen es una llamada más y SIN imágenes: {cuerpos.Count} llamada(s)");
+
+        // 2. LA PREGUNTA NO REENVÍA IMÁGENES y lleva solo las últimas 10 vueltas.
+        for (int i = 1; i <= 12; i++)
+        {
+            dynamic v = Activator.CreateInstance(tVuelta)!;
+            v.Pregunta = $"turno-{i:00}";
+            v.Respuesta = $"respuesta-{i:00}";
+            s.Chat.Add(v);
+        }
+        cuerpos.Clear();
+        string respuesta = ((Task<string>)preguntar.Invoke(cliente, new object[] { s, "¿Qué frecuencia cardiaca tiene?", CancellationToken.None })!).GetAwaiter().GetResult();
+        Debe(cuerpos.Count == 1 && LoQueLleva(cuerpos[0]).Imagenes == 0, "una pregunta es UNA llamada y no lleva ninguna imagen");
+        string cp = cuerpos.FirstOrDefault() ?? "";
+        Debe(cp.Contains("frecuencia cardiaca") && cp.Contains("Ritmo sinusal") && cp.Contains("Estudios revisados"),
+            "lleva la pregunta, las extracciones y el resumen");
+        Debe(!cp.Contains("turno-01") && !cp.Contains("turno-02") && cp.Contains("turno-03") && cp.Contains("turno-12"),
+            "del chat viajan solo las últimas 10 vueltas");
+        Debe(!cp.Contains("data:image"), "ni rastro de una imagen en la pregunta");
+        Debe(!string.IsNullOrWhiteSpace(respuesta) && s.Chat.Count == 13, $"la vuelta queda en el historial: {s.Chat.Count} de 13");
+    }
+
+    private static void UnaFotoSePreparaYUnaIlegibleSeNombra()
+    {
+        var t = Cardio("PreparadorDeFotos");
+        var preparar = t?.GetMethods().FirstOrDefault(m => m.Name == "Preparar" && m.GetParameters().Length == 2
+                                                           && m.GetParameters()[1].ParameterType == typeof(byte[]));
+        if (preparar == null) { Pendiente("Cardio.PreparadorDeFotos.Preparar(nombre, bytes)", "349", "046"); return; }
+        dynamic Preparar(string nombre, byte[] bytes) => preparar.Invoke(null, new object[] { nombre, bytes })!;
+
+        byte[] Png(int ancho, int alto)
+        {
+            // TRANSPARENTE ENTERA: si el fondo no se pinta blanco, el JPEG sale negro.
+            var px = new byte[ancho * alto * 4];
+            var bmp = System.Windows.Media.Imaging.BitmapSource.Create(ancho, alto, 96, 96,
+                System.Windows.Media.PixelFormats.Bgra32, null, px, ancho * 4);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using var ms = new MemoryStream();
+            enc.Save(ms);
+            return ms.ToArray();
+        }
+
+        // 1. GRANDE → LADO MAYOR 1600, JPEG, FONDO BLANCO.
+        var g = Preparar("captura.png", Png(3200, 800));
+        Debe((bool)g.Ok, $"una captura grande se prepara: «{g.Error}»");
+        if (!(bool)g.Ok) return;
+        Debe((int)g.Ancho == 1600 && (int)g.Alto == 400, $"a lado mayor 1600 px, con su proporción: {g.Ancho}×{g.Alto}");
+        byte[] jpeg = g.Jpeg;
+        Debe(jpeg.Length > 3 && jpeg[0] == 0xFF && jpeg[1] == 0xD8, "y sale en JPEG");
+        var decod = System.Windows.Media.Imaging.BitmapDecoder.Create(new MemoryStream(jpeg),
+            System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad).Frames[0];
+        var bgr = new System.Windows.Media.Imaging.FormatConvertedBitmap(decod, System.Windows.Media.PixelFormats.Bgr32, null, 0);
+        var pixel = new byte[4];
+        bgr.CopyPixels(new System.Windows.Int32Rect(10, 10, 1, 1), pixel, 4, 0);
+        Debe(pixel[0] > 240 && pixel[1] > 240 && pixel[2] > 240, $"lo transparente queda BLANCO, no negro: ({pixel[2]},{pixel[1]},{pixel[0]})");
+
+        // 2. PEQUEÑA → NO SE AGRANDA.
+        var c = Preparar("chica.png", Png(800, 600));
+        Debe((bool)c.Ok && (int)c.Ancho == 800 && (int)c.Alto == 600, $"una foto pequeña no se agranda: {c.Ancho}×{c.Alto}");
+
+        // 3. ILEGIBLE → SE NOMBRA Y NO LANZA.
+        var h = Preparar("IMG_0001.HEIC", new byte[] { 0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63 });
+        Debe(!(bool)h.Ok && (string)h.Error == "No se pudo leer IMG_0001.HEIC. Expórtala como JPG",
+            $"una ilegible se nombra y se dice qué hacer: «{h.Error}»");
+    }
+
+    private static void LaSesionCaducaDesdeLaPrimeraFoto()
+    {
+        var t = Cardio("AlmacenCardio");
+        var ctor = t?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var guardar = t?.GetMethod("Guardar");
+        var cargar = t?.GetMethod("Cargar");
+        var tVuelta = Cardio("VueltaDeChat");
+        var t0 = new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc);
+        dynamic? s = SesionConFotos(1, t0.AddMinutes(-1));
+        if (ctor == null || guardar == null || cargar == null || tVuelta == null || s == null)
+        {
+            Pendiente("Cardio.AlmacenCardio(carpeta, reloj) + Guardar + Cargar", "350", "046");
+            return;
+        }
+
+        // 1. LA PRIMERA FOTO MANDA. Una foto 20 h después no alarga la vida de la sesión.
+        dynamic tarde = Activator.CreateInstance(Cardio("FotoCardio")!)!;
+        tarde.Id = "tarde";
+        tarde.Nombre = "tarde.jpg";
+        tarde.Jpeg = Encoding.UTF8.GetBytes("JPEG-MARCADOR-DE-LA-FOTO");
+        s.Agregar(tarde, t0.AddHours(20));
+        Debe((DateTime)s.PrimeraFotoUtc == t0, $"la caducidad cuenta desde la PRIMERA foto: {s.PrimeraFotoUtc:o}");
+        s.Resumen = "RESUMEN-SECRETO FEVI 45 %";
+        dynamic v = Activator.CreateInstance(tVuelta)!;
+        v.Pregunta = "PREGUNTA-SECRETA";
+        v.Respuesta = "RESPUESTA-SECRETA";
+        s.Chat.Add(v);
+
+        string carpeta = Path.Combine(_raiz, "cardio-350");
+        DateTime ahora = t0.AddHours(20);
+        var almacen = ctor.Invoke(new object[] { carpeta, (Func<DateTime>)(() => ahora) });
+        guardar.Invoke(almacen, new object[] { s });
+
+        // 2. EN DISCO NO SE LEE COMO TEXTO CLARO.
+        var archivos = Directory.Exists(carpeta) ? Directory.GetFiles(carpeta, "*", SearchOption.AllDirectories) : Array.Empty<string>();
+        Debe(archivos.Length > 0, "la sesión se guarda en disco para sobrevivir a un reinicio");
+        var claros = archivos.Where(f =>
+        {
+            string txt = Encoding.UTF8.GetString(File.ReadAllBytes(f));
+            return txt.Contains("RESUMEN-SECRETO") || txt.Contains("PREGUNTA-SECRETA") || txt.Contains("JPEG-MARCADOR");
+        }).ToList();
+        Debe(claros.Count == 0, $"nada de lo guardado se lee como texto claro: [{string.Join(", ", claros.Select(Path.GetFileName))}]");
+
+        // 3. ANTES DE LAS 24 H VUELVE ENTERA.
+        ahora = t0.AddHours(23).AddMinutes(59);
+        dynamic? leida = cargar.Invoke(almacen, Array.Empty<object>());
+        Debe(leida != null && leida!.Fotos.Count == 2 && (string)leida.Resumen == "RESUMEN-SECRETO FEVI 45 %" && leida.Chat.Count == 1,
+            "a las 23 h 59 min la sesión vuelve entera: fotos, resumen y chat");
+        if (leida != null)
+        {
+            byte[] j = ((IEnumerable<dynamic>)leida.Fotos).Cast<dynamic>().First(f => (string)f.Id == "tarde").Jpeg;
+            Debe(Encoding.UTF8.GetString(j) == "JPEG-MARCADOR-DE-LA-FOTO", "con los bytes de cada foto intactos");
+        }
+
+        // 4. PASADAS LAS 24 H DESDE LA PRIMERA, SE BORRA ENTERA.
+        ahora = t0.AddHours(24).AddMinutes(1);
+        dynamic? caducada = cargar.Invoke(almacen, Array.Empty<object>());
+        Debe(caducada == null, "a las 24 h desde la primera foto la sesión ya no se devuelve");
+        int quedan = Directory.Exists(carpeta) ? Directory.GetFiles(carpeta, "*", SearchOption.AllDirectories).Length : 0;
+        Debe(quedan == 0, $"y no queda NADA en disco: {quedan} archivo(s)");
+    }
+
+    private static void ElResumenSePintaSinEjecutarMarcado()
+    {
+        var bloques = MetodoCardio(Cardio("MarkdownSimple"), "Bloques", 1);
+        if (bloques == null) { Pendiente("Cardio.MarkdownSimple.Bloques(texto)", "351", "046"); return; }
+
+        const string md = "## Hallazgos clave\n- **FEVI** 45 %\n<script>alert(1)</script> y <b>x</b>\n* otra **sin cerrar\n\n";
+        var b = ((System.Collections.IEnumerable)bloques.Invoke(null, new object[] { md })!).Cast<dynamic>().ToList();
+        string Texto(dynamic bloque) => string.Concat(((System.Collections.IEnumerable)bloque.Trozos).Cast<dynamic>().Select(x => (string)x.Texto));
+        Debe(b.Count == 4, $"cuatro bloques, las líneas vacías no cuentan: salieron {b.Count}");
+        if (b.Count != 4) return;
+        Debe(b[0].Tipo.ToString() == "Titulo" && Texto(b[0]) == "Hallazgos clave", $"«## …» es un título: {b[0].Tipo} «{Texto(b[0])}»");
+        var trozos = ((System.Collections.IEnumerable)b[1].Trozos).Cast<dynamic>().ToList();
+        Debe(b[1].Tipo.ToString() == "Vineta" && trozos.Count == 2 && (string)trozos[0].Texto == "FEVI" && (bool)trozos[0].Negrita
+             && (string)trozos[1].Texto == " 45 %" && !(bool)trozos[1].Negrita,
+            $"«- **FEVI** 45 %» es una viñeta con «FEVI» en negrita: {b[1].Tipo} [{string.Join("|", trozos.Select(x => $"{x.Texto}:{x.Negrita}"))}]");
+        Debe(b[2].Tipo.ToString() == "Parrafo" && Texto(b[2]) == "<script>alert(1)</script> y <b>x</b>"
+             && ((System.Collections.IEnumerable)b[2].Trozos).Cast<dynamic>().All(x => !(bool)x.Negrita),
+            $"el marcado ajeno es texto literal, no se interpreta: «{Texto(b[2])}»");
+        Debe(b[3].Tipo.ToString() == "Vineta" && Texto(b[3]) == "otra **sin cerrar",
+            $"un ** sin cerrar se queda como está: «{Texto(b[3])}»");
+    }
+
+    private static void ElBotonYElProgresoDicenLaVerdad()
+    {
+        var t = Cardio("ReglaCardio");
+        var etiqueta = MetodoCardio(t, "EtiquetaDelBoton", 3);
+        var progreso = MetodoCardio(t, "Progreso", 3);
+        var hayCambios = MetodoCardio(t, "HayCambios", 1);
+        var tCliente = Cardio("ClienteCardio");
+        var ctor = tCliente?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var generar = MetodoCardio(tCliente, "GenerarAsync", 3);
+        dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
+        if (etiqueta == null || progreso == null || hayCambios == null || ctor == null || generar == null || s == null)
+        {
+            Pendiente("Cardio.ReglaCardio.EtiquetaDelBoton + Progreso + HayCambios", "352", "046");
+            return;
+        }
+        string Etiqueta(int n, bool resumen, bool cambios) => (string)etiqueta.Invoke(null, new object[] { n, resumen, cambios })!;
+        string Progreso(int a, int b, int total) => (string)progreso.Invoke(null, new object[] { a, b, total })!;
+        bool Cambios() => (bool)hayCambios.Invoke(null, new object[] { s })!;
+
+        Debe(Etiqueta(12, false, true) == "Generar resumen (12)", $"sin resumen: «{Etiqueta(12, false, true)}»");
+        Debe(Etiqueta(12, true, true) == "Actualizar resumen", $"con resumen y fotos cambiadas: «{Etiqueta(12, true, true)}»");
+        Debe(Etiqueta(12, true, false) == "Resumen al día", $"con resumen y nada nuevo: «{Etiqueta(12, true, false)}»");
+        Debe(Progreso(4, 6, 12) == "Leyendo fotos 4–6 de 12…", $"«{Progreso(4, 6, 12)}»");
+        Debe(Progreso(7, 7, 7) == "Leyendo foto 7 de 7…", $"una sola foto se dice en singular: «{Progreso(7, 7, 7)}»");
+
+        // EL PROGRESO REAL CUENTA SOBRE EL PLAN (patrón nº10): 7 fotos son «de 7» en cada lote.
+        var lineas = new List<string>();
+        var cliente = ctor.Invoke(new object[] { ModeloDeMentira(new List<string>()), "modelo-x" });
+        Debe(Cambios(), "antes de generar, hay cambios");
+        ((Task)generar.Invoke(cliente, new object[] { s, (Action<string>)(l => lineas.Add(l)), CancellationToken.None })!).GetAwaiter().GetResult();
+        Debe(lineas.SequenceEqual(new[] { "Leyendo fotos 1–3 de 7…", "Leyendo fotos 4–6 de 7…", "Leyendo foto 7 de 7…", "Generando resumen…" }),
+            $"el progreso dice lo que pasa, sobre el plan: [{string.Join(" ¦ ", lineas)}]");
+        Debe(!Cambios(), "recién generado, no hay cambios");
+        s.Quitar("f3");
+        Debe(Cambios(), "quitar una foto cuenta como cambio: el resumen ya no describe lo que hay");
+    }
+
+    private static void SiElModeloFallaLoLeidoSeConserva()
+    {
+        var tCliente = Cardio("ClienteCardio");
+        var ctor = tCliente?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var generar = MetodoCardio(tCliente, "GenerarAsync", 3);
+        dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
+        if (ctor == null || generar == null || s == null)
+        {
+            Pendiente("Cardio.ClienteCardio.GenerarAsync", "353", "046");
+            return;
+        }
+
+        // 1. FALLA EL SEGUNDO LOTE.
+        var cuerpos = new List<string>();
+        var roto = ctor.Invoke(new object[] { ModeloDeMentira(cuerpos, n => n == 2), "modelo-x" });
+        string error = "";
+        try { ((Task)generar.Invoke(roto, new object[] { s, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult(); }
+        catch (Exception e) { error = e.Message; }
+        Debe(error.Contains("4–6") && error.Contains("503"),
+            $"el error dice QUÉ lote falló y por qué, no «algo falló»: «{error}»");
+        var fotos = ((IEnumerable<dynamic>)s.Fotos).Cast<dynamic>().ToList();
+        bool Leida(dynamic f) => f.Resultado != null && f.Resultado.Estado.ToString() != "SinLeer";
+        Debe(fotos.Take(3).All(Leida), "lo leído antes del fallo se conserva");
+        Debe(fotos.Skip(3).All(f => !Leida(f)), "lo que no se leyó queda por leer, no omitido");
+        Debe(string.IsNullOrEmpty((string)s.Resumen), "y sin todas las fotos leídas no se inventa un resumen a medias");
+
+        // 2. REINTENTAR LEE SOLO LO QUE FALTÓ.
+        cuerpos.Clear();
+        var sano = ctor.Invoke(new object[] { ModeloDeMentira(cuerpos), "modelo-x" });
+        ((Task)generar.Invoke(sano, new object[] { s, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
+        var releidas = cuerpos.Select(LoQueLleva).SelectMany(x => x.Ids).ToList();
+        Debe(releidas.SequenceEqual(new[] { "f4", "f5", "f6", "f7" }), $"el reintento lee solo lo que faltó: [{string.Join(", ", releidas)}]");
+        Debe(!string.IsNullOrEmpty((string)s.Resumen), "y ahora sí hay resumen");
     }
 
     private static void Debe(bool condicion, string promesa)
