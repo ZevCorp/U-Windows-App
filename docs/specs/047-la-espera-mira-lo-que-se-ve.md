@@ -1169,8 +1169,9 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C
 - [x] 351–359 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO, 307 ✔ / 0 ✘, M), 360 reservada fuera del contrato (2026-09-23, fase 8; la fase 2 sigue sin entrar sin el nivel 4 de la fase 0)
-- [ ] Un sabotaje por promesa, verificado por diff, con el veredicto literal en el PR
+- [x] Un sabotaje por promesa, verificado por diff, con el veredicto literal en el PR (la tabla de la revisión del 23-09 y la de cada fase; 2026-09-23)
 - [x] La 334 reescrita en el registro y anotada en la spec 043; la 299 y la 040 sin tocar (2026-09-22, fase 3)
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
+- [x] `.\scripts\verificar.ps1 -SinCompilar` pasa la compuerta automática sobre `f2a19fe`, con el nivel 1 compilado aparte justo antes (0 errores): contrato 307/307, 0 pendientes, `CONTRATO INTACTO`; voz 46/46, `VOZ ÍNTEGRA`; escenarios y nivel 4 **NO CORRIDO** (M, 2026-09-23 01:29, `TEMP` propio)
+- [x] Choques con A, C y D medidos con `git merge-tree` (2026-09-23): con A, `Contrato.cs` y la línea `:343` de `SurfaceMapTools` (A pone `puerta.Nombre`, B el último argumento `QueCambio`: se quedan los dos); con C, `Contrato.cs` y 3 hunks de `RecorrerSegunElNucleo` (C rebasa encima); con D, solo `Contrato.cs`. Orden: A ∥ B → C → D
 - [ ] Probado en ≥3 pantallas, con nombre: ChatGPT.exe, Gmail en Chrome, Explorador «Descargas»
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
