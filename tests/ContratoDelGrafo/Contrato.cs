@@ -14422,6 +14422,23 @@ internal static class Contrato
         Llamar(maqApagada, "Encender");
         Debe(!Cierto(maqApagada, "OverlayVisible") && Cierto(maqApagada, "PanelVisible"), "con el overlay apagado, encender Jev enseña el panel y ninguna ventana de overlay");
 
+        // AÑADIDAS EN LA FASE 6, ANTES QUE SU CÓDIGO. (1) Un valor que no es «si» apaga, y el porqué dice LO QUE
+        // SE LEYÓ: «sin U_JEV_OVERLAY» no puede cubrir también «U_JEV_OVERLAY=no» ni una errata (patrón nº2), y
+        // una variable vacía no es ausente pero tampoco enciende (patrón nº9). Mayúsculas y espacios no cuentan,
+        // como en U_DECISOR (ConfiguracionDelDecisor.Leer). (2) Con el overlay apagado no hay cajas que contar:
+        // tres cajas «visibles» sobre una ventana que no existe es la caja que miente (aprendizaje nº4).
+        foreach (var (valor, dice) in new[] { ("no", "U_JEV_OVERLAY=no"), ("1", "«1»"), ("  ", "vacía") })
+        {
+            var c = Leer(n => n == "U_JEV_OVERLAY" ? valor : null);
+            Debe(!Cierto(c, "OverlayEncendido") && Texto(c, "Porque").Contains(dice, StringComparison.Ordinal)
+                    && !Texto(c, "Porque").Contains("sin U_JEV_OVERLAY", StringComparison.Ordinal),
+                $"U_JEV_OVERLAY=«{valor}» deja el overlay apagado y el porqué dice lo que se leyó, no «sin»: «{Texto(c, "Porque")}»");
+        }
+        Debe(Cierto(Leer(n => n == "U_JEV_OVERLAY" ? " SI " : null), "OverlayEncendido"), "« SI » enciende: sin mayúsculas ni espacios, como U_DECISOR");
+        Llamar(maqApagada, "AlPintarCajas", 3);
+        Debe(Convert.ToInt32(PropDe(maqApagada, "CajasVisibles")) == 0,
+            $"con el overlay apagado, pintar tres cajas deja 0 visibles: {PropDe(maqApagada, "CajasVisibles")}");
+
         // (b) EL OVERLAY APLICA LAS MÁSCARAS y la vista lee la configuración, que se lee en sus fuentes.
         var overlay = FuenteDelRepo("windows-client/src/Ui/Jev/OverlayDeJev.cs", "379");
         if (overlay != null)
@@ -14641,6 +14658,80 @@ internal static class Contrato
         Debe(ReferenceEquals(internoDe.Invoke(null, new[] { dosVeces }), interno), "Envolver(Envolver(f)) tiene por interno a f, no a otro envoltorio");
         Debe(ReferenceEquals(internoDe.Invoke(null, new object[] { envuelto }), interno), "y el interno del primero también es f");
 
+        // AÑADIDAS EN LA FASE 6, ANTES QUE SU CÓDIGO: lo que el observador TRADUCE. La costura da una
+        // DecisionDeUnPaso y el panel pinta una DecisionDeJev, y las dos no significan lo mismo (hallazgo de la fase
+        // 2, «para la fase 6»): la Puerta viene VACÍA cuando no se actúa, y Cumplido vale 0 cuando no se preguntó.
+        // CicloDe es la traducción entera y es la misma para el puente de hoy (Envolver) y para el evento tipado de
+        // la 048 cuando entre (368, PR #117): sus argumentos son los campos de PasoDecidido —Objetivo, Ofrecidas,
+        // Decision, Ms.Decidir y la caja de cada Candidata—, sin nombrar un tipo que main aún no tiene.
+        var cicloDe = tObs!.GetMethod("CicloDe");
+        if (cicloDe == null) Pendiente("Ui.Jev.ObservadorDelDecisor.CicloDe(objetivo, ofrecidas, decision, msDecidir, cajas)", "382", "049");
+        else
+        {
+            object CicloDe(IReadOnlyList<string> ofrecidas, U.WindowsClient.Decision.DecisionDeUnPaso d, IReadOnlyList<WRect>? cajas = null) =>
+                cicloDe.Invoke(null, new object?[] { "abrir detalles", ofrecidas, d, 399L, cajas })!;
+            var dosIds = new List<string> { "9) Grabar (Button)", "2) Detalles (RadioButton)" };
+
+            // (1) La que no actúa CON distribución: la Puerta es la primera de la distribución, no «»; si no, el
+            // panel diría «"" no se deshace». Y Cumplido vino, así que se conserva.
+            var noActua = DecisionCon(Decision("No", "Jev: «9) Grabar (Button)» no se deshace (peligro 0.80).", 0.80),
+                new[] { ("9) Grabar (Button)", 0.80), ("2) Detalles (RadioButton)", 0.20) }, cumplido: 0.10, peligro: 0.80);
+            var decNo = PropDe(CicloDe(dosIds, noActua), "Decision")!;
+            Debe(Texto(decNo, "Puerta") == "9) Grabar (Button)" && !Cierto(decNo, "Actuar"),
+                $"una decisión que no actúa lleva por Puerta la elegida de la distribución, no «»: «{Texto(decNo, "Puerta")}»");
+            Debe(PropDe(decNo, "Cumplido") is double cu && Math.Abs(cu - 0.10) < 1e-9 && Math.Abs(Numero(decNo, "Peligro") - 0.80) < 1e-9,
+                $"y con distribución Cumplido y Peligro se conservan: {PropDe(decNo, "Cumplido")} / {PropDe(decNo, "Peligro")}");
+
+            // (2) SIN distribución (Luna, la regla local) Cumplido no se preguntó: null, que el medidor enseña «—»
+            // (373), y no 0. Ausente no viaja en DecisionDeUnPaso: null siempre, nunca un 0 inventado.
+            var sinDistribucion = Decision("Si", "2) Detalles (RadioButton)", 0.91, "regla fija");
+            var cicloLocal = CicloDe(dosIds, sinDistribucion);
+            var decLocal = PropDe(cicloLocal, "Decision")!;
+            Debe(PropDe(decLocal, "Cumplido") == null && PropDe(decLocal, "Ausente") == null && PropDe(decNo, "Ausente") == null,
+                $"sin distribución Cumplido es null, y Ausente es null siempre: {PropDe(decLocal, "Cumplido") ?? "null"} / {PropDe(decLocal, "Ausente") ?? "null"} / {PropDe(decNo, "Ausente") ?? "null"}");
+            Debe(PropDe(cicloLocal, "Fase")?.ToString() == "Decidido" && PropDe(cicloLocal, "Pulsada") == null && PropDe(cicloLocal, "TokensFacturados") == null
+                    && Convert.ToInt64(PropDe(cicloLocal, "MsDecidir")) == 399 && Texto(cicloLocal, "Objetivo") == "abrir detalles",
+                $"el ciclo sale Decidido, sin pulsada —la mano aún no pulsó— y sin tokens —nadie lee input_tokens: «—», 373—: {PropDe(cicloLocal, "Fase")} / {PropDe(cicloLocal, "Pulsada") ?? "null"} / {PropDe(cicloLocal, "TokensFacturados") ?? "null"}");
+
+            // (3) La etiqueta sola sale del id POR EL CAMINO QUE LO FORMÓ («{n}) {etiqueta} ({tipo})»,
+            // SurfaceMapTools.cs:270): la primera «)» cierra el número y el ÚLTIMO paréntesis es el tipo, así que
+            // «Guardar (F5)» conserva el suyo; un id que no tiene esa forma se enseña tal cual, sin inventar tipo.
+            var raros = new List<string> { "1) Nuevo (Button)", "3) Guardar (F5) (Button)", "Grabar" };
+            var cands = Elementos(PropDe(CicloDe(raros, sinDistribucion), "Candidatas"));
+            string etiquetas = string.Join(" · ", cands.Select(c => Texto(c, "Etiqueta") + "|" + Texto(c, "Tipo")));
+            Debe(etiquetas == "Nuevo|Button · Guardar (F5)|Button · Grabar|", $"etiqueta y tipo salen del id: [{etiquetas}]");
+            Debe(cands.All(c => PropDe(c, "Caja") == null && !Cierto(c, "EsLeida")),
+                "y el puente no ve cajas: ninguna candidata lleva una, y ninguna se dice leída (375: se ofrece, no se pinta)");
+
+            // (4) Con las cajas del evento de C, en paralelo a las ofrecidas: la leída va con su caja y EsLeida, la
+            // Rect.Empty (terreno, dynpro) va sin caja. Y si no son tantas como las ofrecidas, NO se emparejan a
+            // ojo: pintar la caja de una sobre el id de otra es la caja que miente (285, aprendizaje nº4).
+            var conCajas = Elementos(PropDe(CicloDe(dosIds, sinDistribucion, new List<WRect> { new(10, 20, 80, 20), WRect.Empty }), "Candidatas"));
+            Debe(conCajas.Count == 2 && PropDe(conCajas[0], "Caja") is WRect r0 && r0 == new WRect(10, 20, 80, 20) && Cierto(conCajas[0], "EsLeida")
+                    && PropDe(conCajas[1], "Caja") == null && !Cierto(conCajas[1], "EsLeida"),
+                $"la caja leída se lleva y la vacía no: [{string.Join(" · ", conCajas.Select(c => (PropDe(c, "Caja")?.ToString() ?? "null") + "/" + PropDe(c, "EsLeida")))}]");
+            try
+            {
+                CicloDe(dosIds, sinDistribucion, new List<WRect> { new(10, 20, 80, 20) });
+                Debe(false, "una caja para dos ofrecidas lanza ArgumentException: no se emparejan a ojo");
+            }
+            catch (TargetInvocationException e) when (e.InnerException is ArgumentException)
+            {
+                Debe(e.InnerException!.Message.Contains('1') && e.InnerException.Message.Contains('2'), $"y el mensaje dice cuántas de cada: «{e.InnerException.Message}»");
+            }
+
+            // (5) Un observador que lanza tampoco toca la decisión: sale el mismo objeto, y queda en el log con su
+            // tipo y su mensaje (patrón nº3) —pintar no puede cambiar lo que se pulsa—.
+            var oyenteQueLanza = CazadorDe(tCiclo, out var alDecidirQueLanza, _ => throw new InvalidOperationException("el oyente de mentira revienta"));
+            var envueltoConOyenteRoto = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>)envolver.Invoke(null, new object[] { interno, alDecidirQueLanza })!;
+            U.WindowsClient.Decision.DecisionDeUnPaso? conOyenteRoto = null;
+            try { conOyenteRoto = envueltoConOyenteRoto("uia://de-mentira", "abrir detalles", ids); }
+            catch (Exception e) { Debe(false, $"un oyente que lanza no sale al paso: salió {e.GetType().Name}: {e.Message}"); }
+            Debe(ReferenceEquals(conOyenteRoto, esperada), "con un oyente que lanza, la decisión sale intacta: el mismo objeto");
+            Debe(U.WindowsClient.Diagnostics.LogBus.Snapshot().Any(l => l.Contains("InvalidOperationException", StringComparison.Ordinal) && l.Contains("el oyente de mentira revienta", StringComparison.Ordinal)),
+                "y el log lo dice con su tipo y su mensaje");
+        }
+
         // PUBLICAR SOLO ENCOLA: el despachador es un doble sin reloj (DispatchProxy sobre IDespachador).
         var crear = typeof(DispatchProxy).GetMethods().First(m => m.Name == "Create" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0)
             .MakeGenericMethod(tDesp, typeof(DobleDeDespachador));
@@ -14742,6 +14833,25 @@ internal static class Contrato
         Debe(Convert.ToInt32(PropDe(maq, "CajasVisibles")) == 0 && !Cierto(maq, "PanelEnCorrida"), "y no queda ni caja ni corrida");
         // El interruptor del decisor sigue apagando el catálogo byte a byte: lo juzga la 290 en su sitio; esta rama no lo toca.
 
+        // AÑADIDAS EN LA FASE 6, ANTES QUE SU CÓDIGO. (1) Con Jev APAGADO la mano sigue pulsando —decide Luna— y
+        // UiaSurface.Pulso sigue avisando en cada clic: nada de Jev se enciende por eso, o la flecha volaría a los
+        // clics de Luna. (2) Con la ventana de trabajo detrás de otra no hay vuelo (381): la flecha no se enseña,
+        // y el panel se aparta de lo pulsado igual (385).
+        var dormida = MaquinaConPantalla(tMaq, encendida);
+        Llamar(dormida, "AlEmpezarTramo", "abrir detalles");
+        Llamar(dormida, "AlPintarCajas", 3);
+        Llamar(dormida, "AlConocerPulsada", new WRect(700, 450, 200, 40), true);
+        Debe(!Cierto(dormida, "OverlayVisible") && !Cierto(dormida, "PanelVisible") && !Cierto(dormida, "FlechaVisible")
+                && Convert.ToInt32(PropDe(dormida, "CajasVisibles")) == 0 && !Cierto(dormida, "PanelEnCorrida"),
+            $"con Jev apagado, un tramo, tres cajas y una pulsación no encienden nada de Jev: {PropDe(dormida, "OverlayVisible")} / {PropDe(dormida, "PanelVisible")} / {PropDe(dormida, "FlechaVisible")} / {PropDe(dormida, "CajasVisibles")} / {PropDe(dormida, "PanelEnCorrida")}");
+        var detras = MaquinaConPantalla(tMaq, encendida);
+        Llamar(detras, "Encender");
+        Llamar(detras, "AlConocerPulsada", new WRect(700, 450, 200, 40), false);
+        var rectDetras = PropDe(detras, "RectDelPanel") as WRect?;
+        Debe(!Cierto(detras, "FlechaVisible"), "con la ventana de trabajo detrás, la flecha no vuela ni se enseña");
+        Debe(rectDetras != null && !rectDetras.Value.IntersectsWith(WRect.Inflate(new WRect(700, 450, 200, 40), 8, 8)),
+            $"y el panel se aparta de lo pulsado igual: {(rectDetras.HasValue ? rectDetras.Value.ToString() : "sin rect")}");
+
         // (b) LOS DOS GANCHOS SE LEEN EN EL PARCIAL: Senalador.Suelta y Freno.SePulso (Escape siempre) llevan a .Suelta().
         var parcial = FuenteDelRepo("windows-client/src/Ui/FaceWindow.Jev.cs", "383");
         if (parcial != null)
@@ -14766,6 +14876,32 @@ internal static class Contrato
         Debe(!(bool)viaja.Invoke(null, new object[] { true })!, "en un tramo con Jev la carita ni viaja al clic ni sigue al cursor sintético: vuela la flecha, y una sola cosa vuela por clic");
         Debe((bool)viaja.Invoke(null, new object[] { false })!, "fuera de tramo la carita sigue viajando: la 240 sigue verde con su fixture");
         // La carita no cambia de tamaño (163) ni de curva (240): se juzgan en su sitio; esta rama no toca su ventana.
+
+        // AÑADIDA EN LA FASE 6, ANTES QUE SU CÓDIGO: «un tramo CON JEV» lo dice la máquina de la vista, y es lo que
+        // FaceWindow le pasará a la regla (spec 049 §El cableado: `_vistaDeJev?.EnTramo == true`). Un tramo con Jev
+        // apagado es de Luna, y la carita viaja; encender Jev a mitad lo convierte, porque los pasos que quedan los
+        // decide Jev; soltar lo señalado no termina el tramo —lo termina el tramo, y Escape lo para él—; terminar y
+        // apagar, sí.
+        var tMaq = Jev("MaquinaDeLaVista"); var leer = Jev("ConfiguracionDeLaVista")?.GetMethod("Leer");
+        if (tMaq == null || leer == null) Pendiente("Ui.Jev.MaquinaDeLaVista.EnTramo (AlEmpezarTramo, AlTerminarTramo)", "384", "049");
+        else
+        {
+            var maq = Activator.CreateInstance(tMaq, new[] { leer.Invoke(null, new object[] { (Func<string, string?>)(_ => null) })! })!;
+            Llamar(maq, "AlEmpezarTramo", "abrir detalles");
+            bool sinJev = Cierto(maq, "EnTramo");
+            Llamar(maq, "Encender");
+            bool conJev = Cierto(maq, "EnTramo");
+            Llamar(maq, "Suelta");
+            bool trasSoltar = Cierto(maq, "EnTramo");
+            Llamar(maq, "AlTerminarTramo");
+            bool trasTerminar = Cierto(maq, "EnTramo");
+            Llamar(maq, "AlEmpezarTramo", "otro objetivo");
+            bool otroTramo = Cierto(maq, "EnTramo");
+            Llamar(maq, "Apagar");
+            bool trasApagar = Cierto(maq, "EnTramo");
+            Debe(!sinJev && conJev && trasSoltar && !trasTerminar && otroTramo && !trasApagar,
+                $"EnTramo: con Jev apagado {sinJev} (falso), encendido a mitad {conJev} (cierto), tras soltar {trasSoltar} (cierto), tras terminar {trasTerminar} (falso), otro tramo {otroTramo} (cierto), tras apagar {trasApagar} (falso)");
+        }
 
         // (b) LAS DOS LLAMADAS EN FaceWindow SE CUENTAN EN EL FUENTE: OnAutomationCursorMoved e IrJuntoA con alClic.
         var fuente = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "384");
@@ -14796,6 +14932,16 @@ internal static class Contrato
         Debe(!Cierto(maq, "PanelVisible"), "antes de encender Jev no hay panel");
         Llamar(maq, "Encender");
         Debe(Cierto(maq, "PanelVisible"), "el panel nace al encender Jev, sin atajo de por medio");
+
+        // AÑADIDAS EN LA FASE 6, ANTES QUE SU CÓDIGO: nace YA en su sitio —junto al ancla, por DondeVaElPanel (377)—
+        // y no en (0, 0) esperando la primera pulsación; y sin saber la pantalla no se inventa un sitio: un rect
+        // puesto a ojo diría «estoy donde no estorbo» sin haberlo calculado (aprendizaje nº4).
+        var alNacer = PropDe(maq, "RectDelPanel") as WRect?;
+        Debe(alNacer == new WRect(656, 432, 340, 199), $"al encender, el panel nace junto al ancla, abajo a la derecha: {(alNacer.HasValue ? alNacer.Value.ToString() : "sin rect")}");
+        var aCiegas = Activator.CreateInstance(tMaq, new[] { encendida })!;
+        Llamar(aCiegas, "Encender");
+        Debe(Cierto(aCiegas, "PanelVisible") && PropDe(aCiegas, "RectDelPanel") == null,
+            $"sin área de trabajo ni tamaño, encender enseña el panel pero no le inventa sitio: {PropDe(aCiegas, "RectDelPanel") ?? "null"}");
         var caja = new WRect(700, 450, 200, 40);
         Llamar(maq, "AlConocerPulsada", caja, true);
         var rect = PropDe(maq, "RectDelPanel") as WRect?;
@@ -14815,7 +14961,11 @@ internal static class Contrato
                 string cuerpo = fuente.Substring(inicio, fin - inicio);
                 Debe(!cuerpo.Contains("Jev", StringComparison.Ordinal) && !cuerpo.Contains("_vistaDeJev", StringComparison.Ordinal),
                     "y su cuerpo no nombra a Jev ni a _vistaDeJev: el atajo abre el globo, no el panel");
-                Debe(cuerpo.Contains("ShowTalk(", StringComparison.Ordinal), "y sigue abriendo el globo (ShowTalk)");
+                // EL GLOBO ES HOY EL CHAT DEL NOTCH. Esta línea buscaba ShowTalk(, que era lo que hacía el atajo en
+                // bb3d0dc; main lo cambió en #113 (043addc) por el chat del notch con el foco en el campo, y la
+                // comprobación se habría puesto roja sin que esta rama tocara el atajo (fase 6, vista al pasar de
+                // PENDIENTE a juzgada). Lo prometido no cambia: el atajo abre dónde escribirle a Ü, con el foco.
+                Debe(cuerpo.Contains("AbrirChat(true)", StringComparison.Ordinal), "y sigue abriendo el chat con el foco en el campo (AbrirChat(true); ShowTalk hasta #113)");
             }
         }
     }
