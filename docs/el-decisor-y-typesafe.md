@@ -101,7 +101,7 @@ nombre de la pantalla y las etiquetas, que son cromo»: era falso. La ubicación
 | La ubicación, en el resto | **Solo su origin** (`uia://explorer.exe`, `web://mail.google.com`), nunca el título de la ventana ni la ruta |
 | El objetivo | **Sí, tal cual**. Puede llevar un nombre: es un riesgo aceptado, no se limpia aquí |
 | Las etiquetas en `uia://` y `web://` | **Sí salen de la máquina**: botones, pestañas, nombres de archivo, asuntos de correo. Es lo que Jev necesita para decidir |
-| Las filas (`GuiGridFila`, `GuiTreeFila`, `GuiTreeCarpeta`) | Hoy **con su texto** donde el texto viaja; la promesa 350 (fase 7 de la spec 046) las hará viajar como «N) fila (tipo)» |
+| Las filas (`GuiGridFila`, `GuiTreeFila`, `GuiTreeCarpeta`) | **Nunca su texto**, ni con SAP habilitado: viajan como «2) fila (GuiGridFila)» (promesa 350). La respuesta vuelve a la fila ofrecida y la mano pulsa por su selector. Y tampoco se **registran** por su texto: la línea `decisor:`, el relato de `map_decidir`, el veto y la línea `paso k:` del tramo la nombran «fila 2 (GuiGridFila)» |
 | El valor escrito en un campo | El inventario nombra el campo por su etiqueta, no por lo que contiene (**deducido** de la lectura del código, sin medir). Lo que UIA publique como *nombre* de un elemento sí viaja, y en algunos controles ese nombre es su contenido |
 
 ## Cómo entra en el bucle vivo: `map_decidir`

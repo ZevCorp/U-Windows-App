@@ -51,6 +51,18 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public string QueNoCuadro { get; init; } = "";
 
+    /// <summary>Cuántos ids de puerta se le entregaron a Jev en el cuerpo, sin contar «ninguna» (350). 0 si no se le preguntó.</summary>
+    public int Viajaron { get; init; }
+
+    /// <summary>De esos, cuántos fueron SIN SU TEXTO: filas que viajaron como «N) fila (Tipo)» (350).</summary>
+    public int FilasSinTexto { get; init; }
+
+    /// <summary>
+    /// La longitud del cuerpo que se le entregó al transporte, en caracteres (350); 0 si no se le entregó nada. Si el
+    /// transporte lanzó, es lo que se le dio, no lo que llegó a salir: eso no lo sabe esta pieza.
+    /// </summary>
+    public int Caracteres { get; init; }
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -67,7 +79,14 @@ public sealed class DecisionDeUnPaso
 
     internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro, string queNoCuadro = "") =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
-            { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro };
+            { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro,
+              Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres };
+
+    /// <summary>La misma decisión, con lo que viajó para tomarla (350).</summary>
+    internal DecisionDeUnPaso ConLoQueViajo(int viajaron, int filasSinTexto, int caracteres) =>
+        new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
+            { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
+              Viajaron = viajaron, FilasSinTexto = filasSinTexto, Caracteres = caracteres };
 }
 
 /// <summary>
@@ -342,22 +361,50 @@ public static class ElDecisor
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
 
-        // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (391). Es la ÚNICA lista que viaja, y se
-        // construye aquí, no en CuerpoDeEleccion (la 282 exige que el cuerpo lleve exactamente lo que se le da) ni
-        // en el state (que lista puertas de la pantalla, y «ninguna» no es una). La 388 comparará las claves de la
-        // respuesta contra ESTA lista, por el mismo camino (aprendizaje nº16).
+        // LO QUE VIAJA EN EL CHOICE = las puertas ofrecidas + «ninguna» (391), CADA PUERTA CON EL ID QUE LA POLÍTICA
+        // PERMITE (350): una fila va como «2) fila (GuiGridFila)», sin su texto, también con SAP habilitado. Es la ÚNICA
+        // lista que viaja —en el choice y en el state—, y se construye aquí, no en CuerpoDeEleccion (la 282 exige que el
+        // cuerpo lleve exactamente lo que se le da) ni en el state (que lista puertas de la pantalla, y «ninguna» no es
+        // una). La 388 compara las claves de la respuesta contra ESTA lista, y la respuesta vuelve a la puerta OFRECIDA
+        // por el mapa que se arma a la vez, por el mismo camino (aprendizaje nº16): la mano pulsa por el selector de la
+        // ofrecida, no por lo que viajó. Hasta el 2026-09-22 las filas viajaban con su texto: la lista de pacientes.
         var queViaja = new List<string>(puertas.Count + 1);
-        queViaja.AddRange(puertas);
+        var ofrecidaDe = new Dictionary<string, string>(StringComparer.Ordinal);
+        int filasSinTexto = 0;
+        foreach (var p in puertas)
+        {
+            string v = PoliticaDeLoQueViaja.IdQueViaja(p);
+            if (ofrecidaDe.TryGetValue(v, out string? otra))
+            {
+                // DOS PUERTAS DISTINTAS CON EL MISMO ID DE VIAJE —dos filas sin número: «fila (GuiGridFila)» las dos—: Jev
+                // no podría decir cuál, y quedarse con una sería adivinar. No se pregunta. Con las puertas numeradas de
+                // map_decidir no pasa; con una lista sin numerar, sí. La misma puerta repetida no es ambigua y sigue igual.
+                if (!string.Equals(otra, p, StringComparison.Ordinal))
+                    return DecisionDeUnPaso.No(
+                        $"dos puertas distintas viajarían a Jev con el mismo id «{v}»: no podría decir cuál eligió, así que no se "
+                      + "le pregunta y no decido por regla local. Decide Luna.");
+            }
+            else
+            {
+                ofrecidaDe[v] = p;
+                if (!string.Equals(v, p, StringComparison.Ordinal)) filasSinTexto++;
+            }
+            queViaja.Add(v);
+        }
+        var puertasQueViajan = new List<string>(queViaja);
         queViaja.Add(PeticionASystemOne.IdNinguna);
+        int viajaron = 0;
+        foreach (var k in ofrecidaDe.Keys) if (!string.IsNullOrWhiteSpace(k)) viajaron++;
 
+        string cuerpo = "";
         string respuesta;
         try
         {
             // DE LA UBICACIÓN VIAJA SOLO EL ORIGIN (393): hasta el 2026-09-22 viajaba entera, y en uia:// el pathname
             // es el título vivo de la ventana («/Historia clínica de …»).
-            string cuerpo = PeticionASystemOne.CuerpoDeEleccion(
+            cuerpo = PeticionASystemOne.CuerpoDeEleccion(
                 modelo,
-                PeticionASystemOne.EstadoDeLaPantalla(PoliticaDeLoQueViaja.UbicacionQueViaja(pantalla), objetivo, puertas),
+                PeticionASystemOne.EstadoDeLaPantalla(PoliticaDeLoQueViaja.UbicacionQueViaja(pantalla), objetivo, puertasQueViajan),
                 PeticionASystemOne.IdDeLaPuerta,
                 PeticionASystemOne.InstruccionesDeLaPuerta(objetivo),
                 queViaja);
@@ -370,9 +417,22 @@ public static class ElDecisor
             var porque = "TypeSafe no contestó: ";
             for (var x = e; x != null; x = x.InnerException)
                 porque += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
-            return DecisionDeUnPaso.No(porque + ". Decide Luna.");
+            return Contada(DecisionDeUnPaso.No(porque + ". Decide Luna."));
         }
+        return Contada(Juzgar(respuesta, puertas.Count, ofrecidaDe, queViaja, umbral));
 
+        // LO QUE VIAJÓ VA EN CADA DECISIÓN QUE SALE DESPUÉS DE ENTREGAR EL CUERPO (350), también en las que no accionan:
+        // la línea «decisor:» lo cuenta, y lo que no queda contado no se puede auditar.
+        DecisionDeUnPaso Contada(DecisionDeUnPaso d) => d.ConLoQueViajo(viajaron, filasSinTexto, cuerpo.Length);
+    }
+
+    /// <summary>
+    /// Lee la respuesta de Jev y aplica las compuertas, todas cerradas. Las claves de la respuesta son los ids que
+    /// VIAJARON; <paramref name="ofrecidaDe"/> los devuelve a la puerta ofrecida, que es la que la mano sabe pulsar (350).
+    /// </summary>
+    private static DecisionDeUnPaso Juzgar(
+        string respuesta, int ofrecidas, IReadOnlyDictionary<string, string> ofrecidaDe, IReadOnlyList<string> queViaja, double umbral)
+    {
         if (string.IsNullOrWhiteSpace(respuesta))
             return DecisionDeUnPaso.No("TypeSafe contestó vacío. Decide Luna.");
 
@@ -398,7 +458,11 @@ public static class ElDecisor
             var leida = RespuestaDeJev.Validar(a, queViaja);
             elegida = leida.Elegida;
             confianza = leida.Confianza;
-            alternativas = leida.Alternativas;
+            // LAS ALTERNATIVAS VUELVEN A LAS PUERTAS OFRECIDAS (350): la segunda mejor se busca por el selector de la
+            // ofrecida (288), y «2) fila (GuiGridFila)» no está en esa lista. «Ninguna» no es una puerta y se queda como vino.
+            var alt = new List<(string Puerta, double Probabilidad)>(leida.Alternativas.Count);
+            foreach (var (k, p) in leida.Alternativas) alt.Add((ofrecidaDe.TryGetValue(k, out var o) ? o : k, p));
+            alternativas = alt;
             queNoCuadro = leida.QueNoCuadro;
             // LAS DOS NOULS FALLAN CERRADAS (389, y la 289 desde el 2026-09-22). Hasta hoy una noul ausente o que no
             // era número valía 0, y 0 es justamente lo que ABRE la compuerta de peligro: una respuesta sin «peligro»
@@ -434,10 +498,8 @@ public static class ElDecisor
         // claves que se le dieron, pero eso lo promete el servidor y esto se ejecuta sobre SAP de un
         // hospital: lo que promete otro se comprueba. Comparación ORDINAL y por el mismo camino por
         // el que se construyó la lista (aprendizaje nº16: dos identidades de distinta forma dan
-        // falso SIEMPRE, y en silencio).
-        bool ofrecida = false;
-        foreach (var p in puertas)
-            if (string.Equals(p, elegida, StringComparison.Ordinal)) { ofrecida = true; break; }
+        // falso SIEMPRE, y en silencio): el mapa id que viajó → puerta ofrecida, armado con la lista (350).
+        bool ofrecida = ofrecidaDe.TryGetValue(elegida, out string? puerta);
 
         // «NINGUNA» VIAJÓ Y JEV LA ELIGIÓ (391): no es una puerta, así que no se acciona; se dice con su
         // probabilidad para poder mirar, con cien pasos, si separa aciertos de pérdidas. No es compuerta
@@ -449,7 +511,7 @@ public static class ElDecisor
 
         if (!ofrecida)
             return DecisionDeUnPaso.No(
-                $"Jev contestó «{elegida}», que no está entre las {puertas.Count} puertas de esta pantalla: "
+                $"Jev contestó «{elegida}», que no está entre las {ofrecidas} puertas de esta pantalla: "
               + "no se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
         // YA ESTÁ: si Jev dice que el objetivo ya se cumplió en esta pantalla, accionar es pasarse (289).
@@ -470,7 +532,9 @@ public static class ElDecisor
               + $"por debajo del mínimo exigido ({umbral.ToString("0.00", CultureInfo.InvariantCulture)}): "
               + "no se acciona a medias. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
-        return DecisionDeUnPaso.Si(elegida, confianza,
+        // LA PUERTA ES LA OFRECIDA, EL PORQUÉ NOMBRA LO QUE VIAJÓ (350): la mano necesita el id que lleva detrás el
+        // selector; el porqué sale al log y a la cuenta, y una fila no se escribe por su texto.
+        return DecisionDeUnPaso.Si(puerta!, confianza,
             $"Jev eligió «{elegida}» con confianza {confianza.ToString("0.00", CultureInfo.InvariantCulture)}.")
             .Con(alternativas, cumplido, peligro);
     }

@@ -13907,6 +13907,19 @@ internal static class Contrato
         Debe((int)pViajaron.GetValue(d)! == 4 && (int)pFilas.GetValue(d)! == 3 && (int)pCaracteres.GetValue(d)! == largo,
             $"y la decisión cuenta 4 ids viajados, 3 filas sin texto y {largo} caracteres; salió {pViajaron.GetValue(d)} · {pFilas.GetValue(d)} · {pCaracteres.GetValue(d)}");
 
+        // 1b. DOS FILAS DISTINTAS QUE VIAJARÍAN CON EL MISMO ID —sin número, «fila (GuiGridFila)» las dos—: Jev no podría
+        // decir cuál eligió, y mapear su respuesta a una de las dos sería adivinar. No se pregunta. Añadido en la fase 7 y
+        // visto ROJO antes de su línea: el mapa id que viaja → id ofrecido necesita que el primero sea único (spec 046, Revisiones).
+        int llamadasAmbiguas = 0;
+        var sinNumero = new[] { "fila de prueba · 001 (GuiGridFila)", "fila de prueba · 002 (GuiGridFila)" };
+        var dAmbigua = elegirConModelo.Invoke(null, new object[] { "jev", "sapgui://QAS/NWP1", "abrir la primera fila", sinNumero, 0.7,
+            (Func<string, string>)(_ => { llamadasAmbiguas++; return Respuesta046("fila (GuiGridFila)", new[] { ("fila (GuiGridFila)", "1"), (IdNinguna, "0") }, "1"); }),
+            modeloPorDefecto, politica })!;
+        Debe(llamadasAmbiguas == 0 && !Actuar046(dAmbigua),
+            $"dos filas distintas que viajarían con el mismo id no se preguntan: Jev no podría decir cuál (llamadas={llamadasAmbiguas}, Actuar={Actuar046(dAmbigua)})");
+        Debe(Porque046(dAmbigua).Contains("fila (GuiGridFila)", StringComparison.Ordinal) && !Porque046(dAmbigua).Contains("fila de prueba", StringComparison.Ordinal),
+            $"y el porqué nombra el id que chocaría, no el texto de las filas (dijo: «{Porque046(dAmbigua)}»)");
+
         // 2. map_decidir: la línea «decisor:» y el relato nombran la fila por número y tipo, y dicen cuánto viajó.
         var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"), (Fila, "GuiGridFila"), ("Triage/Urgencias", "GuiTreeFila"), ("Favoritos", "GuiTreeCarpeta"))!.Value;
         var pulsos = new List<string>();
@@ -13940,6 +13953,37 @@ internal static class Contrato
         Debe(pasoNotch != null && !pasoNotch.Contains(Fila, StringComparison.Ordinal),
             $"y la del notch tampoco («{Recorte(pasoNotch ?? "(no hay)")}»)");
         Debe(t.Pulsados.Count == 1 && t.Pulsados[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano del tramo recibe el selector (recibió [{string.Join(" · ", t.Pulsados)}])");
+
+        // 4. UNA FILA VETADA TAMPOCO SE NOMBRA POR SU TEXTO (390 + 350), ni como elegida ni como segunda mejor. El veto de
+        // la fase 5 escribe dos líneas más con la etiqueta —la cuenta del veto y «✋ … vetada» en el log— y PorQue nombra por
+        // la etiqueta, que en una fila es dato. Añadido en la fase 7 y visto ROJO antes de su línea: la tabla de la spec
+        // contaba 3 líneas con la etiqueta y había 5 (patrón nº5; spec 046, Revisiones).
+        const string FilaVetada = "fila de prueba · enviar";
+        string idVetada = $"2) {FilaVetada} (GuiGridFila)";
+        foreach (bool comoSegunda in new[] { false, true })
+        {
+            var mv = MapaParaDecidir(pPuertas, ("A", "Button"), (FilaVetada, "GuiGridFila"))!.Value;
+            var pulsosV = new List<string>();
+            mv.mapa.RecorrerPorElNucleo = pasos =>
+            {
+                pulsosV.Add(pasos[0].Exit);
+                return new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false, "hice 0 de 1 y paré en el paso 1: no lo veo en «uia://sap/NWP1».");
+            };
+            mv.mapa.InventarioParaLosActos = () => "EN PANTALLA AHORA, en «uia://sap/NWP1» (1 elemento(s)):\n  «A» (Button)\n";
+            pDecisor.SetValue(mv.mapa, Decide((_, _, _) => comoSegunda
+                ? DecisionCon(Decision("Si", "1) A (Button)", 0.6, "Jev eligió «1) A (Button)» con confianza 0.60."),
+                    new[] { ("1) A (Button)", 0.60), (idVetada, 0.40) }, cumplido: 0.1, peligro: 0.0)
+                : DecisionCon(Decision("Si", idVetada, 0.9, "Jev eligió «2) fila (GuiGridFila)» con confianza 0.90."), cumplido: 0.1, peligro: 0.0)));
+            string rv = "";
+            var lineasV = LineasDelLog(() => rv = mv.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" }));
+            string caso = comoSegunda ? "como segunda mejor" : "como elegida";
+            Debe(!pulsosV.Any(p => p.Contains(FilaVetada, StringComparison.Ordinal)), $"{caso}, la fila vetada no se pulsa (se pulsó [{string.Join(" · ", pulsosV)}])");
+            Debe(rv.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && rv.Contains("no se puede deshacer", StringComparison.Ordinal) && !rv.Contains(FilaVetada, StringComparison.Ordinal),
+                $"{caso}, la cuenta del veto nombra «fila 2 (GuiGridFila)», dice por qué y no lleva su texto (dijo: «{Recorte(rv)}»)");
+            var vetoLog = lineasV.Where(l => l.Contains("decisor:", StringComparison.Ordinal) && l.Contains("✋", StringComparison.Ordinal)).ToList();
+            Debe(vetoLog.Count > 0 && vetoLog.All(l => l.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && !l.Contains(FilaVetada, StringComparison.Ordinal)),
+                $"{caso}, la línea «✋ … vetada» del log la nombra por número y tipo, no por su texto ({(vetoLog.Count == 0 ? "no hay" : Recorte(vetoLog[0]))})");
+        }
     }
 
     private static void CumplidoSoloConEvidencia()

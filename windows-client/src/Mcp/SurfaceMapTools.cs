@@ -263,15 +263,20 @@ public sealed class SurfaceMapTools
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
         // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
         // (2026-09-18, 03:33-03:34): la etiqueta no es única; el id sí, y detrás lleva su selector.
+        // Y CON SU NOMBRE PARA CONTAR (promesa 350): la etiqueta, o «fila 2 (GuiGridFila)» si es una fila. Es lo que
+        // escriben la línea «decisor:», el relato y el Paso del tramo —que lo lleva a «paso k:», al log y al notch—: lo
+        // que no viaja a Jev por su texto tampoco se escribe por su texto. 1 sitio: el tramo no construye nombres,
+        // cuenta el que le dan. Lo decide la política, por el mismo camino con que decide qué viaja (aprendizaje nº16).
         var ids = new List<string>(puertas.Count);
-        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta)>(StringComparer.Ordinal);
+        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta, string Nombre)>(StringComparer.Ordinal);
         for (int i = 0; i < puertas.Count; i++)
         {
             string id = $"{i + 1}) {puertas[i].Etiqueta} ({puertas[i].Tipo})";
             ids.Add(id);
-            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta);
+            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta, Decision.PoliticaDeLoQueViaja.NombreParaContar(id, puertas[i].Etiqueta));
         }
         var etiquetas = ids;
+        string Nombre(string id) => selectorDe.TryGetValue(id, out var p) ? p.Nombre : Decision.PoliticaDeLoQueViaja.NombreParaContar(id, id);
 
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         Decision.DecisionDeUnPaso d;
@@ -289,9 +294,13 @@ public sealed class SurfaceMapTools
         reloj.Stop();
 
         // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
-        // datos del terreno, y los datos son estas líneas.
-        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · {reloj.ElapsedMilliseconds} ms → "
-            + (d.Actuar ? $"ACCIONA «{d.Puerta}»" : "no acciona")
+        // datos del terreno, y los datos son estas líneas. Y CON LO QUE VIAJÓ (350): cuántos ids de cuántos, cuántos
+        // sin texto y cuántos caracteres —«viajan 0 de N» cuando no se le preguntó a nadie—; la elegida, por su nombre
+        // para contar. Hasta el 2026-09-22 esta línea escribía el id entero: una fila de NWP1, con su texto, al disco.
+        int sinTexto = d.FilasSinTexto;
+        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · viajan {d.Viajaron} de {etiquetas.Count} · "
+            + $"{sinTexto} {(sinTexto == 1 ? "fila" : "filas")} sin texto · {d.Caracteres} caracteres · {reloj.ElapsedMilliseconds} ms → "
+            + (d.Actuar ? $"ACCIONA «{Nombre(d.Puerta)}»" : "no acciona")
             + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
 
         if (!d.Actuar)
@@ -305,9 +314,17 @@ public sealed class SurfaceMapTools
         // determinista manda sobre el modelo. Es PuertasPeligrosas y no SafeToClick.EsDestructivo, que excluye
         // «guardar» a propósito. Consecuencia deliberada: ni el tramo ni map_decidir pulsan «Guardar» aunque el
         // objetivo sea guardar; eso lo pulsa la persona, o Luna con un map_take explícito.
-        string Vetada(string id) =>
-            selectorDe.TryGetValue(id, out var p) && Navigation.PuertasPeligrosas.EsPeligrosa(p.Etiqueta)
-                ? Navigation.PuertasPeligrosas.PorQue(p.Etiqueta) : "";
+        // UNA FILA VETADA SE NOMBRA POR NÚMERO Y TIPO (350): PorQue nombra por la etiqueta, y la de una fila es dato. Se
+        // sustituye el nombre dentro de su frase en vez de escribir otra: la frase vive en PuertasPeligrosas. Si PorQue
+        // cambiara de forma y la sustitución dejara de casar, el texto volvería al log — y la parte 4 del juez de la 350
+        // se pondría roja: esta línea tiene juez, no es una red que se cree puesta (aprendizaje nº18).
+        string Vetada(string id)
+        {
+            if (!selectorDe.TryGetValue(id, out var p) || !Navigation.PuertasPeligrosas.EsPeligrosa(p.Etiqueta)) return "";
+            string porque = Navigation.PuertasPeligrosas.PorQue(p.Etiqueta);
+            return string.Equals(p.Nombre, p.Etiqueta, StringComparison.Ordinal) ? porque
+                : porque.Replace($"«{p.Etiqueta.Trim()}»", $"«{p.Nombre}»", StringComparison.Ordinal);
+        }
         static string NumeroDe(string id) => id.Contains(')') ? id.Substring(0, id.IndexOf(')')) : id;
 
         string vetoElegida = Vetada(d.Puerta);
@@ -317,10 +334,10 @@ public sealed class SurfaceMapTools
             // que no se deshace». Si Jev apunta ahí, lo que hay que decidir ya no es de esta pieza.
             var vetada = selectorDe[d.Puerta];
             string conf = d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
-            LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) conf={conf}: {vetoElegida}");
-            return Sin($"no se acciona: Jev eligió «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) con confianza {conf}, y {vetoElegida} "
+            LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) conf={conf}: {vetoElegida}");
+            return Sin($"no se acciona: Jev eligió «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) con confianza {conf}, y {vetoElegida} "
                      + "Lo irreversible no se pulsa por decisión.",
-                $"Jev eligió «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) y está vetada: {vetoElegida}", d.Confianza);
+                $"Jev eligió «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) y está vetada: {vetoElegida}", d.Confianza);
         }
 
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
@@ -340,7 +357,7 @@ public sealed class SurfaceMapTools
             if (vetoSegunda.Length == 0) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
             else
             {
-                vetoSegunda = $"la segunda, «{selectorDe[segunda.Puerta].Etiqueta}» ({NumeroDe(segunda.Puerta)}) con probabilidad "
+                vetoSegunda = $"la segunda, «{selectorDe[segunda.Puerta].Nombre}» ({NumeroDe(segunda.Puerta)}) con probabilidad "
                             + $"{segunda.Probabilidad.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}, no la pruebo: {vetoSegunda}";
                 LogBus.Log("decisor", $"✋ «{aqui}» · vetada {vetoSegunda}");
             }
@@ -369,17 +386,19 @@ public sealed class SurfaceMapTools
                          && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
             if (noEstaba && k + 1 < candidatos.Count)
             {
-                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
+                relato.Append($"«{puerta.Nombre}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
                 continue;
             }
             if (noEstaba)
-                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}")
+                relato.Append($"«{puerta.Nombre}» ({numero}) no estaba: {cuenta}")
                       .Append(vetoSegunda.Length > 0 ? $"; {vetoSegunda}" : "");
             else
-                relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
+                relato.Append($"elegida «{puerta.Nombre}» ({numero}) {medida}: {cuenta}");
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
-            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
+            // EL TRAMO RECIBE EL NOMBRE PARA CONTAR en el campo Etiqueta (350): lo escribe en «paso k:», en la cuenta y
+            // en «la misma puerta tres veces». Pulsa por Selector, así que no necesita el texto para nada.
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Nombre, numero, prob, relato.ToString(), d.Porque, false, tiempos);
         }
         return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }

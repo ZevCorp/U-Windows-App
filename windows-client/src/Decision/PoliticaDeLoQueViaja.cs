@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace U.WindowsClient.Decision;
 
 /// <summary>
-/// QUÉ SUPERFICIES PUEDEN MANDAR SU TEXTO A JEV, y qué parte de la ubicación viaja. Promesa 393 (spec 046).
+/// QUÉ SUPERFICIES PUEDEN MANDAR SU TEXTO A JEV, qué parte de la ubicación viaja (promesa 393), y con qué id viaja —y
+/// se registra— cada puerta: las filas, nunca por su texto (promesa 350). Spec 046.
 /// </summary>
 /// <remarks>
 /// ES EL ÚNICO SITIO QUE DECIDE QUÉ VIAJA, y no por orden: hasta el 2026-09-22 la política vivía solo en prosa
@@ -135,5 +137,68 @@ public sealed class PoliticaDeLoQueViaja
         if (esquema >= 0) s = s[(esquema + 3)..];
         int corte = s.IndexOfAny(new[] { '/', ':' });
         return corte < 0 ? s : s[..corte];
+    }
+
+    /// <summary>
+    /// LOS TIPOS DE FILA, cuyo texto nunca viaja ni se registra (promesa 350): una fila de rejilla o de árbol es DATO
+    /// —un nombre y un documento, en la lista de pacientes de NWP1—, no cromo. Se comparan EXACTOS y por este solo
+    /// camino (aprendizaje nº16). Los escriben literalmente los sitios que construyen filas, medidos el 2026-09-22:
+    /// <c>MundoQueToca.cs:238, :335, :351</c> y <c>FaceWindow.xaml.cs:380, :5399</c>; los cinco con estos tres nombres.
+    /// Hay una sexta rama, <c>MundoQueToca.cs:360-362</c>, que emitiría una fila de árbol con el tipo de su shell y no
+    /// se reconocería aquí; hoy es inerte (el único <c>new SapVisualElement(</c> pasa <c>IsNode: false</c>). Si se
+    /// despierta, su tipo tiene que ser uno de estos tres, o su texto viajará.
+    /// </summary>
+    public static IReadOnlyList<string> TiposDeFila { get; } =
+        Array.AsReadOnly(new[] { "GuiGridFila", "GuiTreeFila", "GuiTreeCarpeta" });
+
+    /// <summary>
+    /// «2) fila de prueba · 000 (GuiGridFila)» → número «2» y tipo «GuiGridFila». Es el INVERSO del formato con que
+    /// <c>UnPasoDecidido</c> numera las puertas («N) etiqueta (Tipo)»): el tipo es el ÚLTIMO paréntesis, así que una
+    /// etiqueta con paréntesis dentro no engaña. El número puede faltar (una lista sin numerar).
+    /// </summary>
+    private static readonly Regex _idDePuerta =
+        new(@"^\s*(?:(\d+)\)\s*)?(.*?)\s*\(([^()]*)\)\s*$", RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Si el id de una puerta es una fila (<see cref="TiposDeFila"/>, tipo exacto), con su número («» si no lo trae) y
+    /// su tipo. Es el ÚNICO reconocedor: lo usan <see cref="IdQueViaja"/> (qué viaja) y <see cref="NombreParaContar"/>
+    /// (qué se registra), para que lo que viaja sin texto y lo que se cuenta sin texto no puedan discrepar.
+    /// </summary>
+    public static bool EsFila(string id, out string numero, out string tipo)
+    {
+        numero = ""; tipo = "";
+        var m = _idDePuerta.Match(id ?? "");
+        if (!m.Success) return false;
+        foreach (var t in TiposDeFila)
+            if (string.Equals(m.Groups[3].Value, t, StringComparison.Ordinal))
+            {
+                numero = m.Groups[1].Value;
+                tipo = t;
+                return true;
+            }
+        return false;
+    }
+
+    /// <summary>
+    /// EL ID CON EL QUE UNA PUERTA VIAJA A JEV (350): una fila viaja como «2) fila (GuiGridFila)», sin su texto, TAMBIÉN
+    /// con SAP habilitado —habilitar SAP es dejar que viaje el cromo de la pantalla, no la lista de pacientes—; el resto,
+    /// tal cual. Jev elige entre filas por su número y su tipo, y <see cref="ElDecisor"/> devuelve su respuesta a la
+    /// puerta ofrecida, que es la que lleva detrás el selector.
+    /// </summary>
+    public static string IdQueViaja(string id)
+    {
+        if (!EsFila(id, out string numero, out string tipo)) return id;
+        return numero.Length > 0 ? $"{numero}) fila ({tipo})" : $"fila ({tipo})";
+    }
+
+    /// <summary>
+    /// CÓMO SE NOMBRA UNA PUERTA EN LO QUE SE REGISTRA Y SE CUENTA (350): la etiqueta, y si es una fila, «fila 2
+    /// (GuiGridFila)». Lo que no viaja por su texto tampoco se escribe por su texto en el log: la línea «decisor:», el
+    /// relato de <c>map_decidir</c>, el veto y la línea «paso k:» del tramo salen al disco y al notch.
+    /// </summary>
+    public static string NombreParaContar(string id, string etiqueta)
+    {
+        if (!EsFila(id, out string numero, out string tipo)) return etiqueta;
+        return numero.Length > 0 ? $"fila {numero} ({tipo})" : $"fila ({tipo})";
     }
 }
