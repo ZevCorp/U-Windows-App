@@ -13720,43 +13720,59 @@ internal static class Contrato
         const int Presupuesto = 400;
         var campo = new Nucleo.Elemento("uia:name=q;ct=Edit", "q", "Edit");
 
-        (RecorrerSegunElNucleo.Resultado R, long Ms) Escribe(Func<long, string> dondeSegunMs, Func<int, object?>? huella)
+        // EL PASO ES «DESDE A», COMO DICE LA SPEC: el mundo está en A hasta que el paso escribe, y después es lo que diga
+        // `dondeSegunMs`. Corregido en la fase 6, sin tocar ninguna expectativa: con `_ => C` desde el primer instante, el
+        // caso 1 nunca había estado en A —la de partida ERA C— y no se distinguía del caso 3 por ninguna lectura del mundo.
+        // Medido (22-09) con el código de la fase 6 y el arnés de antes: cayó solo el caso 1, a los 1.212 ms, «asentada en
+        // la de partida». Los casos 2 y 4 ya empezaban en A, y el 3 es A siempre: para ellos no cambia nada.
+        (RecorrerSegunElNucleo.Resultado R, long Ms, List<string> Diario) Escribe(Func<long, string> dondeSegunMs, Func<int, object?>? huella)
         {
             var g = new Nucleo.Grafo(); g.Observar(A, new[] { campo });
             var crono = System.Diagnostics.Stopwatch.StartNew();
-            Func<string> donde = () => dondeSegunMs(crono.ElapsedMilliseconds);
+            bool escrito = false;
+            Func<string> donde = () => escrito ? dondeSegunMs(crono.ElapsedMilliseconds) : A;
             var pulsar = new PulsarSegunElNucleo(g, donde, (sel, et) => true) { EsperaMaximaMs = 120 };
-            var lote = new RecorrerSegunElNucleo(g, donde, pulsar, escribir: (c, t) => true, hayQueParar: () => false) { EsperaMaximaMs = Techo047 };
+            var lote = new RecorrerSegunElNucleo(g, donde, pulsar, escribir: (c, t) => { escrito = true; return true; }, hayQueParar: () => false) { EsperaMaximaMs = Techo047 };
             pPresupuesto.SetValue(lote, Presupuesto);
             tR.GetProperty("EsperaDeAsentarMs")?.SetValue(lote, 100);
             tR.GetProperty("RespiroMs")?.SetValue(lote, 100);
+            var diario = new List<string>();
+            lote.Diario = l => { lock (diario) diario.Add(l); };
             int n = 0;
             if (huella != null) pHuella.SetValue(lote, DelegadoDeHuella047(pHuella.PropertyType, () => huella(Interlocked.Increment(ref n))));
             var r = lote.Recorre(new[] { new RecorrerSegunElNucleo.Paso(campo.Selector, Texto: "hola", Llegada: B) });
-            return (r, crono.ElapsedMilliseconds);
+            return (r, crono.ElapsedMilliseconds, diario);
         }
         object? Quieta(int _) => Huella047("(la de la huella)", "w", new[] { "b" });
 
         // 1. ASENTADA EN OTRA (C ≠ A ≠ B): se agota el presupuesto de redirección mirando, y solo entonces el desvío, con las dos.
-        var (r1, ms1) = Escribe(_ => C, Quieta);
+        var (r1, ms1, _) = Escribe(_ => C, Quieta);
         Debe(!r1.Termino && r1.Cuenta.Contains(B) && r1.Cuenta.Contains(C) && ms1 >= Presupuesto && ms1 < Techo047 / 2,
             $"asentada en OTRA pantalla se declara el desvío al agotar el presupuesto de redirección ({Presupuesto}), no en el acto ni al techo: {ms1} ms; «{Recorte(r1.Cuenta)}»");
 
         // 2. LA REDIRECCIÓN (refutación 5; docs.google.com → /document/u/0, spec 044 de Jose, 18-09): C a los 200 y B a los 700.
-        var (r2, ms2) = Escribe(ms => ms < 200 ? A : ms < 700 ? C : B, Quieta);
+        var (r2, ms2, d2) = Escribe(ms => ms < 200 ? A : ms < 700 ? C : B, Quieta);
         Debe(r2.Termino && r2.Hechos == 1 && ms2 < Techo047,
             $"una intermedia que se asienta y salta a la esperada dentro del presupuesto es una llegada, no un desvío: {ms2} ms; «{Recorte(r2.Cuenta)}»");
+        // LA MEDIDA (d) DE LA SPEC SE TOMA AQUÍ: «ms entre dos cambios de sitio seguidos» en las navegaciones con redirección.
+        // El nivel 4 de la fase 0 lo dejó escrito —«map_go_to no pasa por aquí: (d) se mide con la 356, en Recorrer»— y de
+        // esa medida, y de ninguna otra, sale el presupuesto de redirección; sin la línea se quedaría en el techo para
+        // siempre, porque no habría de dónde sacarlo. Añadido en la fase 6, en rojo antes de su código.
+        string[] d2Junto; lock (d2) d2Junto = d2.ToArray();
+        Debe(d2Junto.Any(l => System.Text.RegularExpressions.Regex.IsMatch(l, "«" + System.Text.RegularExpressions.Regex.Escape(C) + @"» a los \d+ ms")
+                && System.Text.RegularExpressions.Regex.IsMatch(l, "«" + System.Text.RegularExpressions.Regex.Escape(B) + @"» a los \d+ ms")),
+            $"y la llegada deja dicho a los cuántos ms cambió de sitio cada vez —a la intermedia y a la esperada—, que es la medida de la que sale el presupuesto: [{string.Join(" ¦ ", d2Junto)}]");
 
         // 3. ASENTADA EN LA DE PARTIDA: una página que aún no empezó a pintarse parece asentada. Se espera el techo.
-        var (r3, ms3) = Escribe(_ => A, Quieta);
+        var (r3, ms3, _) = Escribe(_ => A, Quieta);
         Debe(!r3.Termino && ms3 >= Techo047 - 100, $"asentada en la de partida se sigue esperando hasta el techo: {ms3} ms de {Techo047}");
 
         // 4. LLEGA: en cuanto la ubicación coincide, como hoy.
-        var (r4, ms4) = Escribe(ms => ms < 200 ? A : B, Quieta);
+        var (r4, ms4, _) = Escribe(ms => ms < 200 ? A : B, Quieta);
         Debe(r4.Termino && ms4 < Techo047 / 2, $"llegar a la esperada contesta en cuanto la ubicación coincide: {ms4} ms");
 
         // 5. SIN HUELLA: como hoy (el techo entero mirando la ubicación).
-        var (r5, ms5) = Escribe(_ => C, null);
+        var (r5, ms5, _) = Escribe(_ => C, null);
         Debe(!r5.Termino && ms5 >= Techo047 - 100, $"sin huella se espera como hoy: {ms5} ms de {Techo047}");
     }
 

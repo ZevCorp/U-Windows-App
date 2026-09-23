@@ -361,7 +361,11 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   los 700 → llegada, no desvío; `_donde` da A (la de partida) y huella constante → `≥ Techo − 100`; `_donde`
   pasa a B a los 200 ms → llegada en `< Techo/2`; sin huella y `_donde` = C → `≥ Techo − 100`. **Sabotajes
   (dos, por diff):** quitar la condición «ni la de partida» (cae el caso de la partida); y declarar el desvío
-  en el acto sin agotar el presupuesto (cae el caso de la redirección).
+  en el acto sin agotar el presupuesto (cae el caso de la redirección). **Corregido en la fase 6** (el porqué, en
+  «Hallazgos»): «desde A» se escribe en el arnés —`_donde` da A hasta que el paso escribe, y después lo del
+  caso—, porque con `_ => C` desde el primer instante la de partida ERA C. Y una aserción más, en rojo antes de
+  su código: en la redirección, la línea de la llegada dice a los cuántos ms cambió a C y a B, la medida (d).
+  Su sabotaje: la línea deja de anotar los cambios de sitio.
 - **357** — Mundo con un `TreeItem` sin gesto y una `Button` con destino aprendido a otro sitio. TreeItem
   con huella constante y `_donde` fijo → 2 toques (clic y `doubleclick`) y total `< Techo` (dos esperas,
   ninguna al techo); Button con destino → 2 toques (clic y repetición) y total `≥ 2 × Techo − 200`, y el
@@ -771,6 +775,88 @@ dé el presupuesto de redirección.
     `hasta == desde`, gesto vacío y contenido. Si un TreeItem se despliega con el clic simple, cambia dentro y aun así
     recibe el doble, que puede volver a plegarlo. Hasta la 047 no había forma de verlo; ahora la huella lo ve.
     Cambiarlo es cambiar lo que promete la 83: necesita su propia promesa, en otra fase u otra rama.
+- **2026-09-22, fase 6 (la llegada no agota el techo ni declara en el acto; la 356 en verde).**
+  - **Qué cambió**: un archivo de producción, `RecorrerSegunElNucleo.cs`. Además, `EsperaAsentada.Cadena` pasa de
+    `private` a `internal` (una línea) para no escribir una tercera copia del «la cadena entera» (patrón nº3).
+    - **`Huella`**: nulo = los ojos del pulsar que ya usa el batch. **`PresupuestoDeRedireccionMs`**: sin asignar es
+      `EsperaMaximaMs`, el techo. **`RespiroMs`**: sin asignar, el del pulsar. La primera es `EsperaDeAsentarMs`, el 400
+      de la 299. Así cada número existe una sola vez.
+    - **`LlegoDondeTocaba`** usa una `EsperaAsentada` por sitio juzgado, con la misma regla que la de `Pulsa` y no una
+      segunda. La de partida se lee **antes de actuar**, y solo si hay ojos y el paso trae llegada. Sin ojos no se paga
+      ni una lectura más.
+    - **El presupuesto cuenta desde que se asentó en la otra**, que es lo que dice el enunciado («cuando se asentó en
+      otra… se sigue mirando»). Contarlo desde que se vio C no vale: la redirección del contrato (C a los 200, B a los
+      700) daría desvío hacia los 620 (D: C se ve en la vuelta de los ~220, más 400).
+    - Antes de declarar el desvío se relee el sitio fresco (2b). Si llega vacío, no es «sigue allí» (patrón nº9): se
+      espera como hoy y la línea lo dice.
+  - **`FaceWindow` no se toca, y es lo mínimo que el código exigía.** La spec preveía `recorrer.Huella = pulsar.Huella`
+    dentro de las ≤2 líneas de la fase 0, pero esas dos ya las gastó el pulsar (`:795-796`). El batch recibe **el mismo
+    pulsar** (`:809-812`), así que toma de él la huella, el sitio fresco y el respiro. Una tercera línea en la zona de
+    choque de la UI no aportaba nada.
+  - **La línea de la llegada: la medida (d).** Formato: `🛬 llegada a «B» tras …: partida «A» · cambió a «C» a los N ms
+    → «B» a los M ms · asentada en «…» a los K ms · … · dejó de esperar a los T ms: <por qué>`. Hay una por cada llegada
+    que se comprueba, y va al `Diario` del batch (en la app, `LogBus` «compuerta»). De ahí sale el p95 de los «ms entre
+    dos cambios de sitio seguidos»; sin ella el presupuesto se quedaría en el techo para siempre. La juzga una aserción
+    nueva de la 356, escrita **en rojo antes de su código**.
+  - **Hallazgo del arnés, medido.** El caso 1 decía «un paso de escribir desde A» y el arnés daba `_ => C` desde el
+    primer instante: la de partida **era C**, y el caso no se distinguía del 3 por ninguna lectura del mundo.
+    - Con el código de esta fase y el arnés de antes cayó **solo el caso 1**, a los **1.212 ms**: asentada en la de
+      partida, techo. Los otros cuatro casos y la aserción nueva salieron en ✔, y los otros 306 veredictos fueron
+      iguales a la fase 5.
+    - Se corrigió el arnés, no el código: `_donde` da A hasta que el paso escribe y después lo del caso. **Ninguna
+      expectativa cambió.** Los casos 2 y 4 ya empezaban en A, y el 3 es A siempre.
+    - No se resolvió en el código sacando la de partida del grafo (dónde vive el campo): un campo «q» vive en muchas
+      pantallas, y un paso de tecla no tiene campo.
+  - **Hallazgo de reloj, medido y arreglado en la misma fase.** Con el arnés corregido, el caso 1 salió a los
+    **603 ms** para un límite de `< 600`. Dos causas:
+    - La vuelta fija de 120 ms confirmaba la asentada una vuelta tarde.
+    - El `Compas` por defecto cuenta con `TickCount64`, que avanza a saltos de ~15,6 ms: el mismo hallazgo de la fase 4.
+    - Ahora el compás de la llegada va con un `Stopwatch`, y se mira **en el instante en que la regla puede decidir**
+      (un respiro quieta y pasada la primera) y en el que vence el presupuesto. Sin ojos, la vuelta es la de siempre.
+    - **El margen es corto, y se dice.** El caso 1 no puede salir antes de ~500 ms (100 hasta asentarse más 400 de
+      presupuesto) y tiene que salir antes de 600. El sabotaje (a) recorre ese mismo camino en el caso 3 y midió
+      **538 ms**: unos 60 ms de margen en una máquina con otras tres ramas compilando.
+  - **Sitios** (patrón nº5; M, `grep`):
+    - **3** sitios juzgan la llegada de un paso del batch. **2** miran ahora: `:237` y `:248`, escribir y la tecla
+      sola, las dos por `LlegoDondeTocaba`.
+    - **1 no se toca**: el clic (`:312`). Juzga `r.Hasta` **en el acto**, tras la espera de `Pulsa`, que sale al primer
+      cambio de sitio. Un clic que redirige (A → C → B) se declararía desvío en C.
+    - Ya pasaba antes de esta rama. Queda fuera por dos razones: ninguna aserción lo juzga, y mientras el presupuesto
+      sea el techo, llevarle la mirada solo **añadiría** hasta un techo de espera (4 s en la app) a cada aterrizaje
+      equivocado. **Pendiente**, con su caso en rojo, para cuando la medida (d) dé el presupuesto.
+    - De los 11 sitios que calculan «cambió» por ubicación o recuento quedan **7**; tras la fase 5 eran 8. Sale
+      `LlegoDondeTocaba`.
+  - **Sin juez, y se dice**: **SAP → como hoy** (`sapgui://` en la de partida o en la esperada; la misma regla 4 que en
+    `Pulsa`). Con el presupuesto en el techo no cambia nada. El día que la medida (d) lo baje, SAP no puede quedar debajo
+    sin la 360.
+  - **Contrato** (M, con `TEMP` propio):
+    - **Antes**: `CONTRATO ROTO: 5` (304 ✔ / 3 ✘: 356, 358, 359), la corrida final de la fase 5 sobre `22d23f5`, con el
+      árbol limpio.
+    - **Después**: **`CONTRATO ROTO: 4`** (305 ✔ / 2 ✘: 358 y 359, de fases posteriores). Solo cambia `✘ 356.` →
+      `✔ 356.`, y las aserciones rojas de la 358 y la 359 son las mismas.
+    - Siguen en ✔: 44, 83, **103**, 226, 245, 248, 292, 296, 299, 334, 351, 352, 353, 354, 355 y 357.
+    - Compila con 0 errores, los mismos 36 warnings y ninguno en los archivos tocados.
+  - **Sabotajes, verificados por diff** (1+/1− contra la copia, ancla con `\r\n` y una sola coincidencia, 0 errores al
+    compilar):
+    - (a) **El de la spec**: sin «ni la de partida», `AsentadaEnOtra() => asentadaA >= 0`. Resultado: **`CONTRATO ROTO:
+      5`**. Cae solo la 356, y solo el caso de la partida: «asentada en la de partida se sigue esperando hasta el techo:
+      538 ms de 1200».
+    - (b) **El de la spec**: el desvío en el acto, sin `t - asentadaA >= PresupuestoDeRedireccionMs`. Resultado:
+      **`CONTRATO ROTO: 7`**, y solo la 356.
+      - Cae el caso de la redirección (339 ms), como predijo la spec.
+      - Cae también el caso 1 (109 ms: su cota de abajo, «no en el acto»).
+      - Cae la aserción de la línea, porque B ya no llega. La línea lo cuenta: «asentada en «web://x/c» a los 338 ms
+        … siguió allí 0 ms».
+    - (c) La línea deja de anotar los cambios de sitio (`cambios.Add(` → `_ = (`). Resultado: **`CONTRATO ROTO: 5`**, y
+      solo la aserción de la medida. La línea dijo «no cambió de sitio» en una navegación A → C → B que llegó a los
+      734 ms.
+    - El primer intento de (c) no se aplicó: el ancla llevaba «» y el `.ps1` sin BOM se lee como ANSI (0
+      coincidencias). El guardia del script lo paró **antes de tocar nada**, que es para lo que está (2026-08-21).
+    - Restaurados los tres: `cmp` byte a byte contra cada copia (md5 `B5D34E3D…`), fecha tocada y recompilado.
+      Después, `CONTRATO ROTO: 4` veredicto a veredicto, y las aserciones rojas iguales sin los ms.
+  - **Sin nivel 4**: esta rama no ejecuta `U.exe`. En la app el presupuesto es el techo (4.000 ms) y nada se recorta.
+    Lo que cambia allí es que la llegada toma una huella por vuelta, deja su línea, y contesta hasta ~400 ms antes
+    cuando el sitio releído fresco ya es el esperado (D: la memoria de `_donde` dura 400 ms).
 
 ## Revisiones
 
@@ -801,6 +887,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Fase 3: la 334 reescrita sin reciclar el número, con el cuerpo byte a byte; la 354 verde y su sabotaje propio verificado por diff (cae su primer caso, y con él la 351 y la 355) (2026-09-22)
 - [x] Fase 4: la 353 verde por los dos caminos (manos falsas y `MapaParaTramo`); 44 y 292 intactas; los dos sabotajes de la spec verificados por diff (2026-09-22)
 - [x] Fase 5: la 357 verde; 83, 248 y 296 intactas; las 3 esperas de `Pulsa` con una sola huella y una sola regla (de los 11 sitios quedan 8); el sabotaje de la spec y uno más, verificados por diff (2026-09-22)
+- [x] Fase 6: la 356 verde; 103 intacta; la llegada no recorta nada mientras el presupuesto sea el techo; los dos sabotajes de la spec y uno de la línea (d), verificados por diff; `FaceWindow` sin tocar (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

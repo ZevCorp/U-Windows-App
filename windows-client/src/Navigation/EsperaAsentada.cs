@@ -174,8 +174,9 @@ public sealed class EsperaAsentada
         return $"{asentada} · {coste} · {fresco} · {Sondeos} sondeo(s) de huella";
     }
 
-    /// <summary>La cadena ENTERA de la excepción: un mensaje envuelto se guarda para sí el porqué (patrón nº3).</summary>
-    private static string Cadena(Exception e)
+    /// <summary>La cadena ENTERA de la excepción: un mensaje envuelto se guarda para sí el porqué (patrón nº3). La usa también
+    /// la llegada (356), para no escribir una tercera copia.</summary>
+    internal static string Cadena(Exception e)
     {
         var partes = new List<string>();
         for (Exception? x = e; x != null; x = x.InnerException) partes.Add($"{x.GetType().Name}: {x.Message}");
