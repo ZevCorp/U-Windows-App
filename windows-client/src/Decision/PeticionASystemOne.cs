@@ -146,7 +146,12 @@ public static class PeticionASystemOne
     }
 
     /// <summary>Las instrucciones de la pregunta, en el idioma del terreno.</summary>
+    /// <remarks>
+    /// YA NO PIDE «LA QUE MENOS DAÑO HAGA» (promesa 390, spec 046): era el «clicking best guess» del vídeo de Jev, en
+    /// español, y obligaba a elegir una puerta aunque ninguna avanzara. Desde la 391 viaja «0) ninguna», y lo honesto
+    /// es pedir esa. Lo irreversible lo veta la lista determinista al pulsar, no esta frase (2026-09-22).
+    /// </remarks>
     public static string InstruccionesDeLaPuerta(string objetivo) =>
         $"¿Qué puerta de esta pantalla hay que accionar AHORA para avanzar hacia «{objetivo}»? "
-      + "Elige solo entre las puertas listadas. Si ninguna avanza hacia el objetivo, elige la que menos daño haga.";
+      + "Elige solo entre las opciones listadas. Si ninguna puerta avanza hacia el objetivo, elige «0) ninguna»: no adivines.";
 }

@@ -397,6 +397,7 @@ dependencias: la «ninguna» tiene que viajar antes de que la 388 exija que la r
 | **Toca** | `Mcp/SurfaceMapTools.cs:301-309` (`EsPeligrosa` sobre cada candidata; cuenta con `PorQue`), `Decision/PeticionASystemOne.cs:141` (fuera «menos daño») |
 | **Terminado** | 390 verde; 285–288, 291–295 intactas (sus fixtures pulsan A/B/C/Detalles/Nuevo: comprobado con `grep` en fase 0, ninguna etiqueta peligrosa) |
 | **Sitios** | `EsPeligrosa`: de 1 a 2 llamadores; `EsDestructivo` sigue en sus 2 |
+| **Hecho** | 2026-09-22. En `UnPasoDecidido` (`SurfaceMapTools.cs:301-377`) una función local `Vetada(id)` = `EsPeligrosa(etiqueta)` → `PorQue(etiqueta)`, evaluada **antes de cualquier `Take`**: la elegida vetada devuelve `Sin(«no se acciona: Jev eligió «Grabar» (2) con confianza 0.99, y «Grabar» no se puede deshacer: te la dejo a ti. Lo irreversible no se pulsa por decisión.»)` —la mano no la recibe y no cuenta intento— y **no cae a la segunda** (la segunda es para «no estaba», no para «Jev quiso lo irreversible»); la segunda vetada no se añade a las candidatas, tampoco se busca una tercera, y si la primera no estaba la cuenta termina en «; la segunda, «Guardar» (2) con probabilidad 0.40, no la pruebo: «Guardar» no se puede deshacer: te la dejo a ti.» (patrón nº10). Las dos dejan una línea `✋ … vetada` en el log `decisor`. `InstruccionesDeLaPuerta`: «…Si ninguna puerta avanza hacia el objetivo, elige «0) ninguna»: no adivines.» **Lo mínimo que el código exigió**: nada fuera de los dos archivos; `ElTramo.cs` no se toca (ver Hallazgos: su motivo dice «no se atrevió» también para el veto). **Sitios (M)**: `PuertasPeligrosas.EsPeligrosa(` en producción → **2** sitios (`InstanciarSkill.cs:46`, `SurfaceMapTools.cs:309`), de 1; `EsDestructivo(` sigue en **2** (`SurfaceMapTools.cs:2356`, `PulsarSegunElNucleo.cs:217`); `PuertasPeligrosas.PorQue(` pasa de **0** llamadores a 1 —existía desde la spec 009 «para poder DECIRLO» y nadie lo decía—; «menos daño» en `windows-client/src`, `windows-graph/src` y `sondas/` → 0; `Take(` dentro de `UnPasoDecidido` → 1, y el veto va antes. Veredicto de partida (tras `ac852c0`): `CONTRATO ROTO: 16` —390 roja por 8 aserciones, entre ellas «las instrucciones no piden elegir «la que menos daño haga»»—. Veredicto literal al terminar: `CONTRATO ROTO: 8 promesa(s) incumplida(s). El cambio no puede entrar así.` — rojas exactamente 393, 350, 386, 387 (fases 6–8); **303 verdes** (302 antes); 390 ✔, 285–288 ✔, 291–295 ✔, 126 ✔. Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` **Sabotaje (M)**: `SurfaceMapTools.cs:309` `&& Navigation.PuertasPeligrosas.EsPeligrosa(p.Etiqueta)` → `&& false` (el que dice la tabla: quitar `EsPeligrosa` del filtro de candidatas; `fc /N` contra copia: una línea) → `CONTRATO ROTO: 15`, la 390 roja por sus 7 aserciones de veto («se pulsó [uia:name=Grabar;ct=Button]», «se pulsó [uia:name=A;ct=Button · uia:name=Guardar;ct=Button]», el tramo pulsando «Grabar» tres veces) y ni una promesa más; `U.dll` posterior al `.cs` (19:03:58 < 19:04:19). Restaurada (`fc /B` sin diferencias, SHA-256 idéntico a la copia), fecha tocada, `U.dll` posterior (19:05:36 < 19:05:46): 8 otra vez, 390 ✔. La cláusula de las instrucciones no la muerde ese sabotaje —es otra línea—; su evidencia es el rojo de partida y el verde de ahora |
 
 ### Fase 6 — la política de lo que viaja
 
@@ -513,6 +514,22 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   «345 roja» ya no dice cuál. No es de esta rama; se dice en el PR. **Reservar no es gastar, y un
   número libre por la mañana deja de estarlo al mediodía**: la única comprobación que vale es la del
   momento del merge.
+- **2026-09-22, fase 5.** El tramo para por el veto con «paré: el decisor no se atrevió: Jev eligió «Grabar»
+  (2) y está vetada: …». La cuenta dice lo cierto porque el porqué va detrás, pero el prefijo concluye mal
+  (patrón nº2): Jev sí se atrevió, a 0,99. `ElTramo.cs:157-159` pone «no se atrevió» a **todo** paso sin
+  acción que no sea cumplido, y hoy eso reúne **7** causas que salen de `UnPasoDecidido` (decisor apagado,
+  sin pantalla, sin elementos, el decisor lanzó, `Actuar=false` —duda, «ninguna», no cuadra, peligro—,
+  contestó una no ofrecida, la elegida vetada) **(M)**: 8 `return Sin(` en `UnPasoDecidido`, las 7 causas más la salida del bucle «no quedó ninguna candidata». No se
+  toca en esta fase: la 386 (fase 8) exige literalmente «no se atrevió» para el caso `Cumplido=0,1`, y esas
+  líneas son las que la fase 8 reescribe. Queda para ella: una rama propia para el veto, o un prefijo que
+  describa («no se acciona:») en vez de concluir.
+- **2026-09-22, fase 5.** `PuertasPeligrosas.PorQue` tenía **0** llamadores desde que nació en la spec 009
+  («cuál de los verbos mordió, para poder DECIRLO»): `InstanciarSkill` corta con `break` sin decir por qué.
+  Hoy lo dice `UnPasoDecidido`; `InstanciarSkill` sigue mudo y queda fuera.
+- **2026-09-22, fase 5.** `sondas/DelDecisor/Programa.cs:62-64` arma su propio cuerpo con
+  `InstruccionesDeLaPuerta` y **sin** «0) ninguna» (hallazgo de la fase 1): desde esta fase la instrucción le
+  pide a Jev una opción que en la sonda no viaja. La sonda mide latencia, no decisión; queda fuera, y se
+  anota para quien la use en el nivel 4 (punto 1).
 
 ## Revisiones
 

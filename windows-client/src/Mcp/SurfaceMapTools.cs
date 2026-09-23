@@ -298,6 +298,31 @@ public sealed class SurfaceMapTools
             return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
                 cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo || d.Porque.Contains("cumplido", StringComparison.OrdinalIgnoreCase));
 
+        // LO IRREVERSIBLE NO SE PULSA POR DECISIÓN (promesa 390, spec 046), y se mira AQUÍ, al construir las
+        // candidatas y antes de cualquier Take: es el único sitio por el que pulsan map_decidir y el tramo. Hasta el
+        // 2026-09-22 el único freno era la noul «peligro», que es el MODELO juzgándose a sí mismo: con «Grabar» a
+        // 0,99 y peligro 0 la mano lo recibía, y el tramo lo pulsó tres veces seguidas en el contrato. La lista
+        // determinista manda sobre el modelo. Es PuertasPeligrosas y no SafeToClick.EsDestructivo, que excluye
+        // «guardar» a propósito. Consecuencia deliberada: ni el tramo ni map_decidir pulsan «Guardar» aunque el
+        // objetivo sea guardar; eso lo pulsa la persona, o Luna con un map_take explícito.
+        string Vetada(string id) =>
+            selectorDe.TryGetValue(id, out var p) && Navigation.PuertasPeligrosas.EsPeligrosa(p.Etiqueta)
+                ? Navigation.PuertasPeligrosas.PorQue(p.Etiqueta) : "";
+        static string NumeroDe(string id) => id.Contains(')') ? id.Substring(0, id.IndexOf(')')) : id;
+
+        string vetoElegida = Vetada(d.Puerta);
+        if (vetoElegida.Length > 0)
+        {
+            // LA ELEGIDA VETADA NO CAE A LA SEGUNDA: la segunda es para «no estaba», no para «Jev quiso pulsar algo
+            // que no se deshace». Si Jev apunta ahí, lo que hay que decidir ya no es de esta pieza.
+            var vetada = selectorDe[d.Puerta];
+            string conf = d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) conf={conf}: {vetoElegida}");
+            return Sin($"no se acciona: Jev eligió «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) con confianza {conf}, y {vetoElegida} "
+                     + "Lo irreversible no se pulsa por decisión.",
+                $"Jev eligió «{vetada.Etiqueta}» ({NumeroDe(d.Puerta)}) y está vetada: {vetoElegida}", d.Confianza);
+        }
+
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
         // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
         // probabilidades ya vinieron. La tercera no se prueba: sería adivinar.
@@ -306,7 +331,20 @@ public sealed class SurfaceMapTools
             .Where(a => a.Puerta != d.Puerta && a.Probabilidad >= Decision.ElDecisor.SegundaMejorMinima && selectorDe.ContainsKey(a.Puerta))
             .OrderByDescending(a => a.Probabilidad)
             .FirstOrDefault();
-        if (segunda.Puerta != null) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+        // LA SEGUNDA VETADA NO SE AÑADE, y tampoco se busca una tercera en su lugar (sería adivinar, arriba). Queda
+        // anotado para decirlo si la primera no estaba: un paso no ejecutado deja rastro (patrón nº10).
+        string vetoSegunda = "";
+        if (segunda.Puerta != null)
+        {
+            vetoSegunda = Vetada(segunda.Puerta);
+            if (vetoSegunda.Length == 0) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+            else
+            {
+                vetoSegunda = $"la segunda, «{selectorDe[segunda.Puerta].Etiqueta}» ({NumeroDe(segunda.Puerta)}) con probabilidad "
+                            + $"{segunda.Probabilidad.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}, no la pruebo: {vetoSegunda}";
+                LogBus.Log("decisor", $"✋ «{aqui}» · vetada {vetoSegunda}");
+            }
+        }
 
         var relato = new System.Text.StringBuilder();
         for (int k = 0; k < candidatos.Count; k++)
@@ -335,7 +373,8 @@ public sealed class SurfaceMapTools
                 continue;
             }
             if (noEstaba)
-                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}");
+                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}")
+                      .Append(vetoSegunda.Length > 0 ? $"; {vetoSegunda}" : "");
             else
                 relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
             bool termino = mano?.Termino == true;
