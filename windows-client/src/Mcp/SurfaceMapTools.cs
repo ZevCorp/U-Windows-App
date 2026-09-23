@@ -2895,10 +2895,17 @@ public sealed class SurfaceMapTools
         var compas = new Compas(msMax);
         IntPtr mira = ventana != IntPtr.Zero ? ventana : GetForegroundWindow();
         var ojos = new HuellaEnVivo(() => _where()?.Id ?? "", () => mira) { RespiroMs = EsperaAsentada.RespiroMetaMs };
-        Func<string> sitioFresco = string.IsNullOrWhiteSpace(sitioDeAntes) ? () => "" : ojos.SitioFresco;
+        // SIN SITIO DE ANTES NO HAY SITIO QUE JUZGAR: nulo, y decide la huella. Hasta el 23-09 era una función que devolvía «», y
+        // desde que un sitio fresco vacío ya no deja declarar nada (vacío no es «no cambió», nº9) eso habría sido esperar siempre
+        // el techo.
+        Func<string>? sitioFresco = string.IsNullOrWhiteSpace(sitioDeAntes) ? null : ojos.SitioFresco;
+        // EL SITIO SE COMPARA COMO LO COMPARA Type (revisión del 23-09): con Superficies.MismaPantalla, el mismo camino que
+        // ElEnterSeDeshace y RelatoDeEscribir. Con Ordinal, «web://www.google.com/search» antes del Enter y «web://google.com/search»
+        // después —medido el 18-09 en map_type, 7 veces en una sesión— salía como «cambió de sitio» en la primera relectura, antes
+        // de que se pintara la página, y acto seguido Type decidía que era la misma pantalla.
         var v = EsperaAsentada.Espera(ojos.Tomar, sitioFresco,
             HuellaDeLoQueSeVe.De(sitioDeAntes, "", Array.Empty<string>(), Array.Empty<string>()),
-            compas, EsperaAsentada.RespiroMetaMs, EsperaAsentada.PrimeraMetaMs, 120);
+            compas, EsperaAsentada.RespiroMetaMs, EsperaAsentada.PrimeraMetaMs, 120, Navigation.Superficies.MismaPantalla);
         string porQue = v.PorQueDejoDeEsperar switch
         {
             EsperaAsentada.PorQue.Asentada => $"asentada (dos huellas iguales con {EsperaAsentada.RespiroMetaMs} ms de respiro, desde los {EsperaAsentada.PrimeraMetaMs} ms)",

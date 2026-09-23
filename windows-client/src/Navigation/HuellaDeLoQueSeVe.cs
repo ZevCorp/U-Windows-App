@@ -29,8 +29,17 @@ public sealed class HuellaDeLoQueSeVe
     /// <summary>Qué cambió entre dos huellas, de menos a más: el orden es la prioridad de <see cref="Comparar"/>.</summary>
     public enum QueCambio { Nada, Dentro, Delante, DeSitio }
 
-    /// <summary>Qué parte de la huella lo vio. «Ventanas» es un «Dentro» que solo la cuarta parte ve.</summary>
-    public enum Parte { Nada, Sitio, Delante, Dentro, Ventanas }
+    /// <summary>
+    /// Qué parte de la huella lo vio. «Ventanas» es un «Dentro» que solo la cuarta parte ve; «Titulo» es un «Delante» en el que
+    /// la ventana es la misma y solo cambió su título.
+    /// </summary>
+    /// <remarks>
+    /// «TITULO» VA AL FINAL a propósito: los números de las que ya había no se mueven. Nació el 2026-09-23 (revisión de la rama):
+    /// «delante» es el hwnd y el título, y cualquier diferencia se contaba «otra ventana pasó al frente». En Gmail «marcar como
+    /// leído» cambia «Recibidos (3)» por «Recibidos (2)» sin cambiar de ventana, y «Nuevo chat» retitula ChatGPT.exe: la cuenta
+    /// afirmaba una causa que no podía distinguir (patrón nº2) y mandaba al modelo a buscar un diálogo que no existía.
+    /// </remarks>
+    public enum Parte { Nada, Sitio, Delante, Dentro, Ventanas, Titulo }
 
     public readonly record struct Diferencia(QueCambio QueCambio, Parte Parte)
     {
@@ -55,9 +64,49 @@ public sealed class HuellaDeLoQueSeVe
     /// <summary>No entra en la igualdad: es medida, no identidad.</summary>
     public Costes Coste { get; init; }
 
+    /// <summary>
+    /// CUÁNTOS MS TENÍA LA LECTURA DE «DENTRO» al tomar esta huella: 0 = se leyó ahora. No entra en la igualdad: dice CUÁNDO se
+    /// vio lo de dentro, no QUÉ se vio.
+    /// </summary>
+    /// <remarks>
+    /// EXISTE PORQUE LA HUELLA REAL REUTILIZA LO DE DENTRO (<see cref="HuellaEnVivo"/>: como mucho una lectura por respiro, y la de
+    /// ANTES de tocar es de la misma instancia). Hasta el 2026-09-23 la espera daba la pantalla por asentada con «dos huellas
+    /// iguales, un respiro en medio y pasada la primera» medido en el reloj de los sondeos, y la última lectura real de dentro en
+    /// la que se apoyaba podía ser de 240 ms antes, o la de antes de tocar: la regla se cumplía en el reloj y no en lo observado
+    /// (revisión de la rama; bloqueaba). Con la edad, <see cref="EsperaAsentada"/> cuenta desde cuándo se leyó de verdad.
+    /// Las huellas fabricadas a mano (el contrato) valen 0: siempre frescas.
+    /// </remarks>
+    public long EdadDeDentroMs { get; init; }
+
     private HuellaDeLoQueSeVe(string sitio, string delante, IReadOnlyList<string> dentro, IReadOnlyList<string> ventanas)
     {
         Sitio = sitio; Delante = delante; Dentro = dentro; Ventanas = ventanas;
+    }
+
+    /// <summary>
+    /// «DELANTE» SE ESCRIBE AQUÍ, Y SE LEE AQUÍ: el hwnd en hexadecimal, «·» y el título. <see cref="Comparar"/> separa las dos
+    /// partes por el mismo camino (aprendizaje nº16) para distinguir otra ventana al frente de la misma con otro título.
+    /// </summary>
+    public static string DelanteDe(IntPtr hwnd, string titulo) => hwnd == IntPtr.Zero ? "(ninguna)" : $"{hwnd:X}·{titulo}";
+
+    /// <summary>La ventana de un «delante»: lo que va antes del primer «·». Sin «·» —una huella fabricada a mano— es todo.</summary>
+    private static string VentanaDe(string delante)
+    {
+        int punto = delante.IndexOf('·');
+        return punto < 0 ? delante : delante[..punto];
+    }
+
+    /// <summary>
+    /// «DELANTE» PARA EL LOG: la ventana y cuánto mide su título, NUNCA el título. El título de la ventana de delante puede llevar
+    /// datos —el nombre de un paciente, el asunto de un correo— y el log no se queda en esta máquina: <c>EspejoDelLog</c> sube cada
+    /// línea al panel del backend. La cuenta al modelo ya lo excluía; el log lo escribía en cada pulsación, antes y después, hasta
+    /// el 2026-09-23 (revisión de la rama). La igualdad sigue usando el título entero, en memoria.
+    /// </summary>
+    public static string DelanteParaElLog(string delante)
+    {
+        int punto = delante.IndexOf('·');
+        if (punto >= 0) return $"{delante[..punto]}·(título de {delante.Length - punto - 1} car.)";
+        return delante == "(ninguna)" ? delante : $"({delante.Length} car.)";
     }
 
     /// <summary>El ÚNICO camino para construir una: ordena, y normaliza el vacío como ausente (patrón nº9).</summary>
@@ -68,7 +117,10 @@ public sealed class HuellaDeLoQueSeVe
         return new(sitio ?? "", delante ?? "", Ordena(identidades), Ordena(ventanas));
     }
 
-    public HuellaDeLoQueSeVe ConCoste(Costes coste) => new(Sitio, Delante, Dentro, Ventanas) { Coste = coste };
+    public HuellaDeLoQueSeVe ConCoste(Costes coste) => new(Sitio, Delante, Dentro, Ventanas) { Coste = coste, EdadDeDentroMs = EdadDeDentroMs };
+
+    /// <summary>La misma huella, diciendo cuántos ms tenía su lectura de dentro (<see cref="EdadDeDentroMs"/>). Nunca negativa.</summary>
+    public HuellaDeLoQueSeVe ConEdadDeDentro(long ms) => new(Sitio, Delante, Dentro, Ventanas) { Coste = Coste, EdadDeDentroMs = Math.Max(0, ms) };
 
     /// <summary>Las cuatro partes iguales. El coste no cuenta.</summary>
     public static bool Iguales(HuellaDeLoQueSeVe? a, HuellaDeLoQueSeVe? b) =>
@@ -82,7 +134,9 @@ public sealed class HuellaDeLoQueSeVe
     public static Diferencia Comparar(HuellaDeLoQueSeVe antes, HuellaDeLoQueSeVe ahora)
     {
         if (!string.Equals(antes.Sitio, ahora.Sitio, StringComparison.Ordinal)) return new(QueCambio.DeSitio, Parte.Sitio);
-        if (!string.Equals(antes.Delante, ahora.Delante, StringComparison.Ordinal)) return new(QueCambio.Delante, Parte.Delante);
+        // LA MISMA VENTANA CON OTRO TÍTULO NO ES OTRA VENTANA AL FRENTE: es un «delante» que vio el título (Parte.Titulo).
+        if (!string.Equals(antes.Delante, ahora.Delante, StringComparison.Ordinal))
+            return new(QueCambio.Delante, string.Equals(VentanaDe(antes.Delante), VentanaDe(ahora.Delante), StringComparison.Ordinal) ? Parte.Titulo : Parte.Delante);
         if (!antes.Dentro.SequenceEqual(ahora.Dentro, StringComparer.Ordinal)) return new(QueCambio.Dentro, Parte.Dentro);
         if (!antes.Ventanas.SequenceEqual(ahora.Ventanas, StringComparer.Ordinal)) return new(QueCambio.Dentro, Parte.Ventanas);
         return new(QueCambio.Nada, Parte.Nada);
@@ -95,5 +149,5 @@ public sealed class HuellaDeLoQueSeVe
     public static bool MismaPantallaQueVe(HuellaDeLoQueSeVe a, HuellaDeLoQueSeVe b) =>
         string.Equals(a.Sitio, b.Sitio, StringComparison.Ordinal) && a.Dentro.SequenceEqual(b.Dentro, StringComparer.Ordinal);
 
-    public override string ToString() => $"sitio «{Sitio}» · delante «{Delante}» · dentro {Dentro.Count} · ventanas {Ventanas.Count}";
+    public override string ToString() => $"sitio «{Sitio}» · delante «{DelanteParaElLog(Delante)}» · dentro {Dentro.Count} · ventanas {Ventanas.Count}";
 }

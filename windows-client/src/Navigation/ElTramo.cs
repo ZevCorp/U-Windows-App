@@ -22,7 +22,8 @@ namespace U.WindowsClient.Navigation;
 ///
 /// PARA SOLO, Y DICE POR CUÁL (292): objetivo cumplido, tope, el decisor no se atreve, la mano no pudo, el
 /// freno, o la misma puerta tres veces sin que cambie la pantalla —el detector de bucle que el diagnóstico
-/// pide desde los 80 taps en (330,222)—. Cada paso cuenta, hecho o no (patrón nº10).
+/// pide desde los 80 taps en (330,222)—, o cinco sin cambiar nunca de sitio (353: una ventana que cambia sola).
+/// Cada paso cuenta, hecho o no (patrón nº10).
 ///
 /// ESTA CLASE NO LEE LA PANTALLA NI PULSA: lo hace el paso que le dan (<see cref="Manos.Paso"/>), que es el
 /// mismo de <c>map_decidir</c>. Así el contrato la juzga entera con delegados falsos, sin pantalla.
@@ -34,6 +35,20 @@ public sealed class ElTramo
 
     /// <summary>La misma puerta, sin que cambie la pantalla, estas veces seguidas: se para.</summary>
     public const int RepeticionesQueParan = 3;
+
+    /// <summary>
+    /// La misma puerta sin cambiar NUNCA de sitio —solo dentro o delante— estas veces seguidas: también se para (353, revisión del
+    /// 23-09).
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ HACE FALTA, además de la de arriba. El veredicto compara lo que se veía antes del clic con lo último que se vio, así
+    /// que en una ventana que cambia SOLA —ChatGPT.exe mientras genera, Gmail cuando entra correo, una web con anuncios que rotan—
+    /// sale «dentro» en cada clic, lo haga el clic o no. Con el detector contando solo «nada», un botón muerto se pulsaba hasta el
+    /// tope de 15, esperando el techo en cada paso: el «lado seguro» de la espera (una pantalla que no para de moverse llega al
+    /// techo) era el inseguro del detector. CINCO Y NO TRES: un desplegable que se abre y se cierra para elegir da «dentro» con
+    /// razón, y la 353 exige que tres de esos no sean un bucle. Es una red, no una medida: la afina el nivel 4.
+    /// </remarks>
+    public const int RepeticionesSinSitioQueParan = 5;
 
     /// <summary>Lo que pasó en un paso del tramo. Lo produce el mapa; el tramo solo lo lee.</summary>
     /// <remarks>
@@ -140,7 +155,7 @@ public sealed class ElTramo
     private void Bucle()
     {
         _manos.AlEmpezar?.Invoke($"tramo: {_objetivo}");
-        int hechos = 0, repetidas = 0;
+        int hechos = 0, repetidas = 0, sinSitio = 0;
         string motivo;
         try
         {
@@ -183,10 +198,21 @@ public sealed class ElTramo
                 // llegada (44), pero tampoco son «nada».
                 bool repite = p.Selector == _ultimoSelector && p.QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada;
                 repetidas = repite ? repetidas + 1 : 1;
+                // Y LA MISMA PUERTA SIN CAMBIAR NUNCA DE SITIO (revisión del 23-09): «dentro» y «delante» no son «nada», pero en una
+                // ventana que cambia sola salen en cada clic. Se cuentan aparte, con su propio umbral.
+                bool repiteSinSitio = p.Selector == _ultimoSelector && p.QueCambio != HuellaDeLoQueSeVe.QueCambio.DeSitio;
+                sinSitio = repiteSinSitio ? sinSitio + 1 : 1;
                 _ultimoSelector = p.Selector;
                 if (repetidas >= RepeticionesQueParan)
                 {
                     motivo = $"pulsé la misma puerta «{p.Etiqueta}» tres veces y la pantalla no cambió: esto es un bucle, y no sigo.";
+                    break;
+                }
+                if (sinSitio >= RepeticionesSinSitioQueParan)
+                {
+                    // DICE LO QUE NO PUEDE DISTINGUIR (patrón nº2): «cambió dentro» cinco veces puede ser el clic o la ventana sola.
+                    motivo = $"pulsé la misma puerta «{p.Etiqueta}» cinco veces seguidas y nunca cambió de sitio, solo por dentro o delante: "
+                           + "no distingo si lo cambió mi clic o si la ventana cambia sola, y no sigo.";
                     break;
                 }
             }

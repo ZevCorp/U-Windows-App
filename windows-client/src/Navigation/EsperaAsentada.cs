@@ -48,12 +48,15 @@ public sealed class EsperaAsentada
         string Causa, string SitioAhora, int Sondeos);
 
     private readonly Func<HuellaDeLoQueSeVe?> _huella;
-    private readonly Func<string> _sitioFresco;
+    private readonly Func<string>? _sitioFresco;
+    private readonly Func<string, string, bool> _mismoSitio;
     private readonly HuellaDeLoQueSeVe _antes;
     private readonly int _respiroMs, _primeraMs;
 
     private HuellaDeLoQueSeVe? _referencia;   // la huella con la que empezó la racha quieta
-    private long _tReferencia;
+    // CUÁNDO SE LEYÓ DE VERDAD lo de dentro de la referencia, en el reloj de esta espera: el instante del sondeo menos la edad de
+    // su lectura (revisión del 23-09). Puede ser negativo: la lectura de antes de tocar, que la huella en vivo reutiliza.
+    private long _lecturaDeLaReferencia;
     private HuellaDeLoQueSeVe? _ultima;
     // NULO = AÚN NO SE RELEYÓ, y no long.MinValue: «t - long.MinValue» desborda a negativo (sonda del 22-09: -9,2e18) y la
     // relectura de cada respiro no ocurría nunca antes de la primera asentada; la 355 lo midió: «sitio fresco: 0 veces».
@@ -82,10 +85,30 @@ public sealed class EsperaAsentada
     public long SitioFrescoMsSumado { get; private set; }
     public long SitioFrescoMsMaximo { get; private set; }
     public int SitioFrescoVeces { get; private set; }
+    /// <summary>
+    /// Cuántas veces el sitio releído fresco llegó VACÍO justo al ir a declarar «asentada». Vacío no es «no cambió» (patrón nº9):
+    /// sin sitio que juzgar no se declara nada, y se sigue mirando.
+    /// </summary>
+    public int SitioFrescoVacioAlDeclarar { get; private set; }
 
-    public EsperaAsentada(Func<HuellaDeLoQueSeVe?> huella, Func<string> sitioFresco, HuellaDeLoQueSeVe antes, int respiroMs, int primeraMs)
+    /// <summary>
+    /// Por qué no se declaró la asentada aunque las huellas coincidían, cuando fue por el sitio fresco vacío; vacío = no fue por eso.
+    /// Las palabras las usan las tres esperas que consumen esta clase: una sola definición (patrón nº5).
+    /// </summary>
+    public string AvisoDelSitio => SitioFrescoVacioAlDeclarar == 0 ? ""
+        : $"el sitio releído fresco llegó vacío {SitioFrescoVacioAlDeclarar} vez/veces justo cuando las huellas coincidían, y vacío no es «no cambió»";
+
+    /// <param name="sitioFresco">La ubicación sin memoria, para la regla 2b. Nulo = no hay sitio que juzgar (quien llama no tiene el de
+    /// antes): decide solo la huella, y no se relee nada.</param>
+    /// <param name="mismoSitio">EL COMPARADOR DE SITIOS DE QUIEN LLAMA (revisión del 23-09): <c>Pulsa</c> juzga «cambió» con
+    /// <c>ahora != desde</c>, y la llegada y el mapa con <c>Superficies.MismaPantalla</c>. Hasta ese día aquí se comparaba siempre
+    /// con Ordinal: «web://www.google.com/search» antes del Enter y «web://google.com/search» después (medido el 18-09, 7 veces en
+    /// una sesión) hacía salir la espera del mapa en la primera relectura como «cambió de sitio», y acto seguido Type decidía que
+    /// era la misma pantalla. El mismo ORIGEN no es el mismo CAMINO (aprendizaje nº16): cada consumidor compara como su llamador.</param>
+    public EsperaAsentada(Func<HuellaDeLoQueSeVe?> huella, Func<string>? sitioFresco, HuellaDeLoQueSeVe antes, int respiroMs, int primeraMs,
+        Func<string, string, bool> mismoSitio)
     {
-        _huella = huella; _sitioFresco = sitioFresco; _antes = antes;
+        _huella = huella; _sitioFresco = sitioFresco; _antes = antes; _mismoSitio = mismoSitio;
         _respiroMs = Math.Max(0, respiroMs); _primeraMs = Math.Max(0, primeraMs);
         SitioAhora = antes.Sitio;
     }
@@ -107,6 +130,10 @@ public sealed class EsperaAsentada
         _ultima = h;
         CosteSumado += h.Coste; CosteMaximo = Costes.Max(CosteMaximo, h.Coste); SondeosConCoste++;
 
+        // CUÁNDO SE LEYÓ DE VERDAD lo de dentro de esta huella (revisión del 23-09; bloqueaba): la huella en vivo lo reutiliza
+        // durante un respiro, y también la lectura de antes de tocar. La regla se cumple en lo OBSERVADO, no en el reloj de los
+        // sondeos: la última lectura real tiene que ser posterior a la primera huella y estar a un respiro de la de la referencia.
+        long lectura = t - h.EdadDeDentroMs;
         if (_referencia == null || !Iguales(_referencia, h))
         {
             if (_referencia != null)
@@ -114,35 +141,52 @@ public sealed class EsperaAsentada
                 VecesQueSeMovio++;
                 if (MsAsentada >= 0) VecesQueSeMovioTrasAsentarse++;
             }
-            _referencia = h; _tReferencia = t;
+            _referencia = h; _lecturaDeLaReferencia = lectura;
         }
-        else if (MsAsentada < 0 && t >= _primeraMs && t - _tReferencia >= _respiroMs)
+        else if (MsAsentada < 0 && lectura >= _primeraMs && lectura - _lecturaDeLaReferencia >= _respiroMs)
         {
-            // ANTES DE DECLARAR, EL SITIO FRESCO (regla 2b): si cambió, manda el cambio de sitio aunque las dos
-            // huellas coincidieran.
-            if (ReleeElSitio(t)) return Paso.CambioDeSitio;
+            // ANTES DE DECLARAR, EL SITIO FRESCO (regla 2b): si cambió, manda el cambio de sitio aunque las dos huellas
+            // coincidieran. Y si no se pudo releer, o llegó vacío, NO se declara (revisión del 23-09): hasta ese día la
+            // asentada salía igual, y la cuenta decía «el sitio fresco sin cambiar» en la misma espera cuya línea decía «no pude
+            // releer el sitio» —un mensaje que concluye, patrón nº2— o tomaba el vacío por «no cambió» (nº9).
+            switch (ReleeElSitio(t))
+            {
+                case Relectura.Cambio: return Paso.CambioDeSitio;
+                case Relectura.Rota: return Paso.NoSePudoMirar;
+                case Relectura.Vacia: SitioFrescoVacioAlDeclarar++; return Paso.Sigue;
+            }
             MsAsentada = t; SondeoAsentada = Sondeos;
             return Paso.Asentada;
         }
 
-        if ((_tFresco is not long tFresco || t - tFresco >= _respiroMs) && ReleeElSitio(t)) return Paso.CambioDeSitio;
+        if (_sitioFresco != null && (_tFresco is not long tFresco || t - tFresco >= _respiroMs))
+            switch (ReleeElSitio(t))
+            {
+                case Relectura.Cambio: return Paso.CambioDeSitio;
+                case Relectura.Rota: return Paso.NoSePudoMirar;   // hasta el 23-09 este sondeo decía «sigue» y el siguiente, «no pude»
+            }
         return Paso.Sigue;
     }
 
-    /// <summary>Relee el sitio fresco y dice si dejó de ser el de partida. Anota la primera vez que pasó.</summary>
-    private bool ReleeElSitio(long t)
+    /// <summary>Lo que dio una relectura del sitio fresco. <see cref="Vacia"/> y <see cref="Rota"/> no son «no cambió» (patrones nº9 y nº2).</summary>
+    private enum Relectura { Igual, Cambio, Vacia, Rota, SinSitio }
+
+    /// <summary>Relee el sitio fresco y dice si dejó de ser el de partida, con el comparador de quien llama. Anota la primera vez que pasó.</summary>
+    private Relectura ReleeElSitio(long t)
     {
+        if (_sitioFresco == null) return Relectura.SinSitio;   // no hay sitio que juzgar: decide la huella
         var crono = System.Diagnostics.Stopwatch.StartNew();
         string s;
         try { s = _sitioFresco() ?? ""; }
-        catch (Exception e) { _rota = true; Causa = "no pude releer el sitio: " + Cadena(e); return false; }
+        catch (Exception e) { _rota = true; Causa = "no pude releer el sitio: " + Cadena(e); return Relectura.Rota; }
         crono.Stop();
         _tFresco = t;
         SitioFrescoVeces++; SitioFrescoMsSumado += crono.ElapsedMilliseconds; SitioFrescoMsMaximo = Math.Max(SitioFrescoMsMaximo, crono.ElapsedMilliseconds);
-        if (s.Length > 0) SitioAhora = s;
-        bool cambio = s.Length > 0 && !string.Equals(s, _antes.Sitio, StringComparison.Ordinal);
-        if (cambio && MsCambioDeSitio < 0) MsCambioDeSitio = t;
-        return cambio;
+        if (string.IsNullOrWhiteSpace(s)) return Relectura.Vacia;
+        SitioAhora = s;
+        if (_mismoSitio(s, _antes.Sitio)) return Relectura.Igual;
+        if (MsCambioDeSitio < 0) MsCambioDeSitio = t;
+        return Relectura.Cambio;
     }
 
     /// <summary>El veredicto con lo anotado hasta los <paramref name="t"/> ms. <paramref name="siLlegoAlTecho"/> es la causa cuando no decidió nada.</summary>
@@ -152,6 +196,8 @@ public sealed class EsperaAsentada
         if (MsCambioDeSitio >= 0) return new(QueCambio.DeSitio, Parte.Sitio, MsCambioDeSitio, PorQue.CambioDeSitio, "", SitioAhora, Sondeos);
         if (_rota) return new(dif.QueCambio, dif.Parte, t, PorQue.TechoNoSePudoMirar, Causa, SitioAhora, Sondeos);
         if (MsAsentada >= 0 && VecesQueSeMovioTrasAsentarse == 0) return new(dif.QueCambio, dif.Parte, MsAsentada, PorQue.Asentada, "", SitioAhora, Sondeos);
+        // SE ASENTÓ A LA VISTA PERO EL SITIO LLEGÓ VACÍO AL IR A DECLARARLA: no se pudo mirar el sitio, y se dice con esas palabras.
+        if (MsAsentada < 0 && SitioFrescoVacioAlDeclarar > 0) return new(dif.QueCambio, dif.Parte, t, PorQue.TechoNoSePudoMirar, AvisoDelSitio, SitioAhora, Sondeos);
         return new(dif.QueCambio, dif.Parte, t, siLlegoAlTecho, "", SitioAhora, Sondeos);
     }
 
@@ -160,10 +206,10 @@ public sealed class EsperaAsentada
     /// agotar el <paramref name="compas"/>. Gasta del reloj: con un sondeo lento termina en el techo más un sondeo, no
     /// en techo × vueltas (la forma de la promesa 245; promesa 358).
     /// </summary>
-    public static Veredicto Espera(Func<HuellaDeLoQueSeVe?> huella, Func<string> sitioFresco, HuellaDeLoQueSeVe antes,
-        Compas compas, int respiroMs, int primeraMs, int cadenciaMs)
+    public static Veredicto Espera(Func<HuellaDeLoQueSeVe?> huella, Func<string>? sitioFresco, HuellaDeLoQueSeVe antes,
+        Compas compas, int respiroMs, int primeraMs, int cadenciaMs, Func<string, string, bool> mismoSitio)
     {
-        var s = new EsperaAsentada(huella, sitioFresco, antes, respiroMs, primeraMs);
+        var s = new EsperaAsentada(huella, sitioFresco, antes, respiroMs, primeraMs, mismoSitio);
         do
         {
             var paso = s.Sondea(compas.Transcurrido);
@@ -179,7 +225,7 @@ public sealed class EsperaAsentada
         string asentada = _rota ? Causa
             : MsAsentada >= 0
                 ? $"asentada a los {MsAsentada} ms (sondeo {SondeoAsentada}" + (VecesQueSeMovioTrasAsentarse > 0 ? $"; se movió {VecesQueSeMovioTrasAsentarse} vez/veces DESPUÉS: asentada falsa)" : ")")
-                : $"nunca se asentó (se movió en {VecesQueSeMovio} de {Sondeos} sondeo(s))";
+                : $"nunca se asentó (se movió en {VecesQueSeMovio} de {Sondeos} sondeo(s))" + (AvisoDelSitio.Length > 0 ? $"; {AvisoDelSitio}" : "");
         string coste = SondeosConCoste == 0 ? "coste: sin sondeos"
             : $"coste por sondeo (media/máx ms): sitio {CosteSumado.SitioMs / SondeosConCoste}/{CosteMaximo.SitioMs} · delante {CosteSumado.DelanteMs / SondeosConCoste}/{CosteMaximo.DelanteMs} · dentro {CosteSumado.DentroMs / SondeosConCoste}/{CosteMaximo.DentroMs} · ventanas {CosteSumado.VentanasMs / SondeosConCoste}/{CosteMaximo.VentanasMs}";
         string fresco = SitioFrescoVeces == 0 ? "sitio fresco: 0 veces"

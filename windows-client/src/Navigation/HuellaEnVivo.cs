@@ -72,7 +72,7 @@ public sealed class HuellaEnVivo
         // 2. LA VENTANA DE DELANTE, por Win32 (saltando las de Ü, la misma regla que la ventana de delante del localizador).
         crono.Restart();
         var (hwndDelante, titulo) = UiaSurface.VentanaDelanteAhora();
-        string delante = hwndDelante == IntPtr.Zero ? "(ninguna)" : $"{hwndDelante:X}·{titulo}";
+        string delante = HuellaDeLoQueSeVe.DelanteDe(hwndDelante, titulo);
         long delanteMs = crono.ElapsedMilliseconds;
 
         // 3. LA VENTANA DE TRABAJO y 4. LAS VENTANAS DE SU PROCESO, por Win32.
@@ -97,8 +97,14 @@ public sealed class HuellaEnVivo
         _hwndDeLaUltima = hwnd; _delanteDeLaUltima = delante;
         _ventanasDeLaUltima = ventanas.OrderBy(v => v, StringComparer.Ordinal).ToArray();
 
+        // LA EDAD DE LO DE DENTRO VIAJA CON LA HUELLA (revisión del 23-09; bloqueaba): lo de dentro se reutiliza durante un
+        // respiro, y la lectura de ANTES de tocar es de esta misma instancia. Sin decir su edad, dos huellas «iguales» podían ser
+        // la misma lectura vieja, y la espera declaraba «asentada» a los 480 ms apoyándose en una lectura de los 240, o en la de
+        // antes del clic. Con ella, EsperaAsentada cuenta desde cuándo se leyó de verdad. (Environment.TickCount64 avanza a
+        // saltos de ~15,6 ms: la edad puede salir 15 ms corta o larga, y aquí se compara con respiros de 250.)
         return HuellaDeLoQueSeVe.De(_sitio, delante, _dentro, ventanas)
-            .ConCoste(new HuellaDeLoQueSeVe.Costes(sitioMs, delanteMs, dentroMs, ventanasMs));
+            .ConCoste(new HuellaDeLoQueSeVe.Costes(sitioMs, delanteMs, dentroMs, ventanasMs))
+            .ConEdadDeDentro(ahora - _tDentro);
     }
 
     /// <summary>Lo que se considera accionable para la huella: lo mismo que la observación cuenta como puertas, más los ítems de árbol y tabla.</summary>

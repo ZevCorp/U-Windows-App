@@ -148,6 +148,16 @@ que hoy solo rige en la compuerta de vida (299). Se lleva a la espera de despué
    ahí dispararía una segunda navegación), cuando la ubicación es `sapgui://` (no se puede mirar desde UIA:
    `FaceWindow.xaml.cs:5629`), y cuando **nadie inyectó una huella**. Esto último es lo que mantiene verdes
    la 245, la 248, la 296 y la 334 tal como están: sus arneses construyen `PulsarSegunElNucleo` sin huella.
+   **Desde la revisión del 23-09, dos casos más** (los dos juzgados; ver «Hallazgos»): cuando **quien pulsa espera
+   llegar a otra pantalla** (un paso de skill con `Llegada`: `PulsaParaLlegar`, 356), y **tras el clic sobre
+   contenido sin gesto aprendido** (el que manda después el ensayo del doble, 357). La espera del doble sigue
+   saliendo al asentarse: tras ella no viene otro gesto.
+   - **2c. Lo de dentro cuenta desde cuándo se leyó** (revisión del 23-09): la huella lleva la edad de su lectura
+     de dentro (`EdadDeDentroMs`), y «dos huellas iguales con un respiro, pasada la primera» se mide sobre las
+     LECTURAS, no sobre los sondeos. La huella en vivo reutiliza lo de dentro durante un respiro, y también la
+     lectura de antes de tocar.
+   - **2d. Sin sitio fresco no hay asentada**: si la relectura de antes de declarar lanza, es «no pude mirar»;
+     si llega vacía, no se declara y se sigue mirando.
 5. **El techo** deja de ser «lo que dura una espera que no cambia» y pasa a ser una red. Sale de la espera
    normal medida: `máx(3 × mediana de las últimas esperas que terminaron por condición, techo mínimo)`. Las
    esperas que llegaron al techo no lo alimentan (se alimentaría a sí mismo). El techo mínimo se queda en
@@ -279,15 +289,15 @@ silenciar, veredicto ROTO nombrando esa promesa, restaura, diff idéntico, INTAC
 
 | # | Promesa | Fase |
 |---|---|---|
-| 351 | pulsar no espera a una pantalla que ya se asentó: si la ubicación de trabajo no cambió y dos huellas de lo que se ve, tomadas con un respiro en medio, coinciden, la espera termina en ese instante y no al agotar el techo; el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda el cambio de sitio y se aprende, aunque las dos huellas coincidieran; si entre huella y huella algo cambia, la pantalla se está moviendo y se espera hasta el techo; si el terreno ya sabe que esa puerta lleva a algún sitio, o la ubicación es de SAP, o nadie inyectó una huella, se espera como hoy; y en todos los casos queda dicho a los cuántos milisegundos dejó de esperar y por qué | 2 |
-| 352 | hay una sola definición de «cambió»: la huella de lo que se ve —el sitio de trabajo, la ventana de delante, lo que se ve dentro y las ventanas del proceso de trabajo— se construye y se compara por un solo camino, y la compuerta de vida y la espera tras pulsar lo usan las dos; dos huellas con las mismas partes son iguales aunque las identidades lleguen en otro orden; una parte distinta las separa y dice cuál, y el sitio manda sobre las otras tres; y la compuerta sigue juzgando solo el sitio y lo de dentro, así que la 299 dice lo mismo que decía | 1 |
-| 353 | cambiar de sitio, cambiar por dentro y cambiar la ventana de delante son tres veredictos distintos, y «nada cambió» es el cuarto: el resultado de pulsar dice cuál fue y a los cuántos milisegundos; solo el cambio de sitio acuña una arista, como exige la 44; un cambio por dentro o de delante no aprende nada y la cuenta lo dice con esas palabras; y el detector de bucle del tramo solo cuenta las repeticiones en las que nada cambió —también cuando el paso llega por el mapa, que es el camino del operador—, así que una puerta que abre un menú tres veces no es un bucle y una que no hace nada tres veces sí lo es, como exige la 292 | 4 |
+| 351 | pulsar no espera a una pantalla que ya se asentó: si la ubicación de trabajo no cambió y dos huellas de lo que se ve, tomadas con un respiro en medio, coinciden, la espera termina en ese instante y no al agotar el techo —y lo de dentro cuenta desde cuando se leyó de verdad: una lectura reutilizada, o la de antes de tocar, no hace de segunda huella—; el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda el cambio de sitio y se aprende, aunque las dos huellas coincidieran, y si no se pudo releer o llegó vacío la pantalla no se da por asentada; si entre huella y huella algo cambia, la pantalla se está moviendo y se espera hasta el techo; si el terreno ya sabe que esa puerta lleva a algún sitio, o quien pulsa espera llegar a otra pantalla, o tras el clic tocaría ensayar el doble sobre contenido sin gesto aprendido, o la ubicación es de SAP, o nadie inyectó una huella, se espera como hoy; y en todos los casos queda dicho a los cuántos milisegundos dejó de esperar y por qué | 2 |
+| 352 | hay una sola definición de «cambió»: la huella de lo que se ve —el sitio de trabajo, la ventana de delante, lo que se ve dentro y las ventanas del proceso de trabajo— se construye y se compara por un solo camino, y la compuerta de vida y la espera tras pulsar lo usan las dos; dos huellas con las mismas partes son iguales aunque las identidades lleguen en otro orden; una parte distinta las separa y dice cuál —y de la ventana de delante, si pasó otra al frente o la misma cambió de título—, y el sitio manda sobre las otras tres; y la compuerta sigue juzgando solo el sitio y lo de dentro, así que la 299 dice lo mismo que decía | 1 |
+| 353 | cambiar de sitio, cambiar por dentro y cambiar la ventana de delante son tres veredictos distintos, y «nada cambió» es el cuarto: el resultado de pulsar dice cuál fue y a los cuántos milisegundos; solo el cambio de sitio acuña una arista, como exige la 44; un cambio por dentro o de delante no aprende nada y la cuenta lo dice con esas palabras, sin llamar «otra ventana al frente» a la misma ventana que solo cambió de título; y el detector de bucle del tramo para a la tercera repetición en la que nada cambió y a la quinta en la que solo cambió dentro o delante —también cuando el paso llega por el mapa, que es el camino del operador—, porque una ventana que cambia sola da «dentro» en cada clic, lo haga el clic o no; así que una puerta que abre un menú tres veces no es un bucle, una que no hace nada tres veces sí lo es, como exige la 292, y una que en una ventana que cambia sola da «dentro» cinco veces seguidas también para | 4 |
 | 354 | un botón que no navega no espera el techo cuando la pantalla se asentó: con una huella que ve lo mismo dos veces, pulsar «Guardar» contesta en menos de la mitad del techo, dice que la pantalla no cambió y no aprende nada; sin huella inyectada espera el techo entero, que es lo que la 334 exige hoy y sigue exigiendo; y un campo de texto sigue con su espera corta y su respuesta de campo | 3 |
-| 355 | cada pulsación deja en el log la medida de su espera: la ubicación de trabajo y la ventana de delante antes y después, si lo que se ve dentro cambió y qué parte lo vio, cuánto costó cada parte de la huella, a los cuántos milisegundos se habría dado la pantalla por asentada —o que nunca se asentó—, y a los cuántos cambió la ubicación o que no cambió en el techo; la línea sale aunque la espera no se recorte; y sin huella inyectada dice que nadie miraba | 0 |
-| 356 | comprobar la llegada no agota el techo mirando ni declara el desvío en el acto: cuando lo que se ve se asentó en OTRA pantalla —ni la esperada ni la de partida— se sigue mirando durante el presupuesto de redirección, porque una web pasa a menudo por una pantalla intermedia que se asienta y salta; si al agotarlo sigue allí se declara el desvío nombrando las dos, y si en ese plazo llega a la esperada es una llegada; si se asentó en la de partida se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse parece asentada; llegar a la esperada contesta en cuanto la ubicación coincide, como hoy; y sin huella se espera como hoy | 6 |
-| 357 | las tres esperas de pulsar —tras el clic, tras el ensayo del doble y tras la repetición— consumen la misma huella y la misma regla: con una huella que se asienta, un elemento de lista sin gesto aprendido se ensaya con el doble y esa segunda espera sale en cuanto se asienta en vez de agotar el techo; la repetición de una puerta con destino sigue esperando el techo las dos veces, porque solo se repite lo que se sabe que navega; y la 83, la 248 y la 296 dicen lo mismo que decían | 5 |
-| 358 | esperar a que la pantalla esté lista en las herramientas del mapa gasta del reloj y no cuenta vueltas —con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas—, y decide «lista» con la misma huella de lo que se ve, dos iguales con un respiro, en vez de contar botones de la ventana de delante; comprobar la vuelta tras un Enter deshecho gasta del mismo reloj; y la espera de un cambio que nadie llamaba deja de existir | 7 |
-| 359 | el techo de una espera sale de la espera normal medida y no de un número a ojo: es el triple de la mediana de lo que tardaron en asentarse o cambiar las últimas esperas que terminaron por condición, nunca menos que el techo mínimo; las esperas que llegaron al techo no lo alimentan; y al agotarlo la cuenta dice cuál de las causas fue: que la pantalla no paró de moverse, que nadie miraba, que el terreno sabía que la puerta lleva a algún sitio, o que no se pudo mirar y por qué | 8 |
+| 355 | cada pulsación deja en el log la medida de su espera: la ubicación de trabajo y la ventana de delante antes y después —la ventana sin su título, que puede llevar datos—, si lo que se ve dentro cambió y qué parte lo vio, cuánto costó cada parte de la huella, a los cuántos milisegundos se habría dado la pantalla por asentada —o que nunca se asentó—, y a los cuántos cambió la ubicación o que no cambió en el techo; la línea sale aunque la espera no se recorte; y sin huella inyectada dice que nadie miraba | 0 |
+| 356 | comprobar la llegada no agota el techo mirando ni declara el desvío en el acto: cuando lo que se ve se asentó en OTRA pantalla —ni la esperada ni la de partida— se sigue mirando durante el presupuesto de redirección, porque una web pasa a menudo por una pantalla intermedia que se asienta y salta; si al agotarlo sigue allí se declara el desvío nombrando las dos, y si en ese plazo llega a la esperada es una llegada; si se asentó en la de partida se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse parece asentada; llegar a la esperada contesta en cuanto la ubicación coincide, como hoy; y sin huella se espera como hoy; un clic cuyo paso trae la llegada no se da por asentado antes de cambiar de sitio —se espera como hoy—, así que una navegación más lenta que la primera huella llega y no es un desvío; y la línea que deja la llegada no lleva el texto escrito | 6 |
+| 357 | las tres esperas de pulsar —tras el clic, tras el ensayo del doble y tras la repetición— consumen la misma huella y la misma regla: con una huella que se asienta, un elemento de lista sin gesto aprendido espera como hoy tras el clic —una asentada falsa ahí mandaría el doble sobre un elemento que aún puede estar cambiando—, se ensaya con el doble, y esa segunda espera sale en cuanto se asienta en vez de agotar el techo; la repetición de una puerta con destino sigue esperando el techo las dos veces, porque solo se repite lo que se sabe que navega; y la 83, la 248 y la 296 dicen lo mismo que decían | 5 |
+| 358 | esperar a que la pantalla esté lista en las herramientas del mapa gasta del reloj y no cuenta vueltas —con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas—, y decide «lista» con la misma huella de lo que se ve, dos iguales con un respiro, en vez de contar botones de la ventana de delante, y juzga el cambio de sitio con el mismo comparador que quien la llama —con «www.» y sin él es la misma pantalla—; comprobar la vuelta tras un Enter deshecho gasta del mismo reloj; y la espera de un cambio que nadie llamaba deja de existir | 7 |
+| 359 | el techo de la espera tras pulsar sale de la espera normal medida y no de un número a ojo: es el triple de la mediana de lo que tardaron en asentarse o cambiar las últimas esperas que terminaron por condición, nunca menos que el techo mínimo; las esperas que llegaron al techo no lo alimentan; y al agotarlo la cuenta dice cuál de las causas fue: que la pantalla no paró de moverse, que nadie miraba, que el terreno sabía que la puerta lleva a algún sitio, o que no se pudo mirar y por qué | 8 |
 | 360 | **reservada**: SAP asentada = `!Busy` en 3 sondeos consecutivos (pendiente nº1 de `CLAUDE.md`, la carrera del Busy) + dos `StructureFingerprint` iguales. **No entra al contrato** hasta una sonda de solo lectura en el hospital (aprendizaje nº13: 0 líneas `sapgui://` en 23 logs de esta máquina). El número no se recicla | — |
 
 La que de verdad cierra el asunto es la **351**: mientras no exista, todo lo demás es contabilidad. La que
@@ -400,6 +410,30 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   −1 a lo que tardó (< techo/2), y tras una que llega al techo no se mueve. Sus sabotajes: `Pulsa` deja de anotar
   (cae solo (f)); `Pulsa` espera `EsperaMaximaMs` y no el techo medido (cae solo (e)).
 
+**Añadido en la revisión del 23-09** (el porqué, en «Hallazgos»), todo en rojo antes de su código:
+- **351**: el sitio fresco que lanza, y el que llega vacío, en la relectura de declarar (la primera contesta): techo,
+  y la línea y la cuenta dicen «no pude releer el sitio» / «llegó vacío», nunca «asentada». Y una huella que imita la
+  memoria de `HuellaEnVivo` (relee lo de dentro cada 400 ms y dice su edad por `ConEdadDeDentro`), con la mano de 100 ms
+  y un menú a los 200: «dentro», nunca «nada» a los 120. **Sabotaje**: la lectura vuelve a ser el instante del sondeo
+  (`lectura = t`) → cae solo ese caso, «Nada a los 121 ms».
+- **352**: «1A2B·Recibidos (3)» contra «1A2B·Recibidos (2)» → `(Delante, Titulo)`; contra «3C4D·Recibidos (3)» →
+  `(Delante, Delante)`. **Sabotaje**: `Comparar` da `Parte.Delante` también con la misma ventana → caen la 352 y la 353
+  (su caso del título pasa por el mismo `Comparar`).
+- **353**: pulsar con el título de la misma ventana cambiado → la cuenta dice «título» y no «otra ventana»; y un tramo
+  con ocho «dentro» seguidos para a la quinta. **Sabotaje**: el umbral de cinco no se evalúa → cae solo la 353, «8 pasos,
+  se agotó el tope».
+- **355**: un «delante» con nombre de paciente en el título → ninguna línea lo lleva, y la de la medida sí lleva la
+  ventana. **Sabotaje**: la línea vuelve a escribir los dos «delante» enteros → cae solo la 355.
+- **356**: la línea 🛬 de la redirección no lleva «hola»; y un paso de clic con `Llegada`, grafo sin destino, huella
+  quieta y la página que cambia a los 600 ms → llegada, un paso hecho. **Sabotaje**: `Recorrer` vuelve a llamar a
+  `Pulsa` sin la llegada → cae solo la 356, «hice 0 de 1».
+- **357**: el `TreeItem` espera como hoy tras el clic (`[Techo − 100, 2 × Techo − 200)`), una espera dice «contenido sin
+  gesto aprendido» y la otra «asentada». **Sabotaje**: el caso del contenido no entra en «como hoy» → cae solo la 357,
+  270 ms.
+- **358**: `Espera` con ocho parámetros; con `MismaPantalla`, «web://google.com/search» tras «web://www.google.com/search»
+  se asienta; y `EsperarPantallaLista` nombra `Superficies.MismaPantalla` (por `U_REPO`). **Sabotaje**: la relectura vuelve
+  a comparar con Ordinal → cae solo la 358, «CambioDeSitio a los 0 ms».
+
 ## Las fases
 
 Una fase = un commit que pone verde UNA promesa sin romper las anteriores. Toda la spec vive en esta rama;
@@ -468,6 +502,16 @@ dé el presupuesto de redirección.
   pendiente nº6 de `CLAUDE.md` tienen la misma ceguera. Se dice; no se arregla aquí.
 - **La UI** (el panel de Jev lee `Paso.QueCambio`, `Parte` y `MsHastaElVeredicto`: rama D) y **`Decision/*`**
   (A). Las dos líneas de `FaceWindow` no son «la UI»: son el cableado, y están dichas arriba con su choque.
+- **El techo medido en las otras esperas del alcance** (revisión del 23-09; la 359 se acotó a «la espera tras
+  pulsar»): la llegada (`RecorrerSegunElNucleo.LlegoDondeTocaba`, `EsperaMaximaMs`, 4.000 en la app), la
+  compuerta de vida (`EsperarloVivo`, el mismo `EsperaMaximaMs`), `EsperarPantallaLista` (900) y `Llego` (2.000)
+  siguen con techo fijo. **4 sitios pendientes**, sin número: el día que entren, con su promesa y un caso en rojo
+  para cada uno; no dentro de un enunciado verde que diga «una espera» en general.
+- **Otros sitios que escriben en el log lo que se teclea** (M, `grep` del 23-09 sobre `windows-client/src`): 4
+  más, los 4 de antes de esta rama (están igual en la base `043addc`) y los sube el mismo espejo. `SurfaceMapTools`
+  deja el texto en 3 líneas de `map_type` (`:2706` en la terminal, `:2798` sin Enter, `:2830` «✓ escrito»), cada
+  vez; `FaceWindow :860`, solo cuando SAP no deja escribir. Anotados para una rama propia con su promesa. El de esta
+  rama (la línea 🛬 de la llegada) ya no lo lleva.
 
 ## Nivel 4 pendiente
 
@@ -1024,6 +1068,69 @@ dé el presupuesto de redirección.
       el techo sigue en 1.800 (D).
     - La respuesta al modelo dice por qué esperó.
     - En el nivel 4 de cierre: contar las líneas «techo …», y cuántas dicen «= 3 × mediana …» por encima del mínimo.
+- **2026-09-23, revisión de la rama: diez hallazgos, dos repetidos (el clic con llegada venía dos veces). Los nueve
+  distintos, comprobados uno a uno contra el código antes de tocar nada: ocho ciertos, uno cierto a medias.**
+  - **Qué cambió de lo prometido** (siete enunciados reescritos, sin reciclar ningún número; el literal nuevo está en la
+    tabla de arriba y en `Contrato.cs`):
+    - **351**: lo de dentro cuenta desde cuándo se leyó (regla, 2c); sin sitio fresco no hay asentada (2d); y dos casos
+      más de «como hoy»: quien pulsa espera llegar a otra pantalla, y el clic sobre contenido sin gesto aprendido.
+    - **352**: de la ventana de delante se distingue si pasó otra al frente o la misma cambió de título (`Parte.Titulo`).
+    - **353**: la cuenta no llama «otra ventana al frente» a un título que cambió; y el detector para también a la
+      QUINTA repetición en la que solo cambió dentro o delante (`RepeticionesSinSitioQueParan`).
+    - **355**: la ventana de delante va a la línea sin su título (`DelanteParaElLog`: la ventana y cuánto mide su título).
+    - **356**: un clic cuyo paso trae la llegada espera como hoy (`PulsaParaLlegar`), y la línea 🛬 no lleva el texto.
+    - **357**: el clic sobre contenido sin gesto aprendido espera como hoy; la espera del doble sigue saliendo al asentarse.
+    - **358**: la espera compara sitios con el comparador de quien la llama (`Espera` gana el octavo parámetro, `mismoSitio`).
+    - **359**: acotada a «la espera tras pulsar». Solo el enunciado: su cuerpo no cambia, y sus tres sabotajes de la fase 8
+      siguen valiendo. Las otras cuatro esperas del alcance van a «Lo que queda fuera», con su número de sitios.
+  - **Cada hallazgo, comprobado** (M, leído):
+    - **El clic con llegada** (dos veces en la lista): cierto. `:312` juzgaba `r.Hasta` en el acto, y `Pulsa` sale asentada
+      hacia los 125 ms en el contrato con huella quieta. Medido en rojo: desvío a los 126 ms, `hechos=0`, con la página
+      que cambiaba a los 600. La fase 6 lo había dejado «pendiente, con su caso en rojo»; el caso no existía.
+    - **El sitio fresco que falla al ir a declarar**: cierto. Medido en rojo: asentada a los 124 ms con la relectura
+      lanzando, y a los 126 con la relectura vacía; la cuenta decía «la pantalla no cambió» sin causa.
+    - **El título no es otra ventana**: cierto. Medido: `(Delante, Delante)` y «otra ventana pasó al frente».
+    - **El comparador de la espera del mapa**: cierto en el mapa. En la llegada, **a medias**: el salto con/sin «www.» reinicia
+      el juicio UNA vez, no en cada relectura, porque tras `Juzga(fresco)` el sitio juzgado ya tiene la forma del fresco.
+      Se arregló igual: son 3 consumidores y 2 comparaban con `MismaPantalla`.
+    - **La 359 certificaba más de lo que juzgaba**: cierto, y la propia fase 8 lo había anotado («1 de 10»).
+    - **La lectura de dentro reutilizada** (bloqueaba): cierto. `HuellaEnVivo.Tomar` reutiliza lo de dentro durante
+      `RespiroMs` y la lectura de antes de tocar es de la misma instancia; `Sondea` medía «pasada la primera» y «un
+      respiro» en el reloj de los sondeos. El contrato no lo veía: sus huellas falsas son siempre frescas. Ahora la huella
+      lleva `EdadDeDentroMs` y la regla se mide sobre las lecturas. No se invalida la caché al volver la mano: con la edad,
+      la lectura de antes de tocar ya no puede hacer de segunda huella (su instante es negativo), y el sondeo siguiente relee.
+    - **El texto tecleado en la línea 🛬**: cierto. `Diario` es `LogBus("compuerta")` (`FaceWindow :895`) y `EspejoDelLog`
+      sube cada línea (`Telemetry/EspejoDelLog.cs:66`). Medido en rojo: «tras escribí «hola»».
+    - **El título de la ventana de delante en la línea de la 355**: cierto. Medido en rojo: el título entero, antes y después.
+    - **El detector de bucle ante una ventana que cambia sola**: cierto. Medido en rojo: 8 pasos, «se agotó el tope».
+  - **Lo mínimo, dicho**:
+    - `Pulsa(selector, etiqueta)` no cambia de firma: el contrato la llama por reflexión con dos argumentos (`:2026`). La
+      llegada entra por un método aparte, `PulsaParaLlegar`, y `Pulsa` delega en él.
+    - `HuellaDeLoQueSeVe.De` sigue con cuatro parámetros: el contrato la busca por nombre y la invoca con cuatro
+      argumentos (`Huella047`). La edad entra por `ConEdadDeDentro`, como el coste por `ConCoste`.
+    - «Delante» sigue siendo una cadena, pero se escribe (`DelanteDe`) y se separa (`VentanaDe`) en la misma clase.
+    - `Parte.Titulo` va al final del enum: los valores de las demás no se mueven.
+    - El umbral de «solo dentro o delante» es 5, no 3: la 353 exige que un desplegable abierto tres veces no sea un bucle.
+      Es una red, no una medida; lo afina el nivel 4.
+    - `EsperarPantallaLista` sin sitio de antes pasa `null` como sitio fresco (antes, una función que devolvía «»): con 2d,
+      un «» habría sido esperar siempre el techo.
+  - **Sitios** (patrón nº5; M, `grep`):
+    - Juzgan la llegada de un paso: **3** (escribir `:237`, tecla `:248`, clic `:312`). Miraban 2; ahora miran los 3 (el
+      clic, a través de `PulsaParaLlegar`).
+    - Consumidores de `EsperaAsentada`: **3** (`Pulsa`, la llegada, `EsperarPantallaLista`). Los 3 pasan su comparador
+      (ordinal, `MismaPantalla`, `MismaPantalla`), y los 3 dicen la causa cuando el sitio fresco llegó vacío o no se pudo
+      releer (`PorQueDejoDeEsperar`, `PorQueNoDecidio`, `Cierra`).
+    - Dónde se decide «asentada»: **1** (`EsperaAsentada.Sondea`); quien reutiliza lo de dentro: **1** (`HuellaEnVivo`).
+    - Mensajes que afirmaban «otra ventana pasó al frente»: **2** (la cuenta y la línea); los 2 distinguen el título.
+    - Líneas de log de esta rama con el título de la ventana de delante: **1** (la de la 355, antes y después), más el
+      `ToString` de la huella, que ningún sitio registra hoy: los 2 pasan por `DelanteParaElLog`.
+    - Líneas de log con el texto tecleado en `windows-client/src`: **5**. La de esta rama se arregla; las otras 4 son de
+      antes (en «Lo que queda fuera»).
+    - Detectores de bucle: **1** (`ElTramo`).
+  - **Contrato** (M, con `TEMP` propio): ver el commit. Rojo antes del código, verde después, un sabotaje por promesa
+    tocada verificado por diff.
+  - **Sin nivel 4**: esta rama no ejecuta `U.exe`. La edad de la lectura en `HuellaEnVivo` no la juzga el contrato (sin
+    pantalla no hay huella en vivo): la mide el nivel 4, contando las «asentada» cuya última lectura de dentro fue real.
 
 ## Revisiones
 
@@ -1057,6 +1164,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Fase 6: la 356 verde; 103 intacta; la llegada no recorta nada mientras el presupuesto sea el techo; los dos sabotajes de la spec y uno de la línea (d), verificados por diff; `FaceWindow` sin tocar (2026-09-22)
 - [x] Fase 7: la 358 verde; `EsperarPantallaLista` con la huella y el compás, `Llego` con el compás, `EsperarCambio` y `CuantosAccionables` borrados (3 sitios, 1 borrado; de los 11 quedan 5); el sabotaje de la spec y uno de la aserción nueva, verificados por diff (2026-09-22)
 - [x] Fase 8: la 359 verde; 245 intacta; `TechoDeLaEspera` nueva y el techo de las 3 esperas de `Pulsa` sale de la medida, alimentado desde 1 sitio; la cuenta dice la causa al agotarlo; sin `TechoMinimoMs` ni `Resultado.PorQueDejoDeEsperar` (dicho en «Hallazgos»); el sabotaje de la spec y uno por cada aserción nueva de `Pulsa`, verificados por diff (2026-09-23)
+- [x] Revisión del 23-09: nueve hallazgos distintos comprobados (ocho ciertos, uno a medias), siete enunciados reescritos sin reciclar números (351-353, 355-358) y la 359 acotada; rojo antes del código, verde después, un sabotaje por promesa tocada verificado por diff (2026-09-23)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

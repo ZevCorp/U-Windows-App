@@ -298,7 +298,11 @@ public sealed class RecorrerSegunElNucleo
             if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
                 return Parcial(i, pasos.Count, frenado, conVivos: false);
             alPulsar(elegido.Que.Selector);
-            var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
+            // CON LA LLEGADA DEL PASO (revisión del 23-09): pulsar sabe que tiene que haber una navegación y no da la pantalla por
+            // asentada antes de que cambie de sitio. De los 3 sitios que juzgan la llegada de un paso, la fase 6 llevó la mirada a
+            // 2 (escribir y teclear) y este, el del clic, seguía juzgando `r.Hasta` en el acto sobre una asentada que podía llegar
+            // a los ~480 ms, antes que una web lenta.
+            var r = _pulsar.PulsaParaLlegar(elegido.Que.Selector, elegido.Que.Etiqueta, paso.Llegada);
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
             ultimoPulso = r;
@@ -391,6 +395,13 @@ public sealed class RecorrerSegunElNucleo
         if (paso.Llegada.Length == 0) return true;
 
         string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
+        // EN EL DIARIO, SIN EL TEXTO (revisión del 23-09): el diario de la app es el log («compuerta») y EspejoDelLog sube cada
+        // línea al backend. La línea de la llegada sale en CADA paso de escritura con llegada —en SAP y también cuando sale bien—,
+        // y el texto de una skill de IS-H es el documento del paciente. Antes de esta rama solo quedaba en el log si fallaba.
+        // La respuesta al modelo (`desvio`) sí lo lleva: es el texto que el propio modelo pidió escribir.
+        string queParaElDiario = paso.Texto.Length > 0
+            ? $"escribir {paso.Texto.Length} carácter(es)" + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»" : "") + (paso.Tecla.Length > 0 ? $" y pulsar «{paso.Tecla}»" : "")
+            : $"pulsar «{paso.Tecla}»";
         var ojos = Huella;
         // POR QUÉ SE ESPERA COMO HOY, con palabras que distinguen cada causa (patrón nº2); vacío = los ojos deciden.
         string comoHoy = PorQueLaLlegadaSeEsperaComoHoy(ojos, partida, paso.Llegada);
@@ -418,8 +429,11 @@ public sealed class RecorrerSegunElNucleo
         void Juzga(string sitio, long t)
         {
             juzgado = sitio; desdeQueSeJuzga = t; asentadaA = -1; quietaDesde = t; movidas = 0;
+            // CON EL COMPARADOR DE ESTA LLEGADA (revisión del 23-09): aquí todo sitio se compara con Superficies.MismaPantalla, y la
+            // espera comparaba el suyo con Ordinal; con «www.» y sin él, la relectura fresca reiniciaba el juicio una vez.
             espera = new EsperaAsentada(ojos!, sitioFresco,
-                HuellaDeLoQueSeVe.De(sitio, "", Array.Empty<string>(), Array.Empty<string>()), RespiroMs, EsperaDeAsentarMs);
+                HuellaDeLoQueSeVe.De(sitio, "", Array.Empty<string>(), Array.Empty<string>()), RespiroMs, EsperaDeAsentarMs,
+                Superficies.MismaPantalla);
         }
         // «Ni la esperada ni la de partida»: la esperada ya contestó arriba en cada vuelta; aquí se descarta la de partida.
         bool AsentadaEnOtra() => asentadaA >= 0 && !Superficies.MismaPantalla(juzgado, partida);
@@ -431,13 +445,14 @@ public sealed class RecorrerSegunElNucleo
                 return $"asentada en la de partida («{partida}»), y una página que aún no empezó a pintarse parece asentada: ahí no se declara nada antes del techo";
             if (asentadaA >= 0)
                 return $"asentada en «{juzgado}» a los {asentadaA} ms, y el presupuesto de redirección ({PresupuestoDeRedireccionMs} ms) no venció antes del techo";
+            if (espera.AvisoDelSitio.Length > 0) return espera.AvisoDelSitio + $" (en «{juzgado}»)";
             return espera.VecesQueSeMovio > 0
                 ? $"la pantalla no paró de moverse en «{juzgado}» (se movió en {espera.VecesQueSeMovio} de {espera.Sondeos} sondeo(s))"
                 : $"no le dio tiempo a asentarse en «{juzgado}»: la miraba desde los {desdeQueSeJuzga} ms ({espera.Sondeos} sondeo(s))";
         }
 
         void Linea(long t, string porQue) => Diario?.Invoke(
-            $"🛬 llegada a «{paso.Llegada}» tras {que}: "
+            $"🛬 llegada a «{paso.Llegada}» tras {queParaElDiario}: "
             + (partida.Length > 0 ? $"partida «{partida}»" : "partida sin leer")
             + " · " + (cambios.Count > 0 ? "cambió a " + string.Join(" → ", cambios) : "no cambió de sitio")
             + (asentadas.Count > 0 ? " · " + string.Join(" · ", asentadas) : "")

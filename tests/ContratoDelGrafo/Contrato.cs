@@ -848,15 +848,15 @@ internal static class Contrato
         Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
         Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
         // ── Spec 047: la espera mira lo que se ve ──────────────────────────────────────────────
-        Prueba("351. pulsar no espera a una pantalla que ya se asentó: si la ubicación de trabajo no cambió y dos huellas de lo que se ve, tomadas con un respiro en medio, coinciden, la espera termina en ese instante y no al agotar el techo; el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda el cambio de sitio y se aprende, aunque las dos huellas coincidieran; si entre huella y huella algo cambia, la pantalla se está moviendo y se espera hasta el techo; si el terreno ya sabe que esa puerta lleva a algún sitio, o la ubicación es de SAP, o nadie inyectó una huella, se espera como hoy; y en todos los casos queda dicho a los cuántos milisegundos dejó de esperar y por qué", PulsarNoEsperaAUnaPantallaAsentada);
-        Prueba("352. hay una sola definición de «cambió»: la huella de lo que se ve —el sitio de trabajo, la ventana de delante, lo que se ve dentro y las ventanas del proceso de trabajo— se construye y se compara por un solo camino, y la compuerta de vida y la espera tras pulsar lo usan las dos; dos huellas con las mismas partes son iguales aunque las identidades lleguen en otro orden; una parte distinta las separa y dice cuál, y el sitio manda sobre las otras tres; y la compuerta sigue juzgando solo el sitio y lo de dentro, así que la 299 dice lo mismo que decía", HayUnaSolaDefinicionDeCambio);
-        Prueba("353. cambiar de sitio, cambiar por dentro y cambiar la ventana de delante son tres veredictos distintos, y «nada cambió» es el cuarto: el resultado de pulsar dice cuál fue y a los cuántos milisegundos; solo el cambio de sitio acuña una arista, como exige la 44; un cambio por dentro o de delante no aprende nada y la cuenta lo dice con esas palabras; y el detector de bucle del tramo solo cuenta las repeticiones en las que nada cambió —también cuando el paso llega por el mapa, que es el camino del operador—, así que una puerta que abre un menú tres veces no es un bucle y una que no hace nada tres veces sí lo es, como exige la 292", CuatroVeredictosYElBucleSoloCuentaNada);
+        Prueba("351. pulsar no espera a una pantalla que ya se asentó: si la ubicación de trabajo no cambió y dos huellas de lo que se ve, tomadas con un respiro en medio, coinciden, la espera termina en ese instante y no al agotar el techo —y lo de dentro cuenta desde cuando se leyó de verdad: una lectura reutilizada, o la de antes de tocar, no hace de segunda huella—; el sitio se relee fresco antes de dar la pantalla por asentada, y si cambió manda el cambio de sitio y se aprende, aunque las dos huellas coincidieran, y si no se pudo releer o llegó vacío la pantalla no se da por asentada; si entre huella y huella algo cambia, la pantalla se está moviendo y se espera hasta el techo; si el terreno ya sabe que esa puerta lleva a algún sitio, o quien pulsa espera llegar a otra pantalla, o tras el clic tocaría ensayar el doble sobre contenido sin gesto aprendido, o la ubicación es de SAP, o nadie inyectó una huella, se espera como hoy; y en todos los casos queda dicho a los cuántos milisegundos dejó de esperar y por qué", PulsarNoEsperaAUnaPantallaAsentada);
+        Prueba("352. hay una sola definición de «cambió»: la huella de lo que se ve —el sitio de trabajo, la ventana de delante, lo que se ve dentro y las ventanas del proceso de trabajo— se construye y se compara por un solo camino, y la compuerta de vida y la espera tras pulsar lo usan las dos; dos huellas con las mismas partes son iguales aunque las identidades lleguen en otro orden; una parte distinta las separa y dice cuál —y de la ventana de delante, si pasó otra al frente o la misma cambió de título—, y el sitio manda sobre las otras tres; y la compuerta sigue juzgando solo el sitio y lo de dentro, así que la 299 dice lo mismo que decía", HayUnaSolaDefinicionDeCambio);
+        Prueba("353. cambiar de sitio, cambiar por dentro y cambiar la ventana de delante son tres veredictos distintos, y «nada cambió» es el cuarto: el resultado de pulsar dice cuál fue y a los cuántos milisegundos; solo el cambio de sitio acuña una arista, como exige la 44; un cambio por dentro o de delante no aprende nada y la cuenta lo dice con esas palabras, sin llamar «otra ventana al frente» a la misma ventana que solo cambió de título; y el detector de bucle del tramo para a la tercera repetición en la que nada cambió y a la quinta en la que solo cambió dentro o delante —también cuando el paso llega por el mapa, que es el camino del operador—, porque una ventana que cambia sola da «dentro» en cada clic, lo haga el clic o no; así que una puerta que abre un menú tres veces no es un bucle, una que no hace nada tres veces sí lo es, como exige la 292, y una que en una ventana que cambia sola da «dentro» cinco veces seguidas también para", CuatroVeredictosYElBucleSoloCuentaNada);
         Prueba("354. un botón que no navega no espera el techo cuando la pantalla se asentó: con una huella que ve lo mismo dos veces, pulsar «Guardar» contesta en menos de la mitad del techo, dice que la pantalla no cambió y no aprende nada; sin huella inyectada espera el techo entero, que es lo que la 334 exige hoy y sigue exigiendo; y un campo de texto sigue con su espera corta y su respuesta de campo", UnBotonQueNoNavegaNoEsperaElTecho);
-        Prueba("355. cada pulsación deja en el log la medida de su espera: la ubicación de trabajo y la ventana de delante antes y después, si lo que se ve dentro cambió y qué parte lo vio, cuánto costó cada parte de la huella, a los cuántos milisegundos se habría dado la pantalla por asentada —o que nunca se asentó—, y a los cuántos cambió la ubicación o que no cambió en el techo; la línea sale aunque la espera no se recorte; y sin huella inyectada dice que nadie miraba", CadaPulsacionDejaLaMedidaDeSuEspera);
-        Prueba("356. comprobar la llegada no agota el techo mirando ni declara el desvío en el acto: cuando lo que se ve se asentó en OTRA pantalla —ni la esperada ni la de partida— se sigue mirando durante el presupuesto de redirección, porque una web pasa a menudo por una pantalla intermedia que se asienta y salta; si al agotarlo sigue allí se declara el desvío nombrando las dos, y si en ese plazo llega a la esperada es una llegada; si se asentó en la de partida se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse parece asentada; llegar a la esperada contesta en cuanto la ubicación coincide, como hoy; y sin huella se espera como hoy", ComprobarLaLlegadaNoAgotaElTechoNiDeclaraEnElActo);
-        Prueba("357. las tres esperas de pulsar —tras el clic, tras el ensayo del doble y tras la repetición— consumen la misma huella y la misma regla: con una huella que se asienta, un elemento de lista sin gesto aprendido se ensaya con el doble y esa segunda espera sale en cuanto se asienta en vez de agotar el techo; la repetición de una puerta con destino sigue esperando el techo las dos veces, porque solo se repite lo que se sabe que navega; y la 83, la 248 y la 296 dicen lo mismo que decían", LasTresEsperasDePulsarConsumenLaMismaHuella);
-        Prueba("358. esperar a que la pantalla esté lista en las herramientas del mapa gasta del reloj y no cuenta vueltas —con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas—, y decide «lista» con la misma huella de lo que se ve, dos iguales con un respiro, en vez de contar botones de la ventana de delante; comprobar la vuelta tras un Enter deshecho gasta del mismo reloj; y la espera de un cambio que nadie llamaba deja de existir", LasHerramientasDelMapaGastanDelRelojYMiranLaHuella);
-        Prueba("359. el techo de una espera sale de la espera normal medida y no de un número a ojo: es el triple de la mediana de lo que tardaron en asentarse o cambiar las últimas esperas que terminaron por condición, nunca menos que el techo mínimo; las esperas que llegaron al techo no lo alimentan; y al agotarlo la cuenta dice cuál de las causas fue: que la pantalla no paró de moverse, que nadie miraba, que el terreno sabía que la puerta lleva a algún sitio, o que no se pudo mirar y por qué", ElTechoSaleDeLaMedidaYDiceSuCausa);
+        Prueba("355. cada pulsación deja en el log la medida de su espera: la ubicación de trabajo y la ventana de delante antes y después —la ventana sin su título, que puede llevar datos—, si lo que se ve dentro cambió y qué parte lo vio, cuánto costó cada parte de la huella, a los cuántos milisegundos se habría dado la pantalla por asentada —o que nunca se asentó—, y a los cuántos cambió la ubicación o que no cambió en el techo; la línea sale aunque la espera no se recorte; y sin huella inyectada dice que nadie miraba", CadaPulsacionDejaLaMedidaDeSuEspera);
+        Prueba("356. comprobar la llegada no agota el techo mirando ni declara el desvío en el acto: cuando lo que se ve se asentó en OTRA pantalla —ni la esperada ni la de partida— se sigue mirando durante el presupuesto de redirección, porque una web pasa a menudo por una pantalla intermedia que se asienta y salta; si al agotarlo sigue allí se declara el desvío nombrando las dos, y si en ese plazo llega a la esperada es una llegada; si se asentó en la de partida se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse parece asentada; llegar a la esperada contesta en cuanto la ubicación coincide, como hoy; y sin huella se espera como hoy; un clic cuyo paso trae la llegada no se da por asentado antes de cambiar de sitio —se espera como hoy—, así que una navegación más lenta que la primera huella llega y no es un desvío; y la línea que deja la llegada no lleva el texto escrito", ComprobarLaLlegadaNoAgotaElTechoNiDeclaraEnElActo);
+        Prueba("357. las tres esperas de pulsar —tras el clic, tras el ensayo del doble y tras la repetición— consumen la misma huella y la misma regla: con una huella que se asienta, un elemento de lista sin gesto aprendido espera como hoy tras el clic —una asentada falsa ahí mandaría el doble sobre un elemento que aún puede estar cambiando—, se ensaya con el doble, y esa segunda espera sale en cuanto se asienta en vez de agotar el techo; la repetición de una puerta con destino sigue esperando el techo las dos veces, porque solo se repite lo que se sabe que navega; y la 83, la 248 y la 296 dicen lo mismo que decían", LasTresEsperasDePulsarConsumenLaMismaHuella);
+        Prueba("358. esperar a que la pantalla esté lista en las herramientas del mapa gasta del reloj y no cuenta vueltas —con un sondeo lento, una espera de N milisegundos termina en N y no en N por el número de vueltas—, y decide «lista» con la misma huella de lo que se ve, dos iguales con un respiro, en vez de contar botones de la ventana de delante, y juzga el cambio de sitio con el mismo comparador que quien la llama —con «www.» y sin él es la misma pantalla—; comprobar la vuelta tras un Enter deshecho gasta del mismo reloj; y la espera de un cambio que nadie llamaba deja de existir", LasHerramientasDelMapaGastanDelRelojYMiranLaHuella);
+        Prueba("359. el techo de la espera tras pulsar sale de la espera normal medida y no de un número a ojo: es el triple de la mediana de lo que tardaron en asentarse o cambiar las últimas esperas que terminaron por condición, nunca menos que el techo mínimo; las esperas que llegaron al techo no lo alimentan; y al agotarlo la cuenta dice cuál de las causas fue: que la pantalla no paró de moverse, que nadie miraba, que el terreno sabía que la puerta lleva a algún sitio, o que no se pudo mirar y por qué", ElTechoSaleDeLaMedidaYDiceSuCausa);
         // 360: RESERVADA (SAP asentada = !Busy ×3 + dos StructureFingerprint iguales). No entra al contrato hasta la
         // sonda de solo lectura en el hospital (aprendizaje nº13: 0 líneas sapgui:// en 23 logs de esta máquina).
         // El número no se recicla (spec 047).
@@ -13511,6 +13511,56 @@ internal static class Contrato
             Debe(System.Text.RegularExpressions.Regex.IsMatch(linea, @"dejó de esperar a los \d+ ms: [^·]*" + System.Text.RegularExpressions.Regex.Escape(causa)),
                 $"caso «{caso}»: queda dicho a los cuántos ms dejó de esperar y por qué («{causa}»): [{p.DiarioJunto}]");
         }
+
+        // 8. EL SITIO FRESCO QUE NO SE PUEDE LEER JUSTO AL IR A DECLARARLA (hallazgo de la revisión del 23-09, regla 2b). La
+        // relectura de antes de declarar «asentada» lanzaba, o volvía vacía, y la espera la declaraba igual: la cuenta decía
+        // «asentada (… y el sitio fresco sin cambiar)» y la misma línea del diario, «no pude releer el sitio». Un mensaje que
+        // concluye (patrón nº2) y un vacío tomado por «no cambió» (nº9). Aquí la primera relectura —la del sondeo de t=0—
+        // contesta, y desde la segunda —la de declarar— lanza o vuelve vacía: sin sitio que juzgar no hay asentada, y se llega
+        // al techo diciendo por qué. Añadido el 23-09, en rojo antes de su código.
+        int lecturasRotas = 0, lecturasVacias = 0;
+        var frescoRoto = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }),
+            sitioFresco: () => ++lecturasRotas == 1 ? A047 : throw new InvalidOperationException("el localizador no contestó"))!;
+        var frescoVacio = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", _ => Huella047(A047, "w", new[] { "b" }),
+            sitioFresco: () => ++lecturasVacias == 1 ? A047 : "")!;
+        foreach (var (caso, p, causa) in new[] { ("el sitio fresco lanza", frescoRoto, "no pude releer el sitio"), ("el sitio fresco llega vacío", frescoVacio, "llegó vacío") })
+        {
+            string linea = p.Diario.FirstOrDefault(l => l.Contains("antes") && l.Contains("después")) ?? "";
+            Debe(p.Ms >= Techo047 - 100
+                    && !System.Text.RegularExpressions.Regex.IsMatch(linea, @"dejó de esperar a los \d+ ms: asentada")
+                    && System.Text.RegularExpressions.Regex.IsMatch(linea, @"dejó de esperar a los \d+ ms: [^·]*" + System.Text.RegularExpressions.Regex.Escape(causa))
+                    && !p.R.Cuenta.Contains("asentada") && p.R.Cuenta.Contains(causa),
+                $"caso «{caso}» al ir a declararla: no se da por asentada —se llega al techo— y la línea y la cuenta dicen «{causa}», nunca «asentada»: {p.Ms} ms de {Techo047}; «{p.R.Cuenta}» [{p.DiarioJunto}]");
+        }
+
+        // 9. LO DE DENTRO QUE NO SE RELEYÓ (hallazgo de la revisión del 23-09; bloqueaba). HuellaEnVivo reutiliza lo de dentro
+        // durante un respiro, y también la lectura de ANTES de tocar, que es de la misma instancia: dos huellas «iguales» podían
+        // ser la misma lectura vieja, y la regla se cumplía en el reloj y no en lo observado. Aquí la huella imita esa memoria
+        // —relee lo de dentro solo cuando su lectura tiene 400 ms, y dice su edad—, la mano tarda 100 ms y el menú aparece a
+        // los 200 de soltarla. Con la lectura de antes de tocar la espera declara «nada» hacia los 120 ms; contando desde
+        // cuándo se leyó, la primera lectura de después ve el menú. Añadido el 23-09, en rojo antes de su código.
+        var conEdad = TipoHuella047?.GetMethod("ConEdadDeDentro", BindingFlags.Public | BindingFlags.Instance);
+        if (conEdad == null) { Pendiente("HuellaDeLoQueSeVe.ConEdadDeDentro (la huella dice cuándo se leyó lo de dentro)", "351", "047"); return; }
+        var relojDeLaMano = new System.Diagnostics.Stopwatch();
+        var relojDeLaHuella = System.Diagnostics.Stopwatch.StartNew();
+        long leidaEn = -1; string[] leido = Array.Empty<string>();
+        object? Cacheada(int _)
+        {
+            lock (relojDeLaHuella)
+            {
+                long ahora = relojDeLaHuella.ElapsedMilliseconds;
+                if (leidaEn < 0 || ahora - leidaEn >= 400)
+                {
+                    leido = relojDeLaMano.IsRunning && relojDeLaMano.ElapsedMilliseconds >= 200 ? new[] { "b", "menu" } : new[] { "b" };
+                    leidaEn = ahora;
+                }
+                return conEdad.Invoke(Huella047(A047, "w", leido), new object[] { ahora - leidaEn });
+            }
+        }
+        var vieja = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", Cacheada,
+            alTocar: _ => { Thread.Sleep(100); relojDeLaMano.Start(); return true; })!;
+        Debe(vieja.QueCambio == "Dentro" && vieja.MsHastaElVeredicto >= 200,
+            $"una lectura de dentro reutilizada, o la de antes de tocar, no hace de segunda huella: el menú que aparece a los 200 ms se ve y el veredicto es «dentro», no «nada» a los 120: {vieja.QueCambio} a los {vieja.MsHastaElVeredicto} ms [{vieja.DiarioJunto}]");
     }
 
     private static void HayUnaSolaDefinicionDeCambio()
@@ -13543,6 +13593,18 @@ internal static class Contrato
         Debe(M(a, otraDelante) && M(a, otrasVentanas) && !M(a, otroDentro) && !M(a, otroSitio),
             "la compuerta sigue juzgando solo el sitio y lo de dentro (MismaPantallaQueVe ignora «delante» y «ventanas»): la 299 dice lo mismo que decía");
 
+        // EL TÍTULO NO ES OTRA VENTANA (hallazgo de la revisión del 23-09). «Delante» es el hwnd y el título, y hasta hoy
+        // cualquier diferencia era «otra ventana pasó al frente»: en Gmail «marcar como leído» cambia «Recibidos (3)» por
+        // «Recibidos (2)» sin cambiar de ventana, y «Nuevo chat» retitula ChatGPT.exe. El mensaje afirmaba una causa que no
+        // podía distinguir (patrón nº2). Añadido el 23-09, en rojo antes de su código.
+        var gmail3 = Huella047("s", "1A2B·Recibidos (3) - Gmail", new[] { "x", "y" }, new[] { "h1", "h2" })!;
+        var gmail2 = Huella047("s", "1A2B·Recibidos (2) - Gmail", new[] { "x", "y" }, new[] { "h1", "h2" })!;
+        var otraVentana = Huella047("s", "3C4D·Recibidos (3) - Gmail", new[] { "x", "y" }, new[] { "h1", "h2" })!;
+        Debe(C(gmail3, gmail2) == ("Delante", "Titulo"),
+            $"la misma ventana de delante con otro título dice que cambió el título, no que pasó otra al frente: {C(gmail3, gmail2)}");
+        Debe(C(gmail3, otraVentana) == ("Delante", "Delante"),
+            $"y otra ventana al frente, aunque tenga el mismo título, es «Delante» con la parte «Delante»: {C(gmail3, otraVentana)}");
+
         // Y QUE LA COMPUERTA LO USE DE VERDAD: se lee el código, como la 341 de la voz. Sin U_REPO no se adivina
         // (aprendizaje nº17: «no pude» no es «culpable»).
         string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
@@ -13571,6 +13633,13 @@ internal static class Contrato
         var delante = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, n == 1 ? "gmail" : "escritorio", new[] { "b" }))!;
         Debe(delante.QueCambio == "Delante" && !delante.R.CambioLaPantalla && !delante.R.Aprendido && delante.R.Cuenta.Contains("delante"),
             $"otra ventana delante es «cambió delante»: ni llegada ni arista, y la cuenta lo dice ({delante.QueCambio}; «{delante.R.Cuenta}»)");
+
+        // EL TÍTULO DE LA MISMA VENTANA (hallazgo de la revisión del 23-09): la cuenta no le dice al modelo que otra ventana pasó
+        // al frente —lo mandaría a buscar un diálogo que no existe—, sino que la misma cambió de título. Añadido el 23-09, en rojo.
+        var titulo = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", n => Huella047(A047, n == 1 ? "1A2B·Recibidos (3)" : "1A2B·Recibidos (2)", new[] { "b" }))!;
+        Debe(titulo.QueCambio == "Delante" && titulo.Parte == "Titulo" && !titulo.R.Aprendido
+                && !titulo.R.Cuenta.Contains("otra ventana") && titulo.R.Cuenta.Contains("título"),
+            $"la misma ventana con otro título no es «otra ventana pasó al frente»: la cuenta dice que cambió el título ({titulo.QueCambio}/{titulo.Parte}; «{titulo.R.Cuenta}»)");
 
         // DE SITIO: la única que acuña arista, como exige la 44.
         string donde = A047;
@@ -13603,6 +13672,13 @@ internal static class Contrato
         var (eNada, nNada) = Corre("Nada", 6);
         Debe(nNada == 3 && eNada.Contains("tres veces", StringComparison.OrdinalIgnoreCase),
             $"y una que no hace nada tres veces sí lo es, como exige la 292 ({nNada} pasos; «{Recorte(eNada)}»)");
+        // UNA VENTANA QUE CAMBIA SOLA (hallazgo de la revisión del 23-09): ChatGPT.exe mientras genera, Gmail cuando entra
+        // correo, una web con anuncios. La huella de antes contra la de después da «dentro» en CADA clic, lo haga el clic o
+        // no, y el detector —que solo contaba «nada»— no paraba nunca: el tramo pulsaba una puerta muerta hasta el tope,
+        // esperando el techo en cada paso. Ahora para a la quinta, y dice lo que no puede distinguir. Añadido el 23-09, en rojo.
+        var (eSola, nSola) = Corre("Dentro", 8);
+        Debe(nSola == 5 && eSola.Contains("cinco veces", StringComparison.OrdinalIgnoreCase) && !eSola.Contains("tope", StringComparison.OrdinalIgnoreCase),
+            $"una puerta que da «dentro» cinco veces seguidas —una ventana que cambia sola— para a la quinta y no en el tope ({nSola} pasos; «{Recorte(eSola)}»)");
 
         // (ii) EL CAMINO DEL OPERADOR (refutación 2): Anotar → Mano → SurfaceMapTools.cs:343 → Paso. Sin esa línea el
         // detector seguiría contando !Cambio en el mapa, y (i) saldría verde solo con manos falsas (aprendizaje nº11).
@@ -13693,6 +13769,17 @@ internal static class Contrato
         var l3 = LineasDeMedida(ciega);
         Debe(l3.Count == 1 && l3[0].Contains("nadie miraba"), $"sin huella inyectada la línea sale igual y dice que nadie miraba: [{ciega.DiarioJunto}]");
 
+        // 3b. LA VENTANA DE DELANTE, SIN SU TÍTULO (hallazgo de la revisión del 23-09). La línea escribía en CADA pulsación el
+        // título de la ventana de delante —la de trabajo o cualquiera que la persona tenga al frente—, antes y después, y el
+        // espejo del log (EspejoDelLog) sube cada línea al panel del backend. La cuenta ya lo excluía porque «un título puede
+        // llevar datos»; el log, no. La huella sigue comparando el título en memoria; la línea lleva la ventana y cuánto mide
+        // su título. Añadido el 23-09, en rojo antes de su código.
+        var privada = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir",
+            n => Huella047(A047, n == 1 ? "1A2B·Juan Pérez - Historia clínica" : "1A2B·Juan Pérez - Historia clínica (editada)", new[] { "b" }))!;
+        var l3b = LineasDeMedida(privada);
+        Debe(l3b.Count == 1 && l3b[0].Contains("1A2B") && !privada.Diario.Any(l => l.Contains("Juan Pérez")) && !privada.R.Cuenta.Contains("Juan Pérez"),
+            $"la línea dice qué ventana estaba delante pero no su título, ni antes ni después (ni la cuenta): [{privada.DiarioJunto}]");
+
         // 4. LA HUELLA REAL LLEVA EL SITIO DESDE LA PRIMERA TOMA. HuellaEnVivo decidía «toca releer el sitio» con
         // `ahora - _tSitio >= respiro` y _tSitio = long.MinValue: la misma resta que desborda, así que la PRIMERA huella de
         // cada sesión salía con el sitio vacío y la segunda ya lo traía. En la línea de esa primera pulsación la parte que
@@ -13766,6 +13853,12 @@ internal static class Contrato
         Debe(d2Junto.Any(l => System.Text.RegularExpressions.Regex.IsMatch(l, "«" + System.Text.RegularExpressions.Regex.Escape(C) + @"» a los \d+ ms")
                 && System.Text.RegularExpressions.Regex.IsMatch(l, "«" + System.Text.RegularExpressions.Regex.Escape(B) + @"» a los \d+ ms")),
             $"y la llegada deja dicho a los cuántos ms cambió de sitio cada vez —a la intermedia y a la esperada—, que es la medida de la que sale el presupuesto: [{string.Join(" ¦ ", d2Junto)}]");
+        // SIN EL TEXTO ESCRITO (hallazgo de la revisión del 23-09). La línea decía «tras escribí «TEXTO»» en CADA paso de
+        // escritura con llegada —también en SAP y también cuando salía bien—, y el diario de la app es el log («compuerta»),
+        // que EspejoDelLog sube al backend: el documento del paciente que una skill escribe en IS-H viajaba en cada corrida.
+        // Antes de esta rama el texto solo quedaba en el log si fallaba. Añadido el 23-09, en rojo antes de su código.
+        Debe(!d2Junto.Any(l => l.Contains("hola")),
+            $"y la línea de la llegada no lleva el texto escrito («hola»): [{string.Join(" ¦ ", d2Junto)}]");
 
         // 3. ASENTADA EN LA DE PARTIDA: una página que aún no empezó a pintarse parece asentada. Se espera el techo.
         var (r3, ms3, _) = Escribe(_ => A, Quieta);
@@ -13778,6 +13871,30 @@ internal static class Contrato
         // 5. SIN HUELLA: como hoy (el techo entero mirando la ubicación).
         var (r5, ms5, _) = Escribe(_ => C, null);
         Debe(!r5.Termino && ms5 >= Techo047 - 100, $"sin huella se espera como hoy: {ms5} ms de {Techo047}");
+
+        // 6. UN CLIC CUYO PASO TRAE LA LLEGADA (hallazgo de la revisión del 23-09). De los 3 sitios que juzgan la llegada de un
+        // paso, la fase 6 llevó la mirada a 2 (escribir y teclear); el del clic siguió juzgando `r.Hasta` en el acto. Y desde
+        // la fase 2 pulsar sale «asentada» hacia los 400-500 ms cuando el terreno no sabe a dónde lleva la puerta: una
+        // navegación más lenta volvía con Hasta == desde y el batch declaraba el desvío y cortaba la skill. Antes de esta rama
+        // pulsar esperaba el techo a que cambiara la ubicación. Aquí: una skill enseñada en otra máquina —el terreno de esta
+        // no conoce el destino—, huella quieta, y la página cambia a los 600 ms del clic. Añadido el 23-09, en rojo.
+        var enlace = new Nucleo.Elemento("uia:name=Abrir informe;ct=Hyperlink", "Abrir informe", "Hyperlink");
+        var g6 = new Nucleo.Grafo(); g6.Observar(A, new[] { enlace });
+        var relojDelClic = new System.Diagnostics.Stopwatch();
+        Func<string> donde6 = () => relojDelClic.IsRunning && relojDelClic.ElapsedMilliseconds >= 600 ? B : A;
+        var pulsar6 = new PulsarSegunElNucleo(g6, donde6, (sel, et) => { relojDelClic.Start(); return true; }) { EsperaMaximaMs = Techo047 };
+        var tP = typeof(PulsarSegunElNucleo);
+        tP.GetProperty("RespiroMs")?.SetValue(pulsar6, 100);
+        tP.GetProperty("PrimeraHuellaMs")?.SetValue(pulsar6, 100);
+        var pHuellaDelPulsar = tP.GetProperty("Huella")!;
+        pHuellaDelPulsar.SetValue(pulsar6, DelegadoDeHuella047(pHuellaDelPulsar.PropertyType, () => Huella047(A, "w", new[] { "b" })));
+        var diario6 = new List<string>();
+        tP.GetProperty("Diario")?.SetValue(pulsar6, (Action<string>)(l => { lock (diario6) diario6.Add(l); }));
+        var lote6 = new RecorrerSegunElNucleo(g6, donde6, pulsar6, hayQueParar: () => false) { EsperaMaximaMs = Techo047 };
+        var r6 = lote6.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Abrir informe", Llegada: B) });
+        string[] d6; lock (diario6) d6 = diario6.ToArray();
+        Debe(r6.Termino && r6.Hechos == 1 && Superficies.MismaPantalla(r6.Donde, B),
+            $"un clic con llegada no se da por asentado antes de cambiar de sitio: la página que cambia a los 600 ms llega y no es un desvío (terminó={r6.Termino}, hechos={r6.Hechos}, en «{r6.Donde}»; «{Recorte(r6.Cuenta)}») [{string.Join(" ¦ ", d6)}]");
     }
 
     private static void LasTresEsperasDePulsarConsumenLaMismaHuella()
@@ -13797,14 +13914,21 @@ internal static class Contrato
         }
 
         // EL ENSAYO DEL DOBLE (83): un TreeItem sin gesto aprendido se ensaya con el doble, y ESA espera también sale al asentarse.
+        // CAMBIADO EL 23-09 (hallazgo de la revisión; bloqueaba): hasta entonces las DOS esperas salían al asentarse. Pero una
+        // asentada falsa tras el CLIC es justo la que manda un segundo gesto físico —el doble— sobre un elemento que aún puede
+        // estar cambiando (un TreeItem que se despliega a los 300-450 ms, una fila de Gmail que navega a los 600), y si esa
+        // navegación aterriza durante la espera del doble, Cruzar aprende «doubleclick» y la 82 lo repite en cada visita.
+        // Mientras el nivel 4 no mida PrimeraHuellaMs, la espera del clic sobre contenido sin gesto aprendido es como hoy; la
+        // del doble sigue saliendo al asentarse. En rojo antes de su código.
         var arbol = Pulsa047(Mundo(), () => A047, fila.Selector, "Descargas", _ => Huella047(A047, "w", new[] { "b" }))!;
-        Debe(arbol.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && arbol.Ms < Techo047,
-            $"la fila se ensaya con el doble y las dos esperas salen al asentarse, ninguna al techo: [{string.Join(" · ", arbol.Gestos)}] en {arbol.Ms} ms con techo {Techo047}");
+        Debe(arbol.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && arbol.Ms >= Techo047 - 100 && arbol.Ms < 2 * Techo047 - 200,
+            $"la fila espera como hoy tras el clic, se ensaya con el doble y esa segunda espera sale al asentarse, no al techo: [{string.Join(" · ", arbol.Gestos)}] en {arbol.Ms} ms con techo {Techo047} (entre {Techo047 - 100} y {2 * Techo047 - 200})");
         // LA MISMA REGLA DICE CÓMO TERMINÓ CADA ESPERA (la última cláusula de la 351: «en todos los casos queda dicho a los
         // cuántos milisegundos dejó de esperar y por qué»). Añadido en la fase 5, en rojo antes de su código: hasta entonces
         // la espera del doble se agotaba en silencio —ninguna línea—, y la de la repetición tampoco decía cómo terminó.
-        Debe(arbol.Diario.Count(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"dejó de esperar a los \d+ ms: asentada")) == 2,
-            $"y las dos esperas dicen a los cuántos ms dejaron de esperar y por qué —asentada, las dos—: [{arbol.DiarioJunto}]");
+        Debe(arbol.Diario.Count(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"dejó de esperar a los \d+ ms: asentada")) == 1
+                && arbol.Diario.Count(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"dejó de esperar a los \d+ ms: [^·]*contenido sin gesto aprendido")) == 1,
+            $"y cada espera dice a los cuántos ms dejó de esperar y por qué —la del clic, como hoy por ser contenido sin gesto aprendido; la del doble, asentada—: [{arbol.DiarioJunto}]");
 
         // EL VEREDICTO SALE DE LA ÚLTIMA ESPERA, como sus milisegundos (353, fase 4). Si el doble abre un menú, el resultado
         // dice «dentro» —ni llegada ni arista— y no lo que vio el clic, que fue «nada»: dos esperas mirando y el veredicto de
@@ -13814,7 +13938,7 @@ internal static class Contrato
             _ => Huella047(A047, "w", abierto ? new[] { "b", "menu" } : new[] { "b" }),
             alTocar: gesto => { if (gesto == "doubleclick") abierto = true; return true; })!;
         Debe(menu.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && menu.QueCambio == "Dentro" && !menu.R.CambioLaPantalla
-                && !menu.R.Aprendido && menu.R.Cuenta.Contains("cambió dentro") && menu.MsHastaElVeredicto >= 0 && menu.Ms < Techo047,
+                && !menu.R.Aprendido && menu.R.Cuenta.Contains("cambió dentro") && menu.MsHastaElVeredicto >= 0 && menu.Ms < 2 * Techo047 - 200,
             $"si el doble abre un menú, el resultado lo dice con la huella de la última espera —«dentro», sin llegada ni arista— y no con la del clic: {menu.QueCambio}, aprendido={menu.R.Aprendido}, a los {menu.MsHastaElVeredicto} ms de {menu.Ms}; «{menu.R.Cuenta}»");
 
         // LA REPETICIÓN (248): solo se repite lo que se sabe que navega, y eso espera el techo las dos veces.
@@ -13839,18 +13963,21 @@ internal static class Contrato
 
     private static void LasHerramientasDelMapaGastanDelRelojYMiranLaHuella()
     {
+        // OCHO PARÁMETROS DESDE EL 23-09: el octavo es el comparador de sitios de quien llama (abajo, caso 5). Se busca por
+        // nombre y aridad, y sin él cuenta PENDIENTE: ausente en el núcleo que se escribe no es «no aplica» (flujo-sdd.md).
         var tEspera = Capacidad("U.WindowsClient.Navigation.EsperaAsentada");
-        var espera = tEspera?.GetMethod("Espera", BindingFlags.Public | BindingFlags.Static);
+        var espera = tEspera?.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(m => m.Name == "Espera" && m.GetParameters().Length == 8);
         var antes = Huella047("s", "w", new[] { "b" });
-        if (tEspera == null || espera == null || antes == null || espera.GetParameters().Length != 7)
-        { Pendiente("Navigation.EsperaAsentada.Espera(huella, sitioFresco, antes, compas, respiroMs, primeraMs, cadenciaMs)", "358", "047"); return; }
+        if (tEspera == null || espera == null || antes == null)
+        { Pendiente("Navigation.EsperaAsentada.Espera(huella, sitioFresco, antes, compas, respiroMs, primeraMs, cadenciaMs, mismoSitio)", "358", "047"); return; }
+        Func<string, string, bool> mismaPantalla = Superficies.MismaPantalla;
 
-        (long Ms, string PorQue, long Dicho) Corre(Func<int, object?> huella, int techo)
+        (long Ms, string PorQue, long Dicho) Corre(Func<int, object?> huella, int techo, object? antesDeEsta = null, Func<string>? fresco = null)
         {
             int n = 0;
             var f = DelegadoDeHuella047(espera.GetParameters()[0].ParameterType, () => huella(Interlocked.Increment(ref n)));
             var crono = System.Diagnostics.Stopwatch.StartNew();
-            var v = espera.Invoke(null, new object?[] { f, (Func<string>)(() => "s"), antes, new Compas(techo), 100, 100, 120 })!;
+            var v = espera.Invoke(null, new object?[] { f, fresco ?? (() => "s"), antesDeEsta ?? antes, new Compas(techo), 100, 100, 120, mismaPantalla })!;
             return (crono.ElapsedMilliseconds, PropDe(v, "PorQueDejoDeEsperar")?.ToString() ?? "", Convert.ToInt64(PropDe(v, "MsHastaElVeredicto") ?? -1L));
         }
 
@@ -13865,6 +13992,17 @@ internal static class Contrato
         // 3. Cambiante: el techo, y la causa.
         var inquieta = Corre(n => Huella047("s", "w", new[] { "b" + n }), Techo047);
         Debe(inquieta.Ms >= Techo047 - 100 && inquieta.PorQue == "TechoSeMovia", $"una huella que no para llega al techo y lo dice: {inquieta.Ms} ms ({inquieta.PorQue})");
+
+        // 5. CON «www.» Y SIN ÉL ES EL MISMO SITIO (hallazgo de la revisión del 23-09). EsperaAsentada decidía «cambió de sitio»
+        // comparando con Ordinal, y Type juzga el mismo antes/ahora con Superficies.MismaPantalla: el caso medido el 18-09 en
+        // map_type, 7 veces en una sesión —«web://www.google.com/search» antes del Enter y «web://google.com/search» después—
+        // hacía salir la espera en la primera relectura, antes de que se pintara la página, y el log decía «cambió de sitio»
+        // justo antes de que Type decidiera que era la misma pantalla. De sus 3 consumidores, 2 comparaban sitios con
+        // MismaPantalla y ella con Ordinal: el mismo origen no es el mismo camino (aprendizaje nº16). Añadido el 23-09, en rojo.
+        const string ConWww = "web://www.google.com/search", SinWww = "web://google.com/search";
+        var www = Corre(_ => Huella047(ConWww, "w", new[] { "b" }), Techo047, Huella047(ConWww, "w", new[] { "b" }), () => SinWww);
+        Debe(www.PorQue == "Asentada" && www.Ms < Techo047 / 2,
+            $"con el comparador de quien llama, «{SinWww}» después de «{ConWww}» no es un cambio de sitio: la pantalla se asienta ({www.PorQue}, a los {www.Dicho} ms)");
 
         // 4. LA VUELTA TRAS UN ENTER DESHECHO GASTA DEL MISMO RELOJ. Ningún caso juzgaba esta cláusula; se añade en la fase
         // 7, en rojo antes de su código. Leído el 22-09: Llego ya medía con la hora de pared (DateTime.UtcNow) y NO contaba
@@ -13888,6 +14026,14 @@ internal static class Contrato
         Debe(!fuente.Contains("EsperarCambio(", StringComparison.Ordinal), "la espera de un cambio que nadie llamaba (EsperarCambio, 0 llamadores el 22-09) deja de existir");
         Debe(!fuente.Contains("CuantosAccionables(", StringComparison.Ordinal), "ya no se cuentan botones de la ventana de delante (CuantosAccionables: tres FindAll sobre el primer plano)");
         Debe(fuente.Contains("EsperaAsentada", StringComparison.Ordinal), "EsperarPantallaLista decide «lista» con EsperaAsentada, la misma huella de lo que se ve");
+        // Y QUE LE PASE EL COMPARADOR DE Type (caso 5): el cuerpo de EsperarPantallaLista, desde su firma hasta el método
+        // siguiente, nombra Superficies.MismaPantalla. Añadido el 23-09, en rojo antes de su código.
+        int ini = fuente.IndexOf("private void EsperarPantallaLista(", StringComparison.Ordinal);
+        int fin = ini < 0 ? -1 : fuente.IndexOf("private bool Llego(", ini, StringComparison.Ordinal);
+        string cuerpo = ini >= 0 && fin > ini ? fuente[ini..fin] : "";
+        if (cuerpo.Length == 0) Console.WriteLine("   ⚠ NO PUDE JUZGAR el comparador de EsperarPantallaLista: no encontré su cuerpo entre su firma y la de Llego");
+        else Debe(cuerpo.Contains("Superficies.MismaPantalla", StringComparison.Ordinal),
+            "EsperarPantallaLista le pasa a la espera el mismo comparador de sitios con el que Type juzga el Enter (Superficies.MismaPantalla)");
     }
 
     private static void ElTechoSaleDeLaMedidaYDiceSuCausa()
