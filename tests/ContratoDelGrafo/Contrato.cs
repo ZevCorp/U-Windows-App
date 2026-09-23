@@ -14533,6 +14533,53 @@ internal static class Contrato
         double vInicio = Dist(Pos(medio, 0.01), Pos(medio, 0)), vMedio = Dist(Pos(medio, 0.5), Pos(medio, 0.49)), vFin = Dist(Pos(medio, 1), Pos(medio, 0.99));
         Debe(vInicio < vMedio && vFin < vMedio, $"sale y llega parado: en los extremos va más despacio que en medio ({vInicio:0.00} · {vMedio:0.00} · {vFin:0.00})");
 
+        // Añadidas en la fase 5, antes que su código. «NO SE DEVUELVE» SE MIRABA EN UN SOLO VUELO, el de 780, y
+        // la curva del plano solo lo cumple en los largos: sus mínimos (control 70·s, arco 18·s) están pensados
+        // para cruzar media pantalla, y en un vuelo corto el control cae MÁS ALLÁ del aterrizaje y el camino se
+        // pasa y vuelve (M, barrido de la curva del plano tal cual en la fase 5: 2.040 de 3.360 vuelos —28
+        // distancias, 24 direcciones, 5 escalas— se devuelven, todos con 58·s de camino o menos).
+        // Lo pulsado a 60 de la flecha es lo corriente —el botón de al lado—, así que se mira en cortos, en
+        // todas las direcciones y a dos escalas; y con la flecha YA encima de lo pulsado (distancia 0), que no
+        // tiene dirección de llegada y aun así aterriza a 42·s.
+        var seDevuelven = new List<string>();
+        foreach (double escala in new[] { 1.0, 1.5 })
+            foreach (double lejos in new[] { 0.0, 10, 60, 100, 160 })
+                for (int grados = 0; grados < 360; grados += 30)
+                {
+                    double a = grados * Math.PI / 180;
+                    var centro = new WPoint(500 + lejos * escala * Math.Cos(a), 500 + lejos * escala * Math.Sin(a));
+                    var corto2 = Plan(new WPoint(500, 500), centro, escala, true)!;
+                    var finCorto = (WPoint)PropDe(corto2, "Fin")!;
+                    bool bien = Math.Abs(Dist(finCorto, centro) - 42 * escala) < 0.01;
+                    double antes = Dist(Pos(corto2, 0), finCorto);
+                    for (int i = 1; i <= 100 && bien; i++)
+                    {
+                        double d = Dist(Pos(corto2, i / 100.0), finCorto);
+                        if (d > antes + 1e-6) bien = false;
+                        antes = d;
+                    }
+                    if (!bien) seDevuelven.Add($"{lejos}·{escala}@{grados}°");
+                }
+        Debe(seDevuelven.Count == 0, $"un vuelo corto tampoco se devuelve y aterriza a 42·s, también con la flecha encima de lo pulsado: fallan {seDevuelven.Count} de 120 [{string.Join(", ", seDevuelven.Take(8))}]");
+        // EL RELOJ DEL FOTOGRAMA SE PASA de la duración (el último cuadro llega tarde): la flecha se queda en Fin,
+        // no sigue la curva de largo; y antes de salir se queda en el inicio.
+        Debe(Dist(Pos(medio, 1.5), fin) < 0.01 && Dist(Pos(medio, -0.5), inicio) < 0.01,
+            $"fuera de [0, 1] la flecha se queda en los extremos: p=1,5 → {Pos(medio, 1.5)} · p=−0,5 → {Pos(medio, -0.5)}");
+        // UNA ESCALA QUE NO ES ESCALA, o un punto sin coordenadas, no dan camino: lanzan. Con escala 0 los 520 son
+        // 0 (duración infinita, acotada a 2,2 sin decir nada) y la flecha aterrizaría ENCIMA de lo pulsado; y un
+        // NaN de UIA llegaría a SetWindowPos como int.MinValue (patrón nº9). Es la misma guarda que ya tienen
+        // DondeVaElPanel y Pantallas.DelMonitor (fase 4).
+        bool Lanza<TExc>(WPoint a, WPoint b, double escala) where TExc : Exception
+        {
+            try { Plan(a, b, escala, true); return false; }
+            catch (TargetInvocationException e) when (e.InnerException is TExc) { return true; }
+        }
+        Debe(Lanza<ArgumentOutOfRangeException>(inicio, new WPoint(880, 100), 0) && Lanza<ArgumentOutOfRangeException>(inicio, new WPoint(880, 100), double.NaN)
+             && Lanza<ArgumentOutOfRangeException>(inicio, new WPoint(880, 100), -1),
+            "una escala de 0, NaN o negativa no da vuelo: lanza ArgumentOutOfRangeException");
+        Debe(Lanza<ArgumentException>(new WPoint(double.NaN, 100), new WPoint(880, 100), 1) && Lanza<ArgumentException>(inicio, new WPoint(880, double.PositiveInfinity), 1),
+            "un inicio o un centro sin coordenadas finitas no da vuelo: lanza ArgumentException");
+
         // (b) QUIÉN ESTÁ DELANTE SE LE PREGUNTA A WINDOWS, no se da por hecho.
         var vista = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "381");
         if (vista != null)
