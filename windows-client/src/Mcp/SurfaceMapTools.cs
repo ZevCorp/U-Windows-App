@@ -565,12 +565,108 @@ public sealed class SurfaceMapTools
         return UnPasoDecidido(objetivo, decir, recuerdo).Cuenta;
     }
 
+    // ── El evento para quien pinta (spec 048, promesa 368) ───────────────────────────────────────
+    //
+    // HASTA EL 2026-09-22 lo que se decidía en un paso solo salía como PROSA —la línea «decisor» y la de progreso
+    // del tramo—, y la rama que pinta (spec 049, «el puente provisional») lo reconstruye decorando el Decisor desde
+    // fuera y leyendo la línea de progreso: la decoración ve d.Puerta, pero no las cajas, ni lo que se ofreció, ni
+    // a cuál fue la mano cuando fue la segunda mejor (288). Aquí se publica lo que el paso ya sabía, con tipo.
+
+    /// <summary>Cuánto costó cada fase de un paso decidido, en ms: leer la pantalla, decidir y pulsar.</summary>
+    /// <remarks>
+    /// <paramref name="Pulsar"/> SUMA LOS INTENTOS: si la elegida no estaba y se probó la segunda mejor (288), son
+    /// los dos <c>Take</c>, porque es lo que el paso tardó en pulsar. La línea de tiempos del tramo dice el del
+    /// último intento; aquí va el total. Una fase que no se llegó a correr vale 0 —las tres con el decisor apagado;
+    /// decidir y pulsar sin pantalla o sin nada accionable; pulsar si el decisor dijo que no o lanzó—, y el
+    /// <see cref="PasoDecidido.Paso"/> dice cuál fue.
+    /// </remarks>
+    public readonly record struct MsDelPaso(long Leer, long Decidir, long Pulsar);
+
+    /// <summary>
+    /// UN PASO DECIDIDO, TAL COMO SE DECIDIÓ: lo que se le ofreció al decisor, lo que contestó y lo que hizo la mano.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="Candidatas"/> y <paramref name="Ofrecidas"/> SON LA MISMA LISTA EN EL MISMO ORDEN (285): la
+    /// id N-ésima de <paramref name="Ofrecidas"/> —«N) Etiqueta (Tipo)», exactamente lo que recibió el decisor— es
+    /// la candidata N-ésima, con su caja LEÍDA o <see cref="System.Windows.Rect.Empty"/> si no la hay (terreno,
+    /// dynpro: nunca una estimada, patrón nº8). Vacías si no se llegó a leer.
+    /// <paramref name="Decision"/> ES LA DEL DECISOR SIN TOCAR, también cuando dice que no; nula si no la hubo
+    /// (decisor apagado, pantalla sin nombre, nada accionable, o el decisor lanzó: el porqué está en
+    /// <paramref name="Paso"/>). A CUÁL FUE LA MANO no es la decisión —puede ser la segunda mejor—: es
+    /// <c>Paso.Numero</c>, sacado de la id con <c>id.Substring(0, id.IndexOf(')'))</c> como la mano, y
+    /// <c>Paso.Selector</c>, que es el de una de las <paramref name="Candidatas"/>. Si la mano terminó lo dice
+    /// <c>Paso.Termino</c>, y si no, por qué, <c>Paso.Cuenta</c>: «no terminó» tiene más de una causa (no estaba,
+    /// homónimos, el tope de intentos) y este evento no las resume en una.
+    /// </remarks>
+    public sealed record PasoDecidido(
+        string Donde,
+        string Objetivo,
+        IReadOnlyList<Candidata> Candidatas,
+        IReadOnlyList<string> Ofrecidas,
+        global::U.WindowsClient.Decision.DecisionDeUnPaso? Decision,
+        MsDelPaso Ms,
+        Navigation.ElTramo.Paso Paso);
+
+    /// <summary>
+    /// CADA PASO DECIDIDO, publicado (promesa 368): el de <c>map_decidir</c> y cada uno del tramo, también cuando
+    /// no se acciona. Sin nadie suscrito no se anota nada y la cuenta es byte a byte la de siempre.
+    /// </summary>
+    /// <remarks>
+    /// SALE EN EL HILO DEL PASO, no en el de la ventana: el tramo corre en su propia tarea. Quien pinte tiene que
+    /// pasarlo a su Dispatcher. Y QUIEN OYE NO ROMPE EL PASO: si un oyente lanza, se dice con la cadena entera y
+    /// el paso sigue como si nadie oyera —pintar no puede cambiar lo que se pulsó—.
+    /// </remarks>
+    public event Action<PasoDecidido>? AlDecidir;
+
+    /// <summary>
+    /// Lo que el paso va sabiendo mientras decide, para el evento. Solo existe si alguien oye: sin oyente, el
+    /// paso recibe null y no anota nada (368: «sin suscriptor no cuesta nada»).
+    /// </summary>
+    private sealed class LoQueSeDecide
+    {
+        public string Donde = "";
+        public IReadOnlyList<Candidata> Candidatas = Array.Empty<Candidata>();
+        public IReadOnlyList<string> Ofrecidas = Array.Empty<string>();
+        public global::U.WindowsClient.Decision.DecisionDeUnPaso? Decision;
+        public long MsLeer, MsDecidir, MsPulsar;
+    }
+
+    /// <summary>
+    /// UN PASO DECIDIDO, Y SE PUBLICA. Es el único sitio por el que decide map_decidir y el tramo (spec 037), así
+    /// que publicar AQUÍ, sobre el paso ya devuelto, cubre todas sus salidas —las de hoy y las que se añadan— sin
+    /// tocar ninguna: un paso no ejecutado deja rastro (patrón nº10).
+    /// </summary>
+    private Navigation.ElTramo.Paso UnPasoDecidido(string objetivo, string decir, string recuerdo)
+    {
+        var oyentes = AlDecidir;
+        if (oyentes == null) return DecidirYPulsar(objetivo, decir, recuerdo, null);
+        var anotado = new LoQueSeDecide();
+        var paso = DecidirYPulsar(objetivo, decir, recuerdo, anotado);
+        var evento = new PasoDecidido(anotado.Donde, objetivo, anotado.Candidatas, anotado.Ofrecidas, anotado.Decision,
+            new MsDelPaso(anotado.MsLeer, anotado.MsDecidir, anotado.MsPulsar), paso);
+        foreach (var oyente in oyentes.GetInvocationList().Cast<Action<PasoDecidido>>())
+        {
+            try { oyente(evento); }
+            catch (Exception e)
+            {
+                // LA CADENA ENTERA (patrón nº3), y quién la lanzó: con dos oyentes, «un oyente falló» no dice cuál.
+                string causa = "";
+                for (var x = e; x != null; x = x.InnerException)
+                    causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+                LogBus.Log("decisor", $"✘ un oyente de AlDecidir ({oyente.Method.DeclaringType?.Name}.{oyente.Method.Name}) lanzó "
+                    + $"con el paso de «{evento.Donde}»: {causa}. El paso sigue como si nadie oyera.");
+            }
+        }
+        return paso;
+    }
+
     /// <summary>
     /// UN PASO DECIDIDO: leer las puertas, que el decisor elija, y pulsar por selector —con la segunda mejor si la
     /// primera no está—. Es el cuerpo de map_decidir, y el paso que repite el tramo (spec 037). Devuelve qué pasó
-    /// como datos, y la cuenta con las mismas palabras de siempre.
+    /// como datos, y la cuenta con las mismas palabras de siempre. Con <paramref name="anotado"/> no nulo, además
+    /// deja ahí lo que el evento de la 368 lleva; nunca cambia lo que devuelve.
     /// </summary>
-    private Navigation.ElTramo.Paso UnPasoDecidido(string objetivo, string decir, string recuerdo)
+    private Navigation.ElTramo.Paso DecidirYPulsar(string objetivo, string decir, string recuerdo, LoQueSeDecide? anotado)
     {
         Navigation.ElTramo.Paso Sin(string cuenta, string porque, double conf = 0, bool cumplido = false)
         {
@@ -582,8 +678,9 @@ public sealed class SurfaceMapTools
         // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
         // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
         var relojLeer = System.Diagnostics.Stopwatch.StartNew();
-        var (aqui, puertas, total, _) = PuertasDeAhora();
+        var (aqui, puertas, total, candidatas) = PuertasDeAhora();
         relojLeer.Stop();
+        if (anotado != null) { anotado.Donde = aqui; anotado.Candidatas = candidatas; anotado.MsLeer = relojLeer.ElapsedMilliseconds; }
         // LA CUENTA DE LECTURAS SE TOMA AQUÍ (promesa 362), antes de pulsar: Take invalida la observación al
         // volver y pone el contador a cero, así que leerlo después contaría siempre «0 · 0».
         string lecturas = CuentaDeLecturas();
@@ -601,6 +698,8 @@ public sealed class SurfaceMapTools
             selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta);
         }
         var etiquetas = ids;
+        // LO QUE SE OFRECIÓ, SIN COPIA (285): la misma lista que recibe el decisor, de solo lectura.
+        if (anotado != null) anotado.Ofrecidas = ids.AsReadOnly();
 
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         Decision.DecisionDeUnPaso d;
@@ -613,9 +712,11 @@ public sealed class SurfaceMapTools
             for (var x = e; x != null; x = x.InnerException)
                 causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
             LogBus.Log("decisor", $"✘ en «{aqui}» el decisor lanzó: {causa}");
+            if (anotado != null) anotado.MsDecidir = reloj.ElapsedMilliseconds;
             return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})");
         }
         reloj.Stop();
+        if (anotado != null) { anotado.Decision = d; anotado.MsDecidir = reloj.ElapsedMilliseconds; }
 
         // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
         // datos del terreno, y los datos son estas líneas.
@@ -648,6 +749,7 @@ public sealed class SurfaceMapTools
             var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
             string cuenta = Take(puerta.Selector, "", decir, recuerdo);
             relojPulsar.Stop();
+            if (anotado != null) anotado.MsPulsar += relojPulsar.ElapsedMilliseconds;
             var mano = _ultimaMano;
             // Y CÓMO FUE PREGUNTAR (promesa 364): cuál de los tres caminos tomó Take y cuántos ms costó.
             string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms · {lecturas}"
