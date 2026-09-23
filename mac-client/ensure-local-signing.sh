@@ -21,6 +21,7 @@ metadata() {
 }
 
 if metadata >/dev/null 2>&1; then
+  security unlock-keychain -p "$(<"$SECRET_FILE")" "$KEYCHAIN"
   if [[ "${1:-}" == "--metadata" ]]; then metadata; fi
   exit 0
 fi

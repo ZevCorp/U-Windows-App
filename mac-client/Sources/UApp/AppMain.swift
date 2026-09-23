@@ -20,6 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var highlight: NSPanel?
     func applicationDidFinishLaunching(_ notification: Notification) {
         terminateOlderCopies()
+        if let index = CommandLine.arguments.firstIndex(of: "--execution-test"), CommandLine.arguments.count > index + 1 {
+            Task { await SmokeTest.execution(output: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--smoke-test"), CommandLine.arguments.count > index + 1 {
             Task { await SmokeTest.run(output: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
             return

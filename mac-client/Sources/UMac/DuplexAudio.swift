@@ -9,13 +9,7 @@ public final class DuplexAudio {
     private let playbackFormat = AVAudioFormat(standardFormatWithSampleRate: 24_000, channels: 1)!
     private var epoch = UUID()
     private var pendingFrames: Int = 0
-    private var scheduledFrames = 0
     private var tapInstalled = false
-    public var scheduledMilliseconds: Int { scheduledFrames / 24 }
-    public var playedMilliseconds: Int {
-        guard let player, let time = player.lastRenderTime, let cursor = player.playerTime(forNodeTime: time) else { return 0 }
-        return Int(Double(cursor.sampleTime) * 1000 / cursor.sampleRate)
-    }
     public var onSpeaking: ((Bool) -> Void)?
     public init() {}
     public func start(onPCM: @escaping @Sendable (Data) -> Void, onError: @escaping @Sendable (String) -> Void) throws {
@@ -54,7 +48,8 @@ public final class DuplexAudio {
             }
         }
         let id = epoch
-        pendingFrames += frames; scheduledFrames += frames; onSpeaking?(true)
+        if pendingFrames == 0 { onSpeaking?(true) }
+        pendingFrames += frames
         player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.epoch == id else { return }
@@ -63,13 +58,8 @@ public final class DuplexAudio {
             }
         }
     }
-    public func interrupt() {
-        epoch = UUID(); pendingFrames = 0; scheduledFrames = 0
-        player?.stop(); if engine?.isRunning == true { player?.play() }
-        onSpeaking?(false)
-    }
     public func stop() {
-        epoch = UUID(); pendingFrames = 0; scheduledFrames = 0
+        epoch = UUID(); pendingFrames = 0
         player?.stop()
         if let engine {
             engine.stop()

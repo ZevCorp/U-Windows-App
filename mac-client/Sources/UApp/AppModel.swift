@@ -3,12 +3,14 @@ import Combine
 import UCore
 import UMac
 
-struct ChatMessage: Identifiable { let id = UUID(); let text: String; let user: Bool }
+struct ChatMessage: Identifiable { let id = UUID(); var text: String; let user: Bool }
 
 @MainActor
 final class AppModel: ObservableObject {
     enum Mode: String { case ready = "Lista", listening = "Te escucho", working = "Trabajando", speaking = "Hablando", question = "Necesito un dato", error = "Necesito atención" }
     @Published var mode: Mode = .ready
+    @Published var jevStatus = "Jev · pendiente de conexión"
+    private var jev: JevClient?
     @Published var status = "Dime qué necesitas hacer."
     @Published var draft = ""
     @Published var partial = ""
@@ -25,7 +27,6 @@ final class AppModel: ObservableObject {
     @Published var hasCredential = Credentials.read("GRAPH_API_KEY") != nil
     @Published var configurationMessage = ""
     @Published var permissionSnapshot = PermissionCenter.readSnapshot()
-    @Published var permissionsVersion = 0
     @Published var selectedTab = 0
     let permissions = PermissionCenter()
     let desktop = Desktop()
@@ -46,7 +47,6 @@ final class AppModel: ObservableObject {
     init() {
         permissionObservation = permissions.$snapshot.sink { [weak self] snapshot in
             self?.permissionSnapshot = snapshot
-            self?.permissionsVersion += 1
         }
         speech.onPartial = { [weak self] text in self?.partial = text }
         speech.onText = { [weak self] text in self?.heard(text) }
@@ -68,7 +68,12 @@ final class AppModel: ObservableObject {
         liveVoice.onText = { [weak self] text, user in
             guard let self else { return }
             if user, self.answer != nil { self.submit(text) }
-            else { self.append(text, user: user) }
+            else {
+                // Live sends transcript deltas. Keep one message per speaker turn.
+                if let last = self.messages.indices.last, self.messages[last].user == user {
+                    self.messages[last].text += text
+                } else { self.append(text, user: user) }
+            }
         }
         liveVoice.onSpeaking = { [weak self] speaking in
             guard let self else { return }
@@ -76,6 +81,7 @@ final class AppModel: ObservableObject {
         }
         liveVoice.onError = { [weak self] text in
             guard let self else { return }
+            self.work?.cancel(); self.work = nil; self.runID = UUID()
             self.desktop.stop(); self.busy = false; self.liveConnected = false; self.microphone = false
             self.fail(text + " Puedes volver a conectar o activar el dictado nativo en Configuración.")
         }
@@ -84,7 +90,10 @@ final class AppModel: ObservableObject {
             return try await self.liveTool(name, args: args)
         }
     }
-    func refreshPermissions() { permissions.refreshAndPoll() }
+    func refreshPermissions() {
+        permissions.refreshAndPoll()
+        hasCredential = Credentials.read("GRAPH_API_KEY") != nil
+    }
     func saveConfiguration() {
         do {
             _ = try GraphClient(baseURL: graphURL, apiKey: "validation")
@@ -99,8 +108,8 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 let client = try makeClient()
-                _ = try await client.voiceKey()
-                configurationMessage = "Graph conectado. Credencial de voz disponible."
+                let keys = try await client.providerKeys()
+                configurationMessage = "Graph conectado. Voz: \(keys.openai?.isEmpty == false ? "disponible" : "sin credencial"). Jev: \(keys.typesafe?.isEmpty == false ? "disponible" : "sin credencial TypeSafe")."
             } catch { configurationMessage = error.localizedDescription }
         }
     }
@@ -113,11 +122,12 @@ final class AppModel: ObservableObject {
             return
         }
         guard !busy else { status = "Detén la tarea antes de cambiar el modo de voz."; return }
+        hasCredential = Credentials.read("GRAPH_API_KEY") != nil
         if !nativeDictation && permissions.snapshot.microphone != .granted {
             selectedTab = 1
             showWindow?()
             permissions.request(.microphone)
-            fail("Activa Micrófono y Reconocimiento de voz en Configuración para usar la voz en vivo.")
+            fail("Activa Micrófono en Configuración para usar la voz en vivo.")
             return
         }
         microphone = true; awakeUntil = Date().addingTimeInterval(45)
@@ -130,11 +140,14 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             do {
                 self.status = "Conectando la voz…"
-                let key: String
-                if let configured = Credentials.read("OPENAI_API_KEY") { key = configured }
-                else { key = try await self.makeClient().voiceKey() }
+                let keys = try await self.makeClient().providerKeys()
+                guard let key = Credentials.read("OPENAI_API_KEY") ?? keys.openai, !key.isEmpty else { throw AgentError.unavailable("Graph no tiene credencial de voz.") }
+                let jevKey = Credentials.read("TYPESAFE_API_KEY") ?? keys.typesafe
+                self.jev = jevKey.flatMap { $0.isEmpty ? nil : JevClient(key: $0) }
+                self.jevStatus = self.jev == nil ? "Jev sin credencial · decide Luna" : "Jev · listo"
                 guard self.voiceID == id, !Task.isCancelled else { return }
-                try await self.liveVoice.start(key: key, model: ProcessInfo.processInfo.environment["U_VOICE_MODEL"] ?? "gpt-realtime-2.1-mini")
+                try await self.liveVoice.start(key: key)
+
             } catch {
                 guard self.voiceID == id else { return }
                 self.microphone = false; self.liveConnected = false; self.fail(error.localizedDescription)
@@ -142,22 +155,24 @@ final class AppModel: ObservableObject {
         }
     }
     private func liveTool(_ name: String, args: [String: String]) async throws -> String {
-        if name == "stop_task" { stop(); return "Tarea detenida." }
+        if name == "stop_task" { stopExecution(); return "Tarea detenida. Puedes seguir conversando." }
+        if name == "map_tramo" {
+            guard !busy else { return "Ya hay una tarea en marcha." }
+            guard let jev else { return "Jev no tiene credencial TypeSafe. Usa las herramientas AX directas." }
+            let goal = args["goal"] ?? ""
+            guard !goal.isEmpty else { throw AgentError.invalid("Falta el objetivo.") }
+            startJev(goal: goal, client: jev)
+            return "En marcha con Jev. Recibirás el desenlace sin consultar."
+        }
         guard !busy else { throw AgentError.unavailable("Hay otra acción en curso. Espera su resultado antes de operar otra vez.") }
         busy = true; mode = .working
         let id = voiceID
         defer { if voiceID == id { busy = false; mode = answer == nil ? .listening : .question } }
-        if name == "operate_computer" {
-            let client = try makeClient()
-            let engine = AgentEngine(turn: { try await client.turn($0) },
-                observe: { try await self.desktop.observe(screenshot: $0) },
-                execute: { try await self.desktop.execute($0) }, ask: { try await self.ask($0) })
-            engine.userID = userID
-            engine.onStatus = { [weak self] text in self?.status = text }
-            let result = try await engine.run(goal: args["goal"] ?? "")
-            try Task.checkCancellation()
-            status = result
-            return result
+        if name == "map_decidir" {
+            guard let jev else { return "Jev no tiene credencial. Decide con las herramientas AX." }
+            var previous = "", repeats = 0
+            return try await desktop.jevStep(jev, goal: args["goal"] ?? "", previous: &previous, repeats: &repeats,
+                onStep: { self.status = $0 }) ?? "Control accionado. Lee read_screen para comprobar el resultado."
         }
         if name == "look" {
             let state = try await desktop.observe(screenshot: true)
@@ -168,6 +183,32 @@ final class AppModel: ObservableObject {
         if name == "key" { return try await desktop.execute(AgentAction(kind: "key", key: args["key"])) }
         if name == "scroll" { return try await desktop.tool("map_scroll", args: args) }
         return try await desktop.tool(name, args: args)
+    }
+    private func startJev(goal: String, client: JevClient) {
+        let id = UUID(); runID = id
+        busy = true; mode = .working; status = "Jev · observando"; desktop.begin()
+        work = Task { [weak self] in
+            guard let self else { return }
+            var result = "Se alcanzó el límite de 15 pasos. Decide Luna con read_screen.", previous = "", repeats = 0
+            do {
+                for _ in 0..<15 {
+                    try Task.checkCancellation()
+                    if let outcome = try await self.desktop.jevStep(client, goal: goal, previous: &previous, repeats: &repeats,
+                        onStep: { self.status = $0 }) { result = outcome; break }
+                }
+            } catch is CancellationError { return }
+            catch { result = "Tramo detenido: " + error.localizedDescription + " Decide Luna con read_screen." }
+            guard self.runID == id, !Task.isCancelled else { return }
+            self.work = nil; self.busy = false; self.mode = .listening; self.status = result
+            do { try await self.liveVoice.notify(result) }
+            catch { if self.runID == id { self.fail("No pude comunicar el desenlace a la voz.") } }
+        }
+    }
+    private func stopExecution() {
+        work?.cancel(); work = nil; runID = UUID(); desktop.stop()
+        answer?.resume(throwing: CancellationError()); answer = nil
+        busy = false; status = "Tarea detenida."; mode = liveConnected ? .listening : .ready
+        if liveConnected { desktop.begin() }
     }
     private func heard(_ phrase: String) {
         partial = ""

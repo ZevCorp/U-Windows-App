@@ -125,12 +125,13 @@ struct MainView: View {
                 Text("Permisos del Mac").font(.headline)
                 permission("Accesibilidad", detail: "Leer controles y usar teclado y ratón.", state: model.permissionSnapshot.accessibility) { model.permissions.request(.accessibility) }
                 permission("Grabación de pantalla", detail: "Ver imágenes cuando una aplicación no expone sus controles.", state: model.permissionSnapshot.screenCapture) { model.permissions.request(.screenCapture) }
-                permission("Micrófono y voz", detail: "Entender lo que le pides. El indicador verde muestra cuándo escucha.", state: model.permissionSnapshot.voice) { model.permissions.request(.microphone) }
+                permission(model.nativeDictation ? "Micrófono y dictado" : "Micrófono", detail: "Entender lo que le pides. El indicador verde muestra cuándo escucha.", state: model.nativeDictation ? model.permissionSnapshot.voice : model.permissionSnapshot.microphone) { model.permissions.request(model.nativeDictation ? .speech : .microphone) }
                 HStack(spacing: 10) {
                     Button("Revisar permisos") { model.refreshPermissions() }
                     Button("Reiniciar Ü para aplicar") { model.permissions.relaunchApp() }
                 }
                 Divider()
+                Text("Live 1 · Luna · \(model.jevStatus)").font(.caption).foregroundStyle(.secondary)
                 Text("Control y privacidad").font(.headline)
                 Text("La voz en vivo transmite el micrófono al proveedor mientras está conectada y termina a los 15 minutos. Graph recibe el texto de la pantalla durante una tarea. Las imágenes se envían solo cuando las solicita. Los campos protegidos se ocultan del árbol de accesibilidad. La conversación se mantiene en memoria y se borra al salir.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -141,7 +142,7 @@ struct MainView: View {
                 Text("Firma: \(Bundle.main.object(forInfoDictionaryKey: "USigningMode") as? String ?? "desconocida"). Esta identidad no cambia al actualizar la app.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(20)
-        }.id(model.permissionsVersion)
+        }
     }
     func permission(_ title: String, detail: String, state: PermissionState, action: @escaping () -> Void) -> some View {
         HStack(alignment: .top) {

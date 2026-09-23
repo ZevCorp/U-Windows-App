@@ -3,17 +3,24 @@ import UCore
 
 final class MockGraphProtocol: URLProtocol, @unchecked Sendable {
     static var respond: ((URLRequest) -> (Int, Data))?
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "test.invalid" }
+    static var delay: TimeInterval = 0
+    private var delivery: DispatchWorkItem?
+    override class func canInit(with request: URLRequest) -> Bool { ["test.invalid", "api.typesafe.ai"].contains(request.url?.host ?? "") }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         guard let respond = Self.respond else { fatalError("Missing HTTP fixture") }
         let (status, data) = respond(request)
         let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: data)
-        client?.urlProtocolDidFinishLoading(self)
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        delivery = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.delay, execute: item)
     }
-    override func stopLoading() {}
+    override func stopLoading() { delivery?.cancel() }
 }
 
 extension AgentTests {

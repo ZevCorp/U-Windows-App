@@ -30,6 +30,9 @@ struct ContractRunner {
         try await tests.testFailedActionStopsDependentBatchAndCannotBecomeSuccess()
         try await tests.testHTTPAuthenticationErrorsAndCredentialFetch()
         try tests.testMultichannelMicrophoneProducesReal24kPCM()
-        print("PASS: 12 contracts, \(checks) assertions. No network, microphone or desktop access.")
+        try tests.testLiveOneWireAndUTF8Limit()
+        try tests.testJevClosedChoicesAndHandoff()
+        try await tests.testJevHTTPDeadlineRetryAndCancellation()
+        print("PASS: 15 contracts, \(checks) assertions. No network, microphone or desktop access.")
     }
 }

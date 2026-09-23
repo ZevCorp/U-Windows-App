@@ -38,9 +38,12 @@ public final class GraphClient: @unchecked Sendable {
         return response
     }
     public func voiceKey() async throws -> String {
-        struct Keys: Decodable { let openai: String? }
-        let keys = try JSONDecoder().decode(Keys.self, from: await data(path: "agent/claves"))
+        let keys = try await providerKeys()
         guard let key = keys.openai, !key.isEmpty else { throw AgentError.unavailable("Graph no tiene configurada la credencial de voz.") }
         return key
+    }
+    public struct ProviderKeys: Decodable, Sendable { public let openai: String?; public let typesafe: String? }
+    public func providerKeys() async throws -> ProviderKeys {
+        try JSONDecoder().decode(ProviderKeys.self, from: await data(path: "agent/claves"))
     }
 }

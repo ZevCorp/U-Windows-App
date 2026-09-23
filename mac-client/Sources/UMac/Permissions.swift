@@ -111,24 +111,26 @@ public final class PermissionCenter: ObservableObject {
         case .screenCapture:
             _ = CGRequestScreenCaptureAccess()
             openSettings(for: kind)
-        case .microphone, .speech:
+        case .microphone:
+            Task { await requestVoice(includeSpeech: false) }
+        case .speech:
             Task { await requestVoice() }
         }
         startPolling()
     }
 
-    public func requestVoice() async {
+    public func requestVoice(includeSpeech: Bool = true) async {
         if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
-        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+        if includeSpeech && SFSpeechRecognizer.authorizationStatus() == .notDetermined {
             _ = await withCheckedContinuation { continuation in
                 SFSpeechRecognizer.requestAuthorization { status in continuation.resume(returning: status) }
             }
         }
         refreshAndPoll()
         if snapshot.microphone != .granted { openSettings(for: .microphone) }
-        else if snapshot.speech != .granted { openSettings(for: .speech) }
+        else if includeSpeech && snapshot.speech != .granted { openSettings(for: .speech) }
     }
 
     public func openSettings(for kind: PermissionKind) {

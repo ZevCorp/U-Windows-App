@@ -7,7 +7,41 @@ La app está escrita en Swift/AppKit y usa:
 - `CGEvent` para teclado, ratón, scroll y arrastre.
 - `ScreenCaptureKit` para capturas solicitadas por Graph.
 - `AVAudioEngine` con voice processing para hablar y escuchar sin realimentación.
-- Graph (`/api/v1/agent/turn`) para decidir los pasos; la app ejecuta y verifica.
+- GPT-Live 1 por `/v1/live/sessions`, con planificación delegada a `gpt-5.6-luna`.
+- Jev (`jev-latest`, TypeSafe `/v1/systemone`) para elegir controles AX directamente.
+- Graph entrega las credenciales de proveedores una vez al conectar. El modo texto/dictado conserva `/api/v1/agent/turn` como respaldo.
+
+## Voz y ejecución rápida
+
+Deja desactivado **Usar dictado y voz de macOS como respaldo**, pulsa **Comprobar conexión** y luego el micrófono.
+Graph debe entregar `openai` y `typesafe` en `/api/v1/agent/claves`. Si falta TypeSafe, se muestra y Luna
+puede seguir con las herramientas AX; no se presenta esa ejecución como Jev.
+
+Luna usa `map_tramo` para iniciar navegación (hasta 15 pasos) sin bloquear la conversación y recibe el
+desenlace automáticamente. `map_decidir` hace un solo paso. Jev elige exclusivamente controles observados;
+Luna se ocupa del texto, la planificación, las ambigüedades y los pasos que Jev rechaza. Confianza mínima
+0,70; objetivo cumplido desde 0,70; riesgo desde 0,50 devuelve el control a Luna. La ausencia de cualquiera
+de estas respuestas también devuelve el control. No se reintenta un clic fallido con otra etiqueta.
+
+El recorrido de Jev no hace capturas, ni enumera aplicaciones, ni construye contexto Graph, ni espera 180 ms
+entre acciones. Lee los atributos AX en lotes, conserva la referencia nativa elegida y comprueba cancelación
+y foco antes de pulsar. La siguiente decisión observa el estado posterior. TypeSafe tiene un plazo total
+de 2 segundos, incluidos los reintentos de HTTP 429/529. No se pide permiso por acción.
+
+### Medir en la app instalada
+
+Con el Mac desbloqueado y UFixture recién abierta (contador a cero):
+
+```bash
+open mac-client/.artifacts/UFixture.app
+open -n "$HOME/Applications/U.app" --args --execution-test /tmp/u-execution-test.json
+```
+
+La prueba usa las credenciales guardadas: comprueba sesión Live 1 → herramienta de Luna → resultado,
+sin abrir el micrófono, y pide a Jev cinco clics en la ventana de prueba. El JSON separa `readAXms`,
+`decisionMS` (red y respuesta TypeSafe), `actionMS` y `totalMS` por paso. Solo declara éxito si observa
+el contador en cinco. No extrapoles esta ventana pequeña a navegadores o aplicaciones con árboles AX grandes.
+La conversación e interrupción de voz se comprueban manualmente con el micrófono de la app.
 
 ## Abrir la app
 

@@ -38,7 +38,7 @@ public final class AccessibilityReader: @unchecked Sendable {
             queue.async { do { continuation.resume(returning: try block()) } catch { continuation.resume(throwing: error) } }
         }
     }
-    public func read(pid: pid_t, bundleID: String, appName: String) async throws -> DesktopSnapshot {
+    public func read(pid: pid_t, bundleID: String, appName: String, actionableOnly: Bool = false) async throws -> DesktopSnapshot {
         try await run {
             guard Self.trusted else { throw AgentError.permission("Accesibilidad") }
             AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.2)
@@ -64,25 +64,33 @@ public final class AccessibilityReader: @unchecked Sendable {
             while let (element, depth) = stack.popLast() {
                 if seen.count >= 1600 || ProcessInfo.processInfo.systemUptime > deadline { break }
                 guard depth <= 28, seen.insert(element).inserted else { continue }
-                let role = Self.string(element, kAXRoleAttribute)
-                let subrole = Self.string(element, kAXSubroleAttribute)
+                // Fetch scalar attributes in one AX IPC instead of a dozen round trips per node.
+                let keys = [kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute, kAXDescriptionAttribute,
+                            kAXHelpAttribute, kAXIdentifierAttribute, kAXPositionAttribute, kAXSizeAttribute,
+                            kAXEnabledAttribute, "AXHidden"] + (actionableOnly ? [] : [kAXValueAttribute])
+                var raw: CFArray?
+                AXUIElementCopyMultipleAttributeValues(element, keys as CFArray, [], &raw)
+                let values = raw as? [Any] ?? []
+                func value(_ key: String) -> Any? { guard let i = keys.firstIndex(of: key), i < values.count else { return nil }; return values[i] }
+                func string(_ key: String) -> String { value(key) as? String ?? "" }
+                let role = string(kAXRoleAttribute), subrole = string(kAXSubroleAttribute)
                 let secure = subrole == "AXSecureTextField" || role == "AXSecureTextField"
-                let value = secure ? "[protegido]" : String(Self.string(element, kAXValueAttribute).prefix(300))
+                let fieldValue = secure ? "[protegido]" : String(string(kAXValueAttribute).prefix(300))
                 let label = [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute, kAXIdentifierAttribute]
-                    .lazy.map { Self.string(element, $0) }.first(where: { !$0.isEmpty }) ?? (secure ? "Campo protegido" : value)
+                    .lazy.map { string($0) }.first(where: { !$0.isEmpty }) ?? (secure ? "Campo protegido" : fieldValue)
                 var names: CFArray?
                 AXUIElementCopyActionNames(element, &names)
                 let actions = names as? [String] ?? []
                 let meaningful = !label.isEmpty || !actions.isEmpty || ["AXTextField", "AXTextArea", "AXCheckBox", "AXLink", "AXRow"].contains(role)
-                let hidden = Self.attribute(element, "AXHidden") as? Bool ?? false
+                let hidden = value("AXHidden") as? Bool ?? false
                 if role == "AXWebArea", !hidden, documentURL == nil {
                     let rawURL = Self.attribute(element, "AXURL")
                     let url = (rawURL as? URL) ?? (rawURL as? String).flatMap(URL.init(string:))
                     if let url, ["http", "https"].contains(url.scheme ?? "") { documentURL = url }
                 }
-                if meaningful, !hidden, let frame = Self.frame(element), frame.width > 0, frame.height > 0 {
+                if meaningful, !hidden, (!actionableOnly || (actions.contains("AXPress") && value(kAXEnabledAttribute) as? Bool != false)), let frame = Self.frame(position: value(kAXPositionAttribute), size: value(kAXSizeAttribute)), frame.width > 0, frame.height > 0 {
                     let id = "\(prefix)-\(controls.count + 1)"
-                    controls.append(AccessibleControl(target: AXTarget(id: id, role: role, label: String(label.prefix(300))), frame: frame, value: value, actions: actions))
+                    controls.append(AccessibleControl(target: AXTarget(id: id, role: role, label: String(label.prefix(300))), frame: frame, value: fieldValue, actions: actions))
                     elements[id] = element
                 }
                 // Copy only a bounded slice. Some virtualized browser trees contain millions of descendants.
@@ -133,10 +141,13 @@ public final class AccessibilityReader: @unchecked Sendable {
         return (value as! AXUIElement)
     }
     private static func frame(_ element: AXUIElement) -> CGRect? {
-        guard let p = attribute(element, kAXPositionAttribute), CFGetTypeID(p) == AXValueGetTypeID(),
-              let s = attribute(element, kAXSizeAttribute), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
-        var point = CGPoint.zero, size = CGSize.zero
-        guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size) else { return nil }
-        return CGRect(origin: point, size: size)
+        frame(position: attribute(element, kAXPositionAttribute), size: attribute(element, kAXSizeAttribute))
+    }
+    private static func frame(position: Any?, size: Any?) -> CGRect? {
+        guard let p = position as CFTypeRef?, CFGetTypeID(p) == AXValueGetTypeID(),
+              let s = size as CFTypeRef?, CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
+        var point = CGPoint.zero, extent = CGSize.zero
+        guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &extent) else { return nil }
+        return CGRect(origin: point, size: extent)
     }
 }
