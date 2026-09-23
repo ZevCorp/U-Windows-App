@@ -453,7 +453,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _graphConfig.BaseUrl, _graphConfig.ApiKey, m => LogBus.Log("claves", m));
                 _ = Credenciales.ClavesDelBackend.Viva.TraerSiFaltaAlgunaAsync();
 
-                // LAS FOTOS DE ESTUDIOS CADUCAN SOLAS (spec 046, promesa 350): al abrir Ü y cada 10
+                // LAS FOTOS DE ESTUDIOS CADUCAN SOLAS (spec 046, promesa 354): al abrir Ü y cada 10
                 // minutos, con el panel abierto o cerrado. Sin esto, unas fotos cargadas y olvidadas
                 // seguirían en disco hasta que alguien volviera a pulsar «Subir».
                 Cardio.VigiaCardio.Arrancar();

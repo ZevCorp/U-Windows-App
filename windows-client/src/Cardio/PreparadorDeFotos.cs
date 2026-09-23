@@ -17,7 +17,7 @@ public sealed class FotoPreparada
 
 /// <summary>
 /// Deja una foto lista para el modelo: lado mayor 1600 px, JPEG al 82 % y lo transparente en BLANCO
-/// (promesa 349). Es el canvas de la petición original, hecho con WIC, que ya viene con Windows.
+/// (promesa 353). Es el canvas de la petición original, hecho con WIC, que ya viene con Windows.
 /// </summary>
 /// <remarks>
 /// POR QUÉ 1600: es donde un ECG fotografiado sigue leyéndose —las cifras de un informe y la cuadrícula

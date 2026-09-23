@@ -24,7 +24,7 @@ namespace U.WindowsClient.Ui;
 ///
 /// ESTA VENTANA NO DECIDE NADA. Qué se manda al modelo, qué se descarta, qué dice el botón y cuándo
 /// caduca todo viven en <c>U.WindowsClient.Cardio</c>, donde el contrato lo juzga sin pantalla
-/// (promesas 346-353). Aquí solo se pinta y se reciben las fotos.
+/// (promesas 350-357). Aquí solo se pinta y se reciben las fotos.
 ///
 /// ESC Y ✕ LA ESCONDEN, NO LA CIERRAN: una lectura en curso sigue en marcha y el médico la encuentra
 /// terminada al volver. Lo que sobrevive a reiniciar Ü es lo guardado en disco, no esta instancia.
@@ -320,8 +320,8 @@ public sealed class EstudiosWindow : Window
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(17),
-            ToolTip = "Preguntar (Enter)",
         };
+        System.Windows.Automation.AutomationProperties.SetName(_enviar, "Preguntar");
         _enviar.ConRelieve();
         _enviar.Click += async (_, _) => await PreguntarAsync();
         var fila = new Grid();
@@ -365,8 +365,8 @@ public sealed class EstudiosWindow : Window
             FontWeight = FontWeights.SemiBold,
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(Estudio.RadioChico),
-            ToolTip = "Borra de este equipo las fotos, lo leído, el resumen y el chat",
         };
+        System.Windows.Automation.AutomationProperties.SetName(borrar, "Borrar ahora las fotos, lo leído, el resumen y el chat");
         borrar.MouseEnter += (_, _) => borrar.Background = Estudio.AlertaSuave;
         borrar.MouseLeave += (_, _) => borrar.Background = Brushes.Transparent;
         borrar.Click += (_, _) => BorrarTodo("lo pidió el médico (Borrar ahora)");
@@ -662,7 +662,7 @@ public sealed class EstudiosWindow : Window
         catch (OperationCanceledException) when (trabajo.IsCancellationRequested) { }
         catch (Exception e)
         {
-            // El mensaje ya dice QUÉ lote y POR QUÉ (promesa 353); aquí solo se añade qué hacer.
+            // El mensaje ya dice QUÉ lote y POR QUÉ (promesa 357); aquí solo se añade qué hacer.
             _error.Text = e.Message + " Lo ya leído se conserva: pulsa el botón para reintentar lo que faltó.";
             LogBus.Log("cardio", "generar falló: " + e.Message);
         }
@@ -875,18 +875,18 @@ public sealed class EstudiosWindow : Window
             BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(11),
-            ToolTip = "Quitar esta foto",
             // Sin foco propio: al quitar la foto, el botón desaparece, y si se llevaba el foco con él
             // la ventana dejaba de oír Esc y Ctrl+V hasta el siguiente clic.
             Focusable = false,
         };
+        System.Windows.Automation.AutomationProperties.SetName(quitar, "Quitar " + foto.Nombre);
         quitar.ConRelieve();
         quitar.Click += (_, _) => Quitar(foto.Id);
         celda.Children.Add(quitar);
 
-        celda.ToolTip = foto.Resultado?.Estado == EstadoDeFoto.Cardiologia
-            ? $"{foto.Nombre}\n{foto.Resultado.Tipo}{(foto.Resultado.Fecha.Length > 0 ? " · " + foto.Resultado.Fecha : "")}"
-            : foto.Resultado != null ? $"{foto.Nombre}\n{foto.Resultado.Motivo}" : foto.Nombre;
+        // SIN TEXTO AL PASAR EL RATÓN (promesa 164): el nombre va a la accesibilidad, y el motivo de cada
+        // omitida se lee en su bloque plegable, que es donde se busca.
+        System.Windows.Automation.AutomationProperties.SetName(celda, foto.Nombre);
         return celda;
     }
 
@@ -957,7 +957,7 @@ public sealed class EstudiosWindow : Window
 
     /// <summary>
     /// El markdown del modelo, pintado con Runs: títulos, viñetas y negritas. No hay nada que
-    /// interprete marcado, así que lo que no sea eso se ve literal (promesa 351).
+    /// interprete marcado, así que lo que no sea eso se ve literal (promesa 355).
     /// </summary>
     private static UIElement Markdown(string md, double tamano = 13)
     {
@@ -1023,7 +1023,6 @@ public sealed class EstudiosWindow : Window
             BorderThickness = new Thickness(0),
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(15),
-            ToolTip = queHace,
         };
         System.Windows.Automation.AutomationProperties.SetName(b, queHace);
         b.MouseEnter += (_, _) => b.Background = Estudio.SuperficieSuave;

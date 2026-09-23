@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace U.WindowsClient.Cardio;
 
 /// <summary>
-/// Lo que se sabe de una foto después de pasarla por el modelo. Tres estados y no dos (promesa 346):
+/// Lo que se sabe de una foto después de pasarla por el modelo. Tres estados y no dos (promesa 350):
 /// una foto de la que no volvió nada NO es «omitida» —eso afirmaría que se miró y no era de
 /// cardiología— sino «sin leer», y el siguiente «Generar» la vuelve a pedir.
 /// </summary>
@@ -18,7 +18,7 @@ public sealed class ValorCardio
 
 /// <summary>
 /// La lectura de una foto. De una <see cref="EstadoDeFoto.Omitida"/> solo se rellena <see cref="Motivo"/>:
-/// el resto lo vacía <see cref="LecturaCardio.Emparejar"/> aunque el modelo lo devuelva (promesa 347).
+/// el resto lo vacía <see cref="LecturaCardio.Emparejar"/> aunque el modelo lo devuelva (promesa 351).
 /// </summary>
 public sealed class ResultadoFoto
 {
@@ -58,7 +58,7 @@ public sealed class VueltaDeChat
 
 /// <summary>
 /// Una sesión de estudios: las fotos, lo leído, el resumen y el chat. Vive en memoria y en disco
-/// cifrado, y caduca entera a las 24 h desde <see cref="PrimeraFotoUtc"/> (promesa 350).
+/// cifrado, y caduca entera a las 24 h desde <see cref="PrimeraFotoUtc"/> (promesa 354).
 /// </summary>
 public sealed class SesionCardio
 {

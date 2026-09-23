@@ -40,35 +40,38 @@ sola a las 24 h.
 
 ## Las promesas
 
+> Nacieron como 346-353 y se movieron a 350-357 el mismo día: `main` ya usaba 346-349 en este
+> contrato (el archivo no está en orden y solo se miró el final). Los números no se reciclan.
+
 | # | Promesa |
 |---|---|
-| 346 | la respuesta del modelo da UN resultado por foto: el JSON se encuentra aunque venga envuelto en ``` o con texto alrededor, se empareja por id y, si el id no casa, por orden; y una foto de la que no volvió nada queda «sin leer», ni cardiológica ni omitida |
-| 347 | de una foto no cardiológica solo se conserva el motivo: aunque el modelo devuelva tipo, hallazgos o valores, se descartan en código y no llegan ni al resumen ni a las preguntas |
-| 348 | las fotos viajan al modelo en lotes de 3, cada imagen precedida de «Imagen n — id: X» y con store:false; el resumen y las preguntas no llevan ninguna imagen, y una pregunta lleva solo las extracciones cardiológicas, el resumen, las últimas 10 vueltas y la pregunta |
-| 349 | una foto se prepara a lado mayor 1600 px sin agrandar nunca, en JPEG sobre fondo blanco; y una que no se puede leer se nombra («No se pudo leer X. Expórtala como JPG») sin tumbar a las demás |
-| 350 | la sesión caduca 24 h después de la PRIMERA foto, no de la última: al cargarla caducada se borra entera —fotos, lecturas, resumen y chat— y no queda nada en disco; y lo guardado no se lee como texto claro |
-| 351 | el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal |
-| 352 | el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…» |
-| 353 | si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó |
+| 350 | la respuesta del modelo da UN resultado por foto: el JSON se encuentra aunque venga envuelto en ``` o con texto alrededor, se empareja por id y, si el id no casa, por orden; y una foto de la que no volvió nada queda «sin leer», ni cardiológica ni omitida |
+| 351 | de una foto no cardiológica solo se conserva el motivo: aunque el modelo devuelva tipo, hallazgos o valores, se descartan en código y no llegan ni al resumen ni a las preguntas |
+| 352 | las fotos viajan al modelo en lotes de 3, cada imagen precedida de «Imagen n — id: X» y con store:false; el resumen y las preguntas no llevan ninguna imagen, y una pregunta lleva solo las extracciones cardiológicas, el resumen, las últimas 10 vueltas y la pregunta |
+| 353 | una foto se prepara a lado mayor 1600 px sin agrandar nunca, en JPEG sobre fondo blanco; y una que no se puede leer se nombra («No se pudo leer X. Expórtala como JPG») sin tumbar a las demás |
+| 354 | la sesión caduca 24 h después de la PRIMERA foto, no de la última: al cargarla caducada se borra entera —fotos, lecturas, resumen y chat— y no queda nada en disco; y lo guardado no se lee como texto claro |
+| 355 | el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal |
+| 356 | el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…» |
+| 357 | si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó |
 
-La que cierra el asunto es la **347**: mientras no exista, «omitida» es una etiqueta de la interfaz y
+La que cierra el asunto es la **351**: mientras no exista, «omitida» es una etiqueta de la interfaz y
 el contenido de una selfie o de una radiografía de rodilla podría acabar en el resumen o en una
 respuesta del chat. Es la única que protege al paciente y no a la experiencia.
 
 ### Con qué se juzga cada una
 
 Todas con un modelo de mentira inyectado (`Func<string, CancellationToken, Task<string>>`) que anota
-los cuerpos que recibe: sin red, sin clave y sin pantalla. La 349 construye la imagen en memoria
-(PNG transparente de 3200×800) y la 350 inyecta el reloj y la carpeta.
+los cuerpos que recibe: sin red, sin clave y sin pantalla. La 353 construye la imagen en memoria
+(PNG transparente de 3200×800) y la 354 inyecta el reloj y la carpeta.
 
 ## Las fases
 
 | Fase | Qué | Promesas en verde |
 |---|---|---|
 | 0 | Las promesas en `Contrato.cs`, en rojo | ninguna (el rojo es el entregable) |
-| 1 | `Cardio/LecturaCardio.cs` + `Cardio/ClienteCardio.cs`: prompts, lotes, cuerpos, emparejado, descarte | 346, 347, 348, 353 |
-| 2 | `Cardio/PreparadorDeFotos.cs` + `Cardio/AlmacenCardio.cs` | 349, 350 |
-| 3 | `Cardio/ReglaCardio.cs` (botón, progreso, markdown) + `Ui/EstudiosWindow.cs` + píldora en `FaceWindow.xaml` | 351, 352 |
+| 1 | `Cardio/LecturaCardio.cs` + `Cardio/ClienteCardio.cs`: prompts, lotes, cuerpos, emparejado, descarte | 350, 351, 352, 357 |
+| 2 | `Cardio/PreparadorDeFotos.cs` + `Cardio/AlmacenCardio.cs` | 353, 354 |
+| 3 | `Cardio/ReglaCardio.cs` (botón, progreso, markdown) + `Ui/EstudiosWindow.cs` + píldora en `FaceWindow.xaml` | 355, 356 |
 
 ## Lo que queda fuera, y se dice
 

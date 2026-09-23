@@ -4,7 +4,7 @@ namespace U.WindowsClient.Cardio;
 
 /// <summary>
 /// Lo que el panel de estudios DICE, decidido fuera del panel para que el contrato lo juzgue sin
-/// pantalla (promesa 352).
+/// pantalla (promesa 356).
 /// </summary>
 public static class ReglaCardio
 {
@@ -68,7 +68,7 @@ public sealed class BloqueMd
 /// El markdown que escribe el modelo, reducido a lo que el panel pinta: títulos, viñetas y negritas.
 /// </summary>
 /// <remarks>
-/// SEGURO POR CONSTRUCCIÓN (promesa 351): esto no produce HTML ni XAML, produce trozos de texto que
+/// SEGURO POR CONSTRUCCIÓN (promesa 355): esto no produce HTML ni XAML, produce trozos de texto que
 /// el panel mete en <c>Run</c>s. Un «&lt;script&gt;» o un «&lt;Button&gt;» que venga del modelo —o de una foto
 /// que el modelo transcribió— se ve tal cual, porque no hay nada que lo interprete.
 /// </remarks>

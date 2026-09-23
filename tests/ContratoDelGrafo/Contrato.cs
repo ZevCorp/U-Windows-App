@@ -841,14 +841,14 @@ internal static class Contrato
         Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
 
         // ── Spec 046: fotos de estudios de cardiología → resumen y preguntas ────────────────────
-        Prueba("346. la respuesta del modelo da UN resultado por foto: el JSON se encuentra aunque venga envuelto en ``` o con texto alrededor, se empareja por id y, si el id no casa, por orden; y una foto de la que no volvió nada queda «sin leer», ni cardiológica ni omitida", UnResultadoPorFoto);
-        Prueba("347. de una foto no cardiológica solo se conserva el motivo: aunque el modelo devuelva tipo, hallazgos o valores, se descartan en código y no llegan ni al resumen ni a las preguntas", LoNoCardiologicoSeDescartaEnCodigo);
-        Prueba("348. las fotos viajan al modelo en lotes de 3, cada imagen precedida de «Imagen n — id: X» y con store:false; el resumen y las preguntas no llevan ninguna imagen, y una pregunta lleva solo las extracciones cardiológicas, el resumen, las últimas 10 vueltas y la pregunta", LasFotosViajanEnLotesYLasPreguntasSinFotos);
-        Prueba("349. una foto se prepara a lado mayor 1600 px sin agrandar nunca, en JPEG sobre fondo blanco; y una que no se puede leer se nombra («No se pudo leer X. Expórtala como JPG») sin tumbar a las demás", UnaFotoSePreparaYUnaIlegibleSeNombra);
-        Prueba("350. la sesión caduca 24 h después de la PRIMERA foto, no de la última: al cargarla caducada se borra entera —fotos, lecturas, resumen y chat— y no queda nada en disco; y lo guardado no se lee como texto claro", LaSesionCaducaDesdeLaPrimeraFoto);
-        Prueba("351. el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal", ElResumenSePintaSinEjecutarMarcado);
-        Prueba("352. el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…»", ElBotonYElProgresoDicenLaVerdad);
-        Prueba("353. si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó", SiElModeloFallaLoLeidoSeConserva);
+        Prueba("350. la respuesta del modelo da UN resultado por foto: el JSON se encuentra aunque venga envuelto en ``` o con texto alrededor, se empareja por id y, si el id no casa, por orden; y una foto de la que no volvió nada queda «sin leer», ni cardiológica ni omitida", UnResultadoPorFoto);
+        Prueba("351. de una foto no cardiológica solo se conserva el motivo: aunque el modelo devuelva tipo, hallazgos o valores, se descartan en código y no llegan ni al resumen ni a las preguntas", LoNoCardiologicoSeDescartaEnCodigo);
+        Prueba("352. las fotos viajan al modelo en lotes de 3, cada imagen precedida de «Imagen n — id: X» y con store:false; el resumen y las preguntas no llevan ninguna imagen, y una pregunta lleva solo las extracciones cardiológicas, el resumen, las últimas 10 vueltas y la pregunta", LasFotosViajanEnLotesYLasPreguntasSinFotos);
+        Prueba("353. una foto se prepara a lado mayor 1600 px sin agrandar nunca, en JPEG sobre fondo blanco; y una que no se puede leer se nombra («No se pudo leer X. Expórtala como JPG») sin tumbar a las demás", UnaFotoSePreparaYUnaIlegibleSeNombra);
+        Prueba("354. la sesión caduca 24 h después de la PRIMERA foto, no de la última: al cargarla caducada se borra entera —fotos, lecturas, resumen y chat— y no queda nada en disco; y lo guardado no se lee como texto claro", LaSesionCaducaDesdeLaPrimeraFoto);
+        Prueba("355. el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal", ElResumenSePintaSinEjecutarMarcado);
+        Prueba("356. el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…»", ElBotonYElProgresoDicenLaVerdad);
+        Prueba("357. si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó", SiElModeloFallaLoLeidoSeConserva);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -13386,7 +13386,7 @@ internal static class Contrato
 
     /// <summary>
     /// Una sesión con <paramref name="n"/> fotos f1..fn. La foto «f2» es una selfie: el modelo de
-    /// mentira la marca no cardiológica y AUN ASÍ le devuelve contenido, que es lo que la 347 juzga.
+    /// mentira la marca no cardiológica y AUN ASÍ le devuelve contenido, que es lo que la 351 juzga.
     /// </summary>
     private static dynamic? SesionConFotos(int n, DateTime primera)
     {
@@ -13426,7 +13426,7 @@ internal static class Contrato
     {
         var t = Cardio("LecturaCardio");
         var emparejar = MetodoCardio(t, "Emparejar", 2);
-        if (emparejar == null) { Pendiente("Cardio.LecturaCardio.Emparejar(respuesta, ids)", "346", "046"); return; }
+        if (emparejar == null) { Pendiente("Cardio.LecturaCardio.Emparejar(respuesta, ids)", "350", "046"); return; }
         List<dynamic> Emparejar(string respuesta, params string[] ids) =>
             ((System.Collections.IEnumerable)emparejar.Invoke(null, new object[] { respuesta, ids })!).Cast<dynamic>().ToList();
 
@@ -13462,7 +13462,7 @@ internal static class Contrato
         var tVuelta = Cardio("VueltaDeChat");
         if (emparejar == null || resumir == null || preguntar == null || tVuelta == null)
         {
-            Pendiente("Cardio.LecturaCardio.Emparejar + CuerpoResumir + CuerpoPreguntar + VueltaDeChat", "347", "046");
+            Pendiente("Cardio.LecturaCardio.Emparejar + CuerpoResumir + CuerpoPreguntar + VueltaDeChat", "351", "046");
             return;
         }
 
@@ -13507,7 +13507,7 @@ internal static class Contrato
         dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
         if (ctor == null || generar == null || preguntar == null || tVuelta == null || s == null)
         {
-            Pendiente("Cardio.ClienteCardio(enviar, modelo) + GenerarAsync + PreguntarAsync + SesionCardio", "348", "046");
+            Pendiente("Cardio.ClienteCardio(enviar, modelo) + GenerarAsync + PreguntarAsync + SesionCardio", "352", "046");
             return;
         }
 
@@ -13552,7 +13552,7 @@ internal static class Contrato
         var t = Cardio("PreparadorDeFotos");
         var preparar = t?.GetMethods().FirstOrDefault(m => m.Name == "Preparar" && m.GetParameters().Length == 2
                                                            && m.GetParameters()[1].ParameterType == typeof(byte[]));
-        if (preparar == null) { Pendiente("Cardio.PreparadorDeFotos.Preparar(nombre, bytes)", "349", "046"); return; }
+        if (preparar == null) { Pendiente("Cardio.PreparadorDeFotos.Preparar(nombre, bytes)", "353", "046"); return; }
         dynamic Preparar(string nombre, byte[] bytes) => preparar.Invoke(null, new object[] { nombre, bytes })!;
 
         byte[] Png(int ancho, int alto)
@@ -13603,7 +13603,7 @@ internal static class Contrato
         dynamic? s = SesionConFotos(1, t0.AddMinutes(-1));
         if (ctor == null || guardar == null || cargar == null || tVuelta == null || s == null)
         {
-            Pendiente("Cardio.AlmacenCardio(carpeta, reloj) + Guardar + Cargar", "350", "046");
+            Pendiente("Cardio.AlmacenCardio(carpeta, reloj) + Guardar + Cargar", "354", "046");
             return;
         }
 
@@ -13620,7 +13620,7 @@ internal static class Contrato
         v.Respuesta = "RESPUESTA-SECRETA";
         s.Chat.Add(v);
 
-        string carpeta = Path.Combine(_raiz, "cardio-350");
+        string carpeta = Path.Combine(_raiz, "cardio-354");
         DateTime ahora = t0.AddHours(20);
         var almacen = ctor.Invoke(new object[] { carpeta, (Func<DateTime>)(() => ahora) });
         guardar.Invoke(almacen, new object[] { s });
@@ -13657,7 +13657,7 @@ internal static class Contrato
     private static void ElResumenSePintaSinEjecutarMarcado()
     {
         var bloques = MetodoCardio(Cardio("MarkdownSimple"), "Bloques", 1);
-        if (bloques == null) { Pendiente("Cardio.MarkdownSimple.Bloques(texto)", "351", "046"); return; }
+        if (bloques == null) { Pendiente("Cardio.MarkdownSimple.Bloques(texto)", "355", "046"); return; }
 
         const string md = "## Hallazgos clave\n- **FEVI** 45 %\n<script>alert(1)</script> y <b>x</b>\n* otra **sin cerrar\n\n";
         var b = ((System.Collections.IEnumerable)bloques.Invoke(null, new object[] { md })!).Cast<dynamic>().ToList();
@@ -13688,7 +13688,7 @@ internal static class Contrato
         dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
         if (etiqueta == null || progreso == null || hayCambios == null || ctor == null || generar == null || s == null)
         {
-            Pendiente("Cardio.ReglaCardio.EtiquetaDelBoton + Progreso + HayCambios", "352", "046");
+            Pendiente("Cardio.ReglaCardio.EtiquetaDelBoton + Progreso + HayCambios", "356", "046");
             return;
         }
         string Etiqueta(int n, bool resumen, bool cambios) => (string)etiqueta.Invoke(null, new object[] { n, resumen, cambios })!;
@@ -13721,7 +13721,7 @@ internal static class Contrato
         dynamic? s = SesionConFotos(7, new DateTime(2026, 9, 23, 8, 0, 0, DateTimeKind.Utc));
         if (ctor == null || generar == null || s == null)
         {
-            Pendiente("Cardio.ClienteCardio.GenerarAsync", "353", "046");
+            Pendiente("Cardio.ClienteCardio.GenerarAsync", "357", "046");
             return;
         }
 
