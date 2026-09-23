@@ -406,11 +406,20 @@ public sealed class RecorrerSegunElNucleo
 
         // LA PANTALLA ASENTADA NO SE ESPERA (promesa 299). La huella es lo que una mirada deja en el grafo: dónde
         // estamos y qué puertas están vivas. Dos miradas con la misma huella = nada se está pintando.
-        string? huellaDeLaPrimera = null;
+        //
+        // UNA SOLA DEFINICIÓN DE «CAMBIÓ» (promesa 352, spec 047). Hasta el 2026-09-22 esta compuerta fabricaba su
+        // propia huella —un texto «dónde + selectores unidos por |»— mientras la espera de después de pulsar comparaba
+        // otra cosa, y «cambió» se calculaba con criterios distintos según el sitio (aprendizaje nº16: dos lados de una
+        // comparación que salen de funciones distintas). Ahora se construye por HuellaDeLoQueSeVe.De y se compara por
+        // MismaPantallaQueVe, que juzga SOLO el sitio y lo de dentro: las dos partes de siempre, así que la 299 dice lo
+        // mismo que decía. Aquí «dentro» son los selectores de las puertas vivas que dejó la mirada, no los RuntimeId de
+        // la huella barata de la espera: la misma forma (identidades ordenadas por De) y el mismo comparador. «Delante» y
+        // «ventanas» van vacías a propósito: la compuerta no las mira, y MismaPantallaQueVe no las compara.
+        HuellaDeLoQueSeVe? huellaDeLaPrimera = null;
         bool asentada = false, seMovio = false;
         long msDeLaUltimaMirada = 0;
-        string Huella(string donde) => donde + "\n" + string.Join("|",
-            _grafo.DesdeAqui(donde).Where(a => a.Vivo).Select(a => a.Que.Selector).OrderBy(x => x, StringComparer.Ordinal));
+        HuellaDeLoQueSeVe HuellaDeLaCompuerta(string donde) => HuellaDeLoQueSeVe.De(
+            donde, "", _grafo.DesdeAqui(donde).Where(a => a.Vivo).Select(a => a.Que.Selector), Array.Empty<string>());
         bool Mira(string donde)
         {
             var crono = System.Diagnostics.Stopwatch.StartNew();
@@ -475,7 +484,7 @@ public sealed class RecorrerSegunElNucleo
                 {
                     miradas = 1;
                     // Sin haber podido mirar no hay huella, y sin huella no se sabe si está asentada: no se adivina.
-                    if (Mira(aqui)) { huellaDeLaPrimera = Huella(aqui); continue; }
+                    if (Mira(aqui)) { huellaDeLaPrimera = HuellaDeLaCompuerta(aqui); continue; }
                 }
 
                 // ¿ASENTADA? La segunda mirada se adelanta: si ve lo mismo que la primera, esperar no trae nada.
@@ -485,7 +494,7 @@ public sealed class RecorrerSegunElNucleo
                     miradas = 2;
                     if (Mira(aqui))
                     {
-                        if (Huella(_donde() ?? "") == huellaDeLaPrimera) asentada = true; else seMovio = true;
+                        if (HuellaDeLoQueSeVe.MismaPantallaQueVe(HuellaDeLaCompuerta(_donde() ?? ""), huellaDeLaPrimera)) asentada = true; else seMovio = true;
                         continue;   // una vuelta más: la mirada pudo traer la puerta, y eso se comprueba arriba
                     }
                 }

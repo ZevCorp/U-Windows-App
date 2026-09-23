@@ -510,6 +510,42 @@ dé el presupuesto de redirección.
     cambiaron; el sitio fresco, como mucho cada respiro. Un `hwnd` de trabajo a cero o una raíz UIA nula **lanzan**
     con la causa, y la espera lo anota como «no pude mirar: …» y sigue como hoy: aquí un catch mudo convertiría
     «la ventana se cerró» en «no cambió nada» (patrón nº3).
+- **2026-09-22, fase 1 escrita (352 verde).** Lo que entró y lo que no:
+  - **Qué cambió**: un archivo de producción, `RecorrerSegunElNucleo.cs` (la compuerta de la 299). El `string
+    Huella(` local —texto «dónde + selectores unidos por |»— se va; la huella se construye por
+    `HuellaDeLoQueSeVe.De` (sitio + selectores de las puertas vivas; delante y ventanas vacías, que la compuerta no
+    mira) y se compara por `MismaPantallaQueVe`. `HuellaDeLoQueSeVe.cs` **no se toca**: `Comparar` y
+    `MismaPantallaQueVe` existían desde la fase 0 con la prioridad de la spec (el sitio manda).
+  - **Sitios** (M, `grep` del 22-09): definiciones propias de una huella de pantalla fuera de
+    `HuellaDeLoQueSeVe`: **1** (`:412`), con **2** usos (`:478` y `:488`); quedan **0**. Los otros dos
+    consumidores ya pasaban por ella (`EsperaAsentada` `:94`/`:135`, `PulsarSegunElNucleo` `:413`).
+    `Teach/CamaraDeCuadros.Huella` es un hash de imagen de 16×16 y no juzga si la pantalla cambió: fuera. Los 11
+    sitios de «cambió por ubicación o recuento» siguen siendo 11: la compuerta no era uno de ellos.
+  - **La 299 dice lo mismo** (M: `✔ 299.` antes y después). Dos diferencias de borde, leídas en el código: `De`
+    descarta identidades vacías, pero el grafo ya no guarda ninguna (`Grafo.cs:134` y `:263` saltan el selector en
+    blanco), así que ahí no cambia nada; y la lista ya no puede confundir dos conjuntos cuya unión con «|»
+    coincidiera —el selector es `uia:name={Label};ct=…` y una etiqueta es texto de pantalla, que puede llevar
+    «|»—. Esa solo puede **quitar** «asentadas» falsas, no añadirlas (D: no se ha visto ninguna).
+  - **Contrato** (M, `contrato-del-grafo.ps1` con `TEMP` propio): antes `CONTRATO ROTO: 18 promesa(s)
+    incumplida(s)` (299 ✔ / 8 ✘: 351–354, 356–359); después `CONTRATO ROTO: 17 promesa(s) incumplida(s)` (300 ✔
+    / 7 ✘: 351, 353, 354, 356–359, las de fases posteriores). La única línea de veredicto que cambia es `✘ 352.` →
+    `✔ 352.`. Voz: `VOZ ÍNTEGRA: el collar promete lo que dice prometer.` (46 ✔).
+  - **Sabotaje de la 352, el de la spec, verificado por diff**: en `Comparar`, la línea de «dentro» encima de la
+    de «sitio» (diff 1+/1−; el patrón se buscó con `\r\n` y coincidió 1 vez) → `✘ el sitio manda sobre las otras
+    tres: (Dentro, Dentro)` y `CONTRATO ROTO: 18`, con la 352 como única promesa nueva en rojo. Restaurado desde la
+    copia (hash idéntico, diff vacío, fecha tocada para que el build incremental no se quede con la DLL rota:
+    la trampa de la fase 0) → `CONTRATO ROTO: 17`, línea a línea igual que antes del sabotaje.
+  - **Sabotaje extra, sobre la línea nueva**: la comprobación de la 352 sobre la compuerta lee el código, así que
+    es textual. Para ver que la 299 pasa de verdad por `MismaPantallaQueVe`, se negó esa comparación →
+    `✘ 299.` (6 aserciones, `CONTRATO ROTO: 23`) y ninguna otra; restaurado (hash idéntico) → 17.
+  - **El parche a medias del workflow cortado** reordenaba `Comparar` poniendo «dentro» antes que «sitio»: es
+    exactamente el sabotaje que esta spec prescribe para la 352, y contradice «el sitio manda sobre las otras
+    tres». No se aplicó; de él se tomó solo la parte de la compuerta.
+  - **Hallazgo del arnés, no arreglado aquí**: `contrato-del-grafo.ps1` compila a `%TEMP%\u-contrato` y
+    `contrato-de-la-voz.ps1` a `%TEMP%\u-contrato-voz`, carpetas **compartidas por todos los worktrees** de la
+    máquina. Con las cuatro ramas de Jev juzgándose a la vez, un juez puede cargar los binarios de otra rama y
+    dar el veredicto de otro código (D, no observado). Esta fase corrió con `TEMP` apuntando a una carpeta propia.
+    Los scripts quedan fuera del alcance de la 047: anotado para una rama `chore/` con su promesa.
 
 ## Revisiones
 
@@ -534,6 +570,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 ## Cierre
 
 - [x] Fase 0 **escrita**: 355 verde, sabotaje verificado por diff (2026-09-22)
+- [x] Fase 1: 352 verde, 299 intacta, sabotaje de la spec verificado por diff y uno extra sobre la compuerta (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C
