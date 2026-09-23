@@ -13780,6 +13780,22 @@ internal static class Contrato
         var arbol = Pulsa047(Mundo(), () => A047, fila.Selector, "Descargas", _ => Huella047(A047, "w", new[] { "b" }))!;
         Debe(arbol.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && arbol.Ms < Techo047,
             $"la fila se ensaya con el doble y las dos esperas salen al asentarse, ninguna al techo: [{string.Join(" · ", arbol.Gestos)}] en {arbol.Ms} ms con techo {Techo047}");
+        // LA MISMA REGLA DICE CÓMO TERMINÓ CADA ESPERA (la última cláusula de la 351: «en todos los casos queda dicho a los
+        // cuántos milisegundos dejó de esperar y por qué»). Añadido en la fase 5, en rojo antes de su código: hasta entonces
+        // la espera del doble se agotaba en silencio —ninguna línea—, y la de la repetición tampoco decía cómo terminó.
+        Debe(arbol.Diario.Count(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"dejó de esperar a los \d+ ms: asentada")) == 2,
+            $"y las dos esperas dicen a los cuántos ms dejaron de esperar y por qué —asentada, las dos—: [{arbol.DiarioJunto}]");
+
+        // EL VEREDICTO SALE DE LA ÚLTIMA ESPERA, como sus milisegundos (353, fase 4). Si el doble abre un menú, el resultado
+        // dice «dentro» —ni llegada ni arista— y no lo que vio el clic, que fue «nada»: dos esperas mirando y el veredicto de
+        // la primera con el reloj de la segunda sería una caja que miente (patrón nº8). Añadido en la fase 5, en rojo antes.
+        bool abierto = false;
+        var menu = Pulsa047(Mundo(), () => A047, fila.Selector, "Descargas",
+            _ => Huella047(A047, "w", abierto ? new[] { "b", "menu" } : new[] { "b" }),
+            alTocar: gesto => { if (gesto == "doubleclick") abierto = true; return true; })!;
+        Debe(menu.Gestos.SequenceEqual(new[] { "clic", "doubleclick" }) && menu.QueCambio == "Dentro" && !menu.R.CambioLaPantalla
+                && !menu.R.Aprendido && menu.R.Cuenta.Contains("cambió dentro") && menu.MsHastaElVeredicto >= 0 && menu.Ms < Techo047,
+            $"si el doble abre un menú, el resultado lo dice con la huella de la última espera —«dentro», sin llegada ni arista— y no con la del clic: {menu.QueCambio}, aprendido={menu.R.Aprendido}, a los {menu.MsHastaElVeredicto} ms de {menu.Ms}; «{menu.R.Cuenta}»");
 
         // LA REPETICIÓN (248): solo se repite lo que se sabe que navega, y eso espera el techo las dos veces.
         var puerta = Pulsa047(Mundo(), () => A047, boton.Selector, "Compose", _ => Huella047(A047, "w", new[] { "b" }))!;
@@ -13787,6 +13803,17 @@ internal static class Contrato
             $"una puerta con destino se repite una vez y espera el techo las dos veces: [{string.Join(" · ", puerta.Gestos)}] en {puerta.Ms} ms (≥ {2 * Techo047 - 200})");
         Debe(puerta.Diario.Count(l => l.Contains("lleva a algún sitio")) == 2,
             $"y el diario lo dice las dos veces: [{puerta.DiarioJunto}]");
+        // Y LO DICE CADA ESPERA, con la misma regla: las dos llegan al techo porque el terreno sabe a dónde lleva la puerta.
+        // Añadido en la fase 5, en rojo antes de su código: hasta entonces la segunda mención era el aviso «lo repito una
+        // vez», que dice por qué se repite y no cómo terminó la espera de después.
+        Debe(puerta.Diario.Count(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"dejó de esperar a los \d+ ms: [^·]*lleva a algún sitio")) == 2,
+            $"y cada una de las dos esperas dice por qué llegó al techo: [{puerta.DiarioJunto}]");
+        // «LA MISMA HUELLA» TAMBIÉN EN LA REPETICIÓN, aunque espere el techo: mira en sombra, para la medida del nivel 4. Con
+        // la huella quieta de este mundo el veredicto sale igual con ella o sin ella, así que solo lo delata la línea. Esta
+        // aserción se escribió DESPUÉS del código de la fase 5 (se vio que ninguna juzgaba esa cláusula); su rojo lo midió
+        // el sabotaje (b) de esa fase —la repetición sin huella—, no una corrida anterior al código.
+        Debe(puerta.Diario.Count(l => l.Contains("sondeo(s) de huella")) == 2,
+            $"y las dos esperas miran con la huella aunque lleguen al techo: [{puerta.DiarioJunto}]");
         // Los fixtures de la 83, la 248 y la 296 no se tocan: siguen construyendo PulsarSegunElNucleo sin huella.
     }
 

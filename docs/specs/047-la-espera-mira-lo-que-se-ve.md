@@ -366,7 +366,12 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   con huella constante y `_donde` fijo → 2 toques (clic y `doubleclick`) y total `< Techo` (dos esperas,
   ninguna al techo); Button con destino → 2 toques (clic y repetición) y total `≥ 2 × Techo − 200`, y el
   diario lo dice dos veces; los fixtures de la 83, 248 y 296 no se tocan. **Sabotaje:** el ensayo del doble
-  llama a la espera sin huella: cae el caso del TreeItem.
+  llama a la espera sin huella: cae el caso del TreeItem. **Añadido en la fase 5** (el porqué, en «Hallazgos»):
+  tres aserciones, en rojo antes del código. Las dos esperas del TreeItem dicen «dejó de esperar a los N ms:
+  asentada». Si el doble abre un menú, el resultado dice `Dentro` con la huella de la última espera, sin llegada
+  ni arista. Y cada una de las dos esperas de la puerta dice «dejó de esperar … lleva a algún sitio». Una cuarta
+  aserción se escribió **después** del código, y se dice: las dos esperas de la puerta llevan la medida de la
+  huella («sondeo(s) de huella»). Su rojo lo midió un segundo sabotaje, la repetición sin huella.
 - **358** — `Capacidad("U.WindowsClient.Navigation.EsperaAsentada")`: huella lenta (400 ms de `Sleep`)
   con techo 1.200 → termina en `< 1.200 + 3 × 400` (la forma de la 245); huella constante → `< Techo/2`
   con `Asentada`; huella cambiante → techo con `TechoSeMovia`. Y por `U_REPO`, `SurfaceMapTools.cs` no
@@ -704,6 +709,68 @@ dé el presupuesto de redirección.
       **`CONTRATO ROTO: 7`**, y cae **solo el caso (ii)**, «por el mapa (…) tampoco para por bucle: 3 pulsados». Es lo
       que predijo la spec. Sin esa línea, la 353 saldría verde solo con manos falsas (aprendizaje nº11).
     - Restaurados los dos → `CONTRATO ROTO: 6`, veredicto a veredicto igual que la primera corrida en verde.
+- **2026-09-22, fase 5 (las otras dos esperas de `Pulsa`; la 357 en verde).**
+  - **Dónde estaban**: la tabla de fases cita `:201` y `:225`, y ya no eran esas líneas. Antes de la fase, las dos
+    llamadas sin huella estaban en `:306` (ensayo del doble) y `:331` (repetición); ahora están en `:315` y `:349`.
+  - **Qué cambió**: un archivo de producción, `PulsarSegunElNucleo.cs`.
+    - Las dos esperas pasan por `EsperarOtraVez`. Construye la espera con el mismo `NuevaEspera` que la del clic y
+      decide con el mismo `comoHoy`: la regla 4, calculada una vez sobre las mismas entradas.
+    - La espera del doble sale al asentarse.
+    - La de la repetición cae siempre en el caso 4 (`HayQueRepetir` exige `SabeQueLleva`). Espera el techo con la
+      huella en sombra, como pide la promesa.
+    - La sobrecarga sin huella, `EsperarACambiar(string)`, se borra: 0 llamadores.
+  - **Una línea por espera.**
+    - Formato: `↻ ensayé «X» con el doble (83: …) · <medida de la huella> · dejó de esperar a los N ms: <por qué>`.
+      La repetición deja una línea con la misma forma.
+    - El aviso «lo repito una vez» iba antes de la mano; ahora forma parte de esa línea, después de la espera.
+    - Así, la aserción `== 2` de la 357 cuenta una línea por espera. El hallazgo de la fase 2 dejó dicho que esa
+      aserción tendría que decidir qué contaba, y esta es la decisión.
+    - No son líneas de medida (`antes → después`). Esa sigue siendo **una por pulsación**, que es lo que cuenta el
+      nivel 4.
+  - **Las palabras del caso `SabeQueLleva`.** Antes decían «cortar aquí haría repetir el clic (248)»; ahora dicen
+    «una asentada falsa aquí daría por perdida una navegación que aún está en camino (248)». Tras la repetición ya no
+    se repite nada, y las dos esperas usan la misma frase (patrón nº2).
+  - **El veredicto sale de la última espera.** `QueCambio` y `Parte` salen de la última espera que miró, igual que
+    `MsHastaElVeredicto` desde la fase 4. Con dos esperas mirando, el `Resultado` habría dado el veredicto de la
+    primera con el reloj de la segunda: una caja que miente (patrón nº8).
+  - **Rastro de la mano** (patrón nº10). Un doble o una repetición que la mano no pudo dar no dejaba ninguna línea.
+    Ahora dice «quise … y la mano no pudo: <motivo>». **No lo juzga ninguna aserción**, y se dice.
+  - **Sitios** (M, `grep`):
+    - Las **3** esperas de `Pulsa` consumen la huella. Una sola construcción de `EsperaAsentada` (`NuevaEspera`) sirve
+      a las tres, y una sola regla (`comoHoy`).
+    - De los 11 sitios que calculan «cambió» por ubicación o recuento quedan **8**; tras la fase 2 eran 10. Salen los
+      dos que quedaban en `Pulsa`.
+    - Llamadas a `Anota` en `Pulsa`: 5 → 8. Se van «lo repito» antes de la mano; entran las dos líneas `↻` y los dos
+      rastros de la mano.
+    - `AbrirSegunElNucleo` tiene su propio `EsperarACambiar` (4 apariciones), fuera por alcance.
+  - **Aserciones nuevas de la 357.**
+    - Tres se escribieron **en rojo antes del código**: las dos esperas del TreeItem dicen «asentada»; un doble que
+      abre un menú da `Dentro` con la huella de la última espera; cada espera de la puerta dice por qué llegó al techo.
+    - La cuarta se escribió **después**: la repetición lleva la medida de la huella. Salió al buscar qué cláusula no
+      tenía juez: con la huella quieta del contrato, el veredicto de la repetición sale igual con huella o sin ella.
+      Su rojo lo midió el sabotaje (b), no una corrida anterior al código.
+    - El enunciado no cambió.
+  - **Contrato** (M, con `TEMP` propio):
+    - **Antes**, con las tres aserciones nuevas y sin código: `CONTRATO ROTO: 9` (303 ✔ / 4 ✘). La 357 tenía 4
+      aserciones rojas. Los 307 veredictos, iguales a la fase 4. El TreeItem tardó **1.325 ms** con techo 1.200: la
+      espera del clic salió asentada a los 125 ms y la del doble agotó el techo.
+    - **Después**: **`CONTRATO ROTO: 5`** (304 ✔ / 3 ✘: 356, 358 y 359, de fases posteriores). Solo cambia
+      `✘ 357.` → `✔ 357.`, y las aserciones de las tres rojas son las mismas.
+    - Siguen en ✔: 44, 83, 245, 248, 292, 296, 299, 334, 351, 352, 353, 354 y 355.
+    - Voz: `VOZ ÍNTEGRA` (46 ✔, 0 ✘). Compila con 0 errores, los mismos 36 warnings y ninguno en el archivo tocado.
+  - **Sabotajes, verificados por diff** (1+/1− contra la copia, ancla con `\r\n` y una sola coincidencia):
+    - (a) **El de la spec**: el ensayo del doble llama a la espera sin huella, `EsperarOtraVez(desde, null, comoHoy)`.
+      Resultado: **`CONTRATO ROTO: 8`**, y solo la 357. Caen el caso del TreeItem (1.316 ms de 1.200) y las dos
+      aserciones nuevas del TreeItem. La línea del doble dijo «llegó al techo: no había huella con la que mirar», y el
+      menú dio `Nada`. Las de la puerta siguen en ✔.
+    - (b) La repetición espera sin huella. Resultado: **`CONTRATO ROTO: 6`**, solo la 357 y solo la aserción de la
+      medida. La línea de la repetición sale sin «sondeo(s) de huella» y lo demás sigue igual.
+    - Restaurados los dos: md5 `56BFA486…` idéntico, `cmp` byte a byte y fecha tocada. Después, `CONTRATO ROTO: 5`
+      veredicto a veredicto y aserción a aserción.
+  - **Visto y no tocado**: el ensayo del doble se hace aunque la primera espera haya visto «dentro». Su condición es
+    `hasta == desde`, gesto vacío y contenido. Si un TreeItem se despliega con el clic simple, cambia dentro y aun así
+    recibe el doble, que puede volver a plegarlo. Hasta la 047 no había forma de verlo; ahora la huella lo ve.
+    Cambiarlo es cambiar lo que promete la 83: necesita su propia promesa, en otra fase u otra rama.
 
 ## Revisiones
 
@@ -733,6 +800,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [ ] Fase 2 **escrita** (351 verde, y la 354 con ella; dos sabotajes por diff; 2026-09-22) — **no entra** hasta el nivel 4 de la fase 0: `PrimeraHuellaMs`/`RespiroMs` siguen siendo metas
 - [x] Fase 3: la 334 reescrita sin reciclar el número, con el cuerpo byte a byte; la 354 verde y su sabotaje propio verificado por diff (cae su primer caso, y con él la 351 y la 355) (2026-09-22)
 - [x] Fase 4: la 353 verde por los dos caminos (manos falsas y `MapaParaTramo`); 44 y 292 intactas; los dos sabotajes de la spec verificados por diff (2026-09-22)
+- [x] Fase 5: la 357 verde; 83, 248 y 296 intactas; las 3 esperas de `Pulsa` con una sola huella y una sola regla (de los 11 sitios quedan 8); el sabotaje de la spec y uno más, verificados por diff (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

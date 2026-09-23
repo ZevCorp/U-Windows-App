@@ -124,8 +124,10 @@ public sealed class PulsarSegunElNucleo
     // FASE 0 (355): la huella se toma en cada sondeo y la línea dice a los cuántos ms se habría asentado.
     // FASE 2 (351): tras el clic, DOS HUELLAS IGUALES CON UN RESPIRO EN MEDIO terminan la espera en ese instante. Se
     // espera como hoy —y la huella sigue mirando en sombra— cuando nadie mira, cuando el terreno sabe que la puerta lleva
-    // a algún sitio, en SAP y en un campo de texto (regla 4 de la spec). Las otras dos esperas de Pulsa —el ensayo del
-    // doble y la repetición— siguen esperando el techo: son la fase 5 (357).
+    // a algún sitio, en SAP y en un campo de texto (regla 4 de la spec).
+    // FASE 5 (357): las otras dos esperas de Pulsa —el ensayo del doble y la repetición— consumen la misma huella y la misma
+    // regla, y cada una deja su línea con a los cuántos ms dejó de esperar y por qué. La repetición cae siempre en el caso 4
+    // (solo se repite lo que se sabe que navega) y espera el techo, como hoy.
     //
     // SIN MEDIR TODAVÍA, y es la condición que la spec 043 dejó escrita («acortar esa espera sin medir es la spec 038,
     // aparcada por el dueño»): RespiroMs y PrimeraHuellaMs son METAS, no datos, hasta el nivel 4 de la fase 0. Esta
@@ -239,8 +241,7 @@ public sealed class PulsarSegunElNucleo
                 motivo.Length > 0 ? $"no pude pulsar «{etiqueta}»: {motivo}" : $"no pude pulsar «{etiqueta}».");
         bool esCampo = EsCampoDeTexto(desde, selector);
         int presupuesto = esCampo ? EsperaDeCampoMs : EsperaMaximaMs;
-        var espera = antes == null || Huella == null ? null
-            : new EsperaAsentada(Huella, SitioFresco ?? _donde, antes, RespiroMs, PrimeraHuellaMs);
+        var espera = NuevaEspera(antes);
         // LA REGLA DE LA 351 MANDA salvo en los casos de la regla 4 de la spec; entonces la huella mira en sombra y se
         // espera como hoy, y el porqué queda dicho en la línea de la 355.
         string comoHoy = PorQueSeEsperaComoHoy(desde, selector, esCampo, antes, causaAntes);
@@ -300,15 +301,26 @@ public sealed class PulsarSegunElNucleo
         // lo tocado es CONTENIDO (promesa 83). Sobre un botón el doble no se ensaya jamás — «hacer
         // su trabajo sin cambiar de pantalla» es lo normal de un «Guardar», y un segundo clic sería
         // repetir la acción, no averiguar nada.
-        if ((hasta.Length == 0 || hasta == desde) && gesto.Length == 0 && EsContenido(desde, selector)
-            && _mano(selector, etiqueta, "doubleclick") == null)
+        // SU ESPERA ES LA DEL CLIC (357): la misma huella y la misma regla, así que sale en cuanto la pantalla se asienta en
+        // vez de agotar el techo. Hasta la fase 5 esperaba el techo entero y en silencio: 1,8 s por cada fila de lista
+        // pulsada por primera vez, además de la del clic.
+        if ((hasta.Length == 0 || hasta == desde) && gesto.Length == 0 && EsContenido(desde, selector))
         {
-            string tras = EsperarACambiar(desde);
-            msVeredicto = desdeLaMano.ElapsedMilliseconds;
-            if (tras.Length > 0 && tras != desde)
+            string? motivoDoble = _mano(selector, etiqueta, "doubleclick");
+            if (motivoDoble != null)
+                // UN PASO QUE NO SE HIZO DEJA RASTRO (patrón nº10): hasta la fase 5 un doble que la mano no pudo dar no dejaba ninguna línea.
+                Anota($"↻ quise ensayar «{etiqueta}» con el doble (83) y la mano no pudo{(motivoDoble.Length > 0 ? ": " + motivoDoble : ", sin decir por qué")}");
+            else
             {
-                hasta = tras;
-                gestoUsado = "doubleclick";
+                var (tras, esperaDoble) = EsperarOtraVez(desde, antes, comoHoy);
+                msVeredicto = desdeLaMano.ElapsedMilliseconds;
+                Anota(LaOtraEspera($"↻ ensayé «{etiqueta}» con el doble (83: es contenido y su gesto aún no se conoce)", desde, tras, esperaDoble, comoHoy));
+                if (esperaDoble?.Ultima != null) queCambio = LoQueCambioAlPulsar(desde, tras, antes, esperaDoble);
+                if (tras.Length > 0 && tras != desde)
+                {
+                    hasta = tras;
+                    gestoUsado = "doubleclick";
+                }
             }
         }
 
@@ -325,11 +337,19 @@ public sealed class PulsarSegunElNucleo
             _yaRepeti = true;
             try
             {
-                Anota($"«{etiqueta}» no movió nada y el terreno sabe que lleva a algún sitio: lo repito una vez");
-                if (_mano(selector, etiqueta, gesto) == null)
+                // SU ESPERA TAMBIÉN ES LA DEL CLIC (357), y por la misma regla llega al techo: solo se repite lo que el terreno
+                // sabe que navega, que es el caso 4 de la regla. El aviso va DESPUÉS de la espera, en la misma línea que dice
+                // cómo terminó: una línea por espera, y si la mano no pudo, lo dice (hasta la fase 5 se anunciaba «lo repito»
+                // y un segundo clic que no se dio no dejaba rastro, patrón nº10).
+                string? motivoOtra = _mano(selector, etiqueta, gesto);
+                if (motivoOtra != null)
+                    Anota($"↻ quise repetir «{etiqueta}» una vez (248) y la mano no pudo{(motivoOtra.Length > 0 ? ": " + motivoOtra : ", sin decir por qué")}");
+                else
                 {
-                    string tras = EsperarACambiar(desde);
+                    var (tras, esperaOtra) = EsperarOtraVez(desde, antes, comoHoy);
                     msVeredicto = desdeLaMano.ElapsedMilliseconds;
+                    Anota(LaOtraEspera($"↻ «{etiqueta}» no movió nada y el terreno sabe que lleva a algún sitio: lo repetí una vez (248)", desde, tras, esperaOtra, comoHoy));
+                    if (esperaOtra?.Ultima != null) queCambio = LoQueCambioAlPulsar(desde, tras, antes, esperaOtra);
                     if (tras.Length > 0 && tras != desde) { hasta = tras; gestoUsado = gesto; }
                 }
             }
@@ -388,8 +408,9 @@ public sealed class PulsarSegunElNucleo
         // «asentada». Su asentada es otra (!Busy ×3 + StructureFingerprint): la 360, reservada.
         if (Teach.Mundos.EsSap(desde)) return "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)";
         // LA PUERTA CON DESTINO: es la que repite la 248 cuando su clic se pierde; una espera cortada aquí haría repetir
-        // el clic sobre una navegación que aún estaba en camino.
-        if (SabeQueLleva(desde, selector)) return "el terreno sabe que esta puerta lleva a algún sitio, y cortar aquí haría repetir el clic (248) sobre una navegación en camino";
+        // el clic sobre una navegación que aún estaba en camino. Las palabras valen para las dos esperas que la consultan
+        // (357): hasta la fase 5 decían «cortar aquí haría repetir el clic», y tras la repetición ya no se repite nada.
+        if (SabeQueLleva(desde, selector)) return "el terreno sabe que esta puerta lleva a algún sitio, y una asentada falsa aquí daría por perdida una navegación que aún está en camino (248)";
         return "";
     }
 
@@ -459,7 +480,37 @@ public sealed class PulsarSegunElNucleo
         catch { return false; }
     }
 
-    private string EsperarACambiar(string desde) => EsperarACambiar(desde, EsperaMaximaMs, null, decide: false);
+    /// <summary>La espera que mira lo que se ve, o nulo si nadie mira o no hubo huella de antes. UN solo sitio la construye para las tres esperas (357).</summary>
+    private EsperaAsentada? NuevaEspera(HuellaDeLoQueSeVe? antes) =>
+        antes == null || Huella == null ? null : new EsperaAsentada(Huella, SitioFresco ?? _donde, antes, RespiroMs, PrimeraHuellaMs);
+
+    /// <summary>
+    /// LAS OTRAS DOS ESPERAS DE PULSA —tras el ensayo del doble (83) y tras la repetición (248)— con la misma huella y la misma
+    /// regla que la del clic (357): <paramref name="comoHoy"/> es el porqué que ya decidió la primera, sobre las mismas
+    /// entradas. Contra la huella de ANTES DE TOCAR, que es contra lo que se juzga el resultado de toda la pulsación.
+    /// </summary>
+    /// <remarks>
+    /// Hasta la fase 5 (2026-09-22) las dos llamaban a una sobrecarga sin huella que esperaba el techo entero: sobre el
+    /// TreeItem del contrato, 1.325 ms de un techo de 1.200 para dos esperas, cuando la del clic ya había salido a los 125.
+    /// Esa sobrecarga se borró: 0 llamadores.
+    /// </remarks>
+    private (string Hasta, EsperaAsentada? Espera) EsperarOtraVez(string desde, HuellaDeLoQueSeVe? antes, string comoHoy)
+    {
+        var espera = NuevaEspera(antes);
+        return (EsperarACambiar(desde, EsperaMaximaMs, espera, decide: comoHoy.Length == 0), espera);
+    }
+
+    /// <summary>
+    /// LA LÍNEA DE LAS OTRAS DOS ESPERAS (357): qué se hizo, lo que midió la huella, y a los cuántos ms dejó de esperar y por
+    /// qué, con las mismas palabras que la de la 355. No es otra línea de medida («antes → después»): esa es UNA por pulsación
+    /// y la cuenta el nivel 4; esta dice cómo terminó cada espera de más, que hasta la fase 5 se agotaba sin decirlo.
+    /// </summary>
+    private string LaOtraEspera(string que, string desde, string hasta, EsperaAsentada? espera, string comoHoy)
+    {
+        bool cambio = hasta.Length > 0 && hasta != desde;
+        string medida = espera == null ? "" : " · " + espera.Resumen();
+        return $"{que}{medida} · dejó de esperar a los {_msDejoDeEsperar} ms: {PorQueDejoDeEsperar(cambio, EsperaMaximaMs, espera, comoHoy)}";
+    }
 
     /// <param name="espera">La espera que mira lo que se ve; se sondea en cada vuelta. Nulo = nadie mira.</param>
     /// <param name="decide">Si la regla de la 351 manda. Con <c>false</c> la huella mira EN SOMBRA —se anota para la línea
@@ -505,7 +556,7 @@ public sealed class PulsarSegunElNucleo
         return ahora.Length > 0 ? ahora : (_donde() ?? "");
     }
 
-    /// <summary>Por qué dejó de esperar la primera espera de <c>Pulsa</c>, en palabras que distinguen cada causa (patrón nº2).</summary>
+    /// <summary>Por qué dejó de esperar la última espera de <c>Pulsa</c> —la del clic, la del doble o la de la repetición—, en palabras que distinguen cada causa (patrón nº2).</summary>
     private string PorQueDejoDeEsperar(bool cambioLaUbicacion, int presupuestoMs, EsperaAsentada? espera, string comoHoy)
     {
         if (cambioLaUbicacion)
