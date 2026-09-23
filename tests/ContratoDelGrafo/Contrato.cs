@@ -766,6 +766,10 @@ internal static class Contrato
         Prueba("347. el resultado textual del delegado entra al historial aunque la respuesta haya llegado por el canal de voz", ElTextoDelDelegadoLlegaAlHistorial);
         Prueba("348. el chat convierte Markdown técnico en texto conversacional sin perder contenido", ElChatEntregaTextoLegibleYCompleto);
         Prueba("349. U toca el borde izquierdo, la persona el derecho y el último texto queda visible", CadaVozTocaSuBorde);
+        // SIN BLUETOOTH, EL COLLAR LO DICE Y ESPERA (spec 050, 2026-09-23). Una usuaria sin radio vio el
+        // collar fallar 12 veces en 42 s con «0x800710DF: sin mensaje», y el estado le decía «no se
+        // encontró el collar». 411 y no 350: hasta la 410 están tomadas en ramas abiertas.
+        Prueba("411. sin Bluetooth el collar lo dice una vez y deja de buscar: una radio apagada —o el fallo 0x800710DF, que es lo que Windows contesta cuando lo está— espera a que se encienda sin reintentar cada 6 s; un equipo sin adaptador no reintenta; el estado nombra cuál de las dos es y qué hacer; y el mismo estado repetido no vuelve al log", SinBluetoothElCollarLoDiceYEspera);
         // UN ASISTENTE POR ESCRITORIO (spec 031, 2026-09-17). El dueño: «quiero dejar un asistente en cada
         // escritorio virtual; incrustar la carita en el centro de la consulta, con las dimensiones del pantallazo;
         // y un botón debajo para llevarla a otro escritorio, con la aplicación quedándose enfrente mío». Todo lo
@@ -10087,6 +10091,47 @@ internal static class Contrato
         olvida.Invoke(mem, null);
         Debe(Pide() == "valor3" && llamadas == 3,
             "y se puede olvidar a mano: cuando una acción acaba de cambiar la pantalla, lo recordado ya no vale");
+    }
+
+    private static void SinBluetoothElCollarLoDiceYEspera()
+    {
+        // EL LOG DE LA USUARIA (2026-09-23, SALA-DE-JUNTAS): «no se pudo abrir el collar · COMException
+        // (0x800710DF): sin mensaje», cada 6 s, doce veces. 0x800710DF es ERROR_DEVICE_NOT_AVAILABLE: la
+        // radio no está. Reintentar no la enciende, y «no se encontró el collar» no le dice qué hacer.
+        var t = Cap004("U.WindowsClient.Voice.ElBluetooth");
+        var delFallo = t?.GetMethod("DelFallo");
+        var queHacer = t?.GetMethod("QueHacer");
+        var queDecir = t?.GetMethod("QueDecir");
+        var seDice = t?.GetMethod("SeDice");
+        Debe(t != null && delFallo != null && queHacer != null && queDecir != null && seDice != null,
+            "todavía no existe «Voice.ElBluetooth» con DelFallo, QueHacer, QueDecir y SeDice (spec 050, promesa 411). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (t == null || delFallo == null || queHacer == null || queDecir == null || seDice == null) return;
+        var tRadio = t.GetNestedType("Radio")!;
+        object Radio(string n) => Enum.Parse(tRadio, n);
+        string? Fallo(int hr) => delFallo.Invoke(null, new object[] { hr })?.ToString();
+        string Hacer(string radio) => queHacer.Invoke(null, new[] { Radio(radio) })!.ToString()!;
+        string Decir(string radio) => (string)queDecir.Invoke(null, new[] { Radio(radio) })!;
+        bool Se(string? antes, string ahora) => (bool)seDice.Invoke(null, new object?[] { antes, ahora })!;
+
+        Debe(Fallo(unchecked((int)0x800710DF)) == "Apagada",
+            "0x800710DF es lo que contesta Windows con la radio apagada: se lee como radio apagada, no como «no hay collar»");
+        Debe(Fallo(unchecked((int)0x80004005)) == null,
+            "un fallo cualquiera NO concluye nada sobre la radio: decir «apagada» por un error genérico es inventar la causa");
+
+        Debe(Hacer("Apagada") == "EsperarAQueSeEncienda",
+            "con la radio apagada NO se reintenta cada 6 s: se espera a que la persona la encienda");
+        Debe(Hacer("SinAdaptador") == "NoReintentar", "sin adaptador no hay nada que esperar");
+        Debe(Hacer("Encendida") == "Reintentar", "con la radio encendida, lo de siempre: el collar puede aparecer en cualquier momento");
+
+        string apagada = Decir("Apagada"), sinAdaptador = Decir("SinAdaptador");
+        Debe(apagada.Contains("Bluetooth") && apagada.Contains("enc", StringComparison.OrdinalIgnoreCase),
+            $"el estado con la radio apagada dice qué hacer —encender el Bluetooth—: «{apagada}»");
+        Debe(sinAdaptador.Contains("Bluetooth") && sinAdaptador != apagada,
+            $"y sin adaptador dice OTRA cosa: son dos causas y se arreglan distinto («{sinAdaptador}»)");
+
+        Debe(Se(null, apagada) && !Se(apagada, apagada) && Se(apagada, sinAdaptador),
+            "el mismo estado repetido no vuelve al log: doce líneas iguales en 42 s no dicen más que una");
     }
 
     private static void TrasEscribirHayTresRespuestas()
