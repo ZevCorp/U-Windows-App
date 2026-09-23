@@ -14194,6 +14194,15 @@ internal static class Contrato
         Debe(Math.Abs(A(5) - 198.6) < 0.05, $"con cinco barras 198,6 (medido en el vídeo, t=16,0): {A(5):0.00}");
         Debe(A(3) < A(5) && Math.Abs((A(5) - A(3)) - 40) < 0.05, $"cada barra son 20 de paso: AltoDe(3) = {A(3):0.0}, AltoDe(5) = {A(5):0.0}");
         Debe(Math.Abs(A(5) - Math.Max(Const("AltoMinimo"), S(5))) < 0.001, "AltoDe es max(AltoMinimo, SumaDePartes)");
+        // CINCO BARRAS COMO MUCHO (372): un alto para seis, o para menos de cero, no existe, y un número
+        // inventado sería un panel cuyo alto miente sobre lo que pinta. Lanza (añadida en la fase 4, antes
+        // que su código: sin ella, la guarda sería una línea de producción sin juez).
+        bool Lanza(int barras)
+        {
+            try { A(barras); return false; }
+            catch (TargetInvocationException e) when (e.InnerException is ArgumentOutOfRangeException) { return true; }
+        }
+        Debe(Lanza(6) && Lanza(-1), "ni seis barras ni menos de cero tienen alto: AltoDe lanza ArgumentOutOfRangeException en vez de inventarlo");
 
         // EL XAML MEDIDO SIN PANTALLA DA LO MISMO (fase 8): el mismo XAML que pinta la ventana, parseado y
         // medido en un hilo STA del arnés. Si WPF no arranca aquí, SIN JUZGAR: ni verde ni rojo.
@@ -14244,21 +14253,26 @@ internal static class Contrato
         }
         var rcWork = new WRect(0, 0, 1920, 1040);
         var panel = new WSize(340, 199);
-        (WRect R, string Esquina) C(WPoint ancla, WSize tam, double escala, List<WRect> obstaculos, WRect? objetivo)
+        (WRect R, string Esquina, bool Junto) C(WPoint ancla, WSize tam, double escala, List<WRect> obstaculos, WRect? objetivo)
         {
             var r = calcular.Invoke(null, new object?[] { ancla, tam, rcWork, escala, obstaculos, objetivo })!;
             var rect = (WRect)PropDe(r, "Rect")!;
             string esquina = PropDe(r, "Esquina")?.ToString() ?? "";
+            bool junto = PropDe(r, "JuntoAlAncla") is true;
             // Lo que vale en TODOS los casos: dentro del área de trabajo y sin tapar el cuadrado de 44·escala.
             var cuadrado = new WRect(ancla.X - 22 * escala, ancla.Y - 22 * escala, 44 * escala, 44 * escala);
             Debe(rcWork.Contains(rect), $"nunca se sale del área de trabajo: ancla {ancla}, panel en {rect}");
             Debe(!rect.IntersectsWith(cuadrado), $"y no tapa el cuadrado de {44 * escala} alrededor del ancla: ancla {ancla}, panel en {rect}");
-            return (rect, esquina);
+            return (rect, esquina, junto);
         }
         var sin = new List<WRect>();
 
         var a = C(new WPoint(600, 400), panel, 1, sin, null);
         Debe(a.R.X == 656 && a.R.Y == 432 && a.Esquina == "AbajoDerecha", $"junto al ancla a (56, 32), abajo a la derecha: {a.R} · {a.Esquina}");
+        // Añadida en la fase 4, antes que su código: el resultado dice si es una esquina JUNTO AL ANCLA o la
+        // del área de trabajo a la que se va cuando ninguna cabe. «ArribaIzquierda» sola no distingue las dos,
+        // y la línea de log «lo moví a {esquina}» tiene que poder hacerlo (aprendizaje nº2).
+        Debe(a.Junto, "y dice que va junto al ancla");
         var b = C(new WPoint(1800, 400), panel, 1, sin, null);
         Debe(b.Esquina == "AbajoIzquierda" && b.R.X == 1800 - 56 - 340 && b.R.Right <= 1908,
             $"pegado a la derecha no cabe: abajo a la izquierda, con su Right a ≤ 1908: {b.R} · {b.Esquina}");
@@ -14287,6 +14301,23 @@ internal static class Contrato
         var enorme = new WRect(500, 300, 1400, 740);
         var lejos = C(new WPoint(600, 400), panel, 1, sin, enorme);
         Debe(lejos.R.X == 12 && lejos.R.Y == 12, $"con un objetivo que no deja esquina libre, a la esquina opuesta del área de trabajo (arriba a la izquierda, a 12): {lejos.R}");
+        Debe(!lejos.Junto, "y dice que NO va junto al ancla: es una esquina del área de trabajo");
+        // Añadida en la fase 4, antes que su código. «LA ESQUINA OPUESTA» Y «SIN TAPAR EL CUADRADO» CHOCAN cuando
+        // el ancla está justo en esa esquina: con el ancla en (100, 100) y lo pulsado ocupando el resto, la
+        // opuesta es la de arriba a la izquierda, que taparía el ancla. El enunciado dice las dos cosas; la del
+        // cuadrado vale SIEMPRE (la comprueba C en cada caso), así que se va a la esquina más lejana de lo
+        // pulsado que no tape el ancla: abajo a la izquierda, a 12 del borde.
+        var tapada = C(new WPoint(100, 100), panel, 1, sin, new WRect(300, 200, 1600, 820));
+        Debe(tapada.R.X == 12 && tapada.R.Y == 1040 - 12 - 199 && !tapada.Junto,
+            $"con el ancla en la esquina opuesta, a la más lejana de lo pulsado que no la tape (abajo a la izquierda): {tapada.R} · {tapada.Esquina}");
+        // Y una escala que no es escala (0, NaN: un GetDpiForMonitor que falló) no da un sitio: lanza. Con escala
+        // 0 los 56/32/44/12 valen 0 y el panel caería ENCIMA del ancla diciendo que cabe (patrón nº9).
+        bool LanzaConEscala(double escala)
+        {
+            try { calcular.Invoke(null, new object?[] { new WPoint(600, 400), panel, rcWork, escala, sin, null }); return false; }
+            catch (TargetInvocationException e) when (e.InnerException is ArgumentOutOfRangeException) { return true; }
+        }
+        Debe(LanzaConEscala(0) && LanzaConEscala(double.NaN) && LanzaConEscala(-1), "una escala de 0, NaN o negativa no da sitio: lanza ArgumentOutOfRangeException");
 
         // CON ESCALA 1,5 los 56/32/44/12 salen multiplicados; el tamaño del panel ya llega en físicos.
         var grande = new WSize(510, 298.5);
@@ -14433,6 +14464,15 @@ internal static class Contrato
         var primario = delMonitor.Invoke(null, new object[] { new WRect(0, 0, 1920, 1080), 1.0 })!;
         var mismo = (WPoint)Llamar(primario, "AUnidad", new WPoint(640, 480))!;
         Debe(mismo == new WPoint(640, 480), "en la primaria a escala 1, la unidad es el físico");
+        // Añadida en la fase 4, antes que su código: UNA ESCALA 0 NO ES UNA ESCALA (patrón nº9). Un
+        // GetDpiForMonitor que falla deja 0, y con 0 la inversa da infinitos y la ida los devuelve como NaN: ya
+        // no hay identidad que valga. El conversor no nace con una escala así; lanza y lo dice.
+        bool LanzaConEscala(double escala)
+        {
+            try { delMonitor.Invoke(null, new object[] { monitor, escala }); return false; }
+            catch (TargetInvocationException e) when (e.InnerException is ArgumentOutOfRangeException) { return true; }
+        }
+        Debe(LanzaConEscala(0) && LanzaConEscala(double.NaN) && LanzaConEscala(-1.5), "con escala 0, NaN o negativa no hay conversor: DelMonitor lanza ArgumentOutOfRangeException");
 
         // AL CAMBIAR EL DPI, EL RECT CALCULADO Y NO EL SUGERIDO.
         var calculado = new WRect(1920, 0, 2560, 1440); var sugerido = new WRect(1900, 10, 2000, 1000);
