@@ -217,23 +217,30 @@ las líneas «nadie miraba» de la 355 en el log de la corrida, y tienen que ser
 
 Leído antes de escribir: la 334 (spec 043) y la 299 (spec 040), y de paso la 44, 83, 245, 248, 292 y 296.
 
-- **La 334 choca de frente en su caso 4.** `Contrato.cs:13009-13011`: «un botón sigue esperando el
-  presupuesto entero», `ms4 >= Presupuesto - 100`, con «Guardar» y un `_donde` que nunca cambia — y su
-  arnés **no inyecta huella**. Con la regla del punto 4 («sin huella, como hoy»), el fixture de hoy **sigue
-  valiendo tal cual** y la promesa nueva 354 añade el caso «con huella asentada → menos de la mitad del
-  techo» sobre el mismo «Guardar». Lo que sí queda impreciso es la última cláusula del **enunciado**: «y lo
-  que no es un campo espera como siempre». Se propone reescribirla, **sin reciclar el número**, en la fase 3,
-  cuando la fase 0 haya medido lo que la 043 pedía medir:
+- **La 334 choca de frente en su caso 4.** `Contrato.cs:13347-13349` (eran `:13009-13011` antes de las
+  promesas de esta spec): «un botón sigue esperando el presupuesto entero», `ms4 >= Presupuesto - 100`, con
+  «Guardar» y un `_donde` que nunca cambia — y su arnés **no inyecta huella**. Con la regla del punto 4 («sin
+  huella, como hoy»), el fixture **sigue valiendo tal cual** y la promesa nueva 354 añade el caso «con huella
+  asentada → menos de la mitad del techo» sobre el mismo «Guardar». Lo que quedaba impreciso era la última
+  cláusula del **enunciado**: «y lo que no es un campo espera como siempre». Se reescribió **sin reciclar el
+  número** en la fase 3 (2026-09-22). El literal, el mismo que va en `Contrato.cs`:
 
   > **334.** un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un
   > cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el
   > clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta
-  > como cualquier navegación; **y lo que no es un campo espera a que lo que se ve se asiente, o el techo
-  > si nadie mira** (2026-09-2x: hasta hoy «como siempre» era el presupuesto entero, medido 1.797–1.825 ms
-  > en 13 de 13 clics que no navegaban).
+  > como cualquier navegación; **y lo que no es un campo espera a que lo que se ve se asiente —el
+  > presupuesto entero si nadie mira, o en los demás casos en que la 351 espera como hoy—**
 
-  El cambio de enunciado se anota también en la spec 043 («lo que pasó después»). Hasta esa fase, la 334
-  convive en verde con la regla: solo actúa cuando alguien inyecta la huella, y su contrato no la inyecta.
+  Hasta ese día «como siempre» era el presupuesto entero: 1.797–1.825 ms en 13 de 13 clics que no navegaban
+  (log del 21-09, M; va en el comentario de la 334, no en el enunciado, que dice lo que se promete y no su
+  historia). **La propuesta de esta spec se quedaba corta**: decía «o el techo si nadie mira», y con huella
+  también se espera entero cuando no se pudo tomar la huella de antes, en `sapgui://` y ante una puerta con
+  destino (`SabeQueLleva`, 248) —la regla, punto 4, que juzga la 351—. Por eso el literal cita esos casos por
+  la promesa que los juzga en vez de enumerarlos: una lista copiada en dos enunciados es una segunda definición
+  que se desincroniza (aprendizaje nº16). El **cuerpo** de la 334 no cambió ni un byte: 54 líneas, iguales a
+  las de `17560d0`, donde nació (M: md5 `1212778d…` en los dos lados, quitando los CR). Su caso 4 sigue
+  exigiendo el presupuesto entero sin huella, y la cláusula nueva, «espera a que lo que se ve se asiente», la
+  juzga la 354 sobre el mismo mundo y el mismo «Guardar». Anotado en la spec 043, «Lo que pasó después».
 - **La 299 y la spec 040 no cambian.** Es la compuerta de vida (puerta ausente antes de pulsar) y sus casos
   4 («se movió: se espera entero») y 5 («sin poder mirar, nada cambia») siguen en pie. Esta spec **no toca
   `EsperarloVivo`** salvo `:412-413`, para que la huella sea la definición compartida (352); la 299 cita
@@ -337,7 +344,9 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   constante → `ms < Techo/2`, `!CambioLaPantalla`, `!Aprendido`, cuenta con «no cambió» y sin «campo»;
   «Guardar» sin huella → `ms ≥ Techo − 100` (el caso 4 de la 334, calcado); «Search» con y sin huella →
   `ms < Techo/2` y cuenta con «campo» y «foco». **Sabotaje:** `if (!esCampo) huella = null;` antes de la
-  espera: cae solo el primer caso.
+  espera: cae solo el primer caso. (Medido en la fase 3: de la 354 cae solo ese caso, pero **no solo la
+  354**: caen también la 351 y la 355, que juzgan la misma espera sobre un `Button`. La local `huella` no
+  existe; la línea es `if (!esCampo) Huella = null;`, sobre la propiedad.)
 - **355** — `Diario` y `Huella` inyectados; tras `Pulsa` el diario tiene UNA línea que contiene «antes»,
   «después», «delante», «asentada a los» + « ms», «ubicación», la parte que vio el cambio («dentro» /
   «delante» / «ventanas» / «nada») y «coste» con los ms de cada parte; con huella que nunca coincide dice
@@ -618,6 +627,34 @@ dé el presupuesto de redirección.
     ya cumple «el diario lo dice las dos veces», porque la línea de la primera espera dice «lleva a algún sitio» y la
     de la repetición también. Si la fase 5 hace que la espera de la repetición escriba su propia línea, serán tres, y
     esa aserción (`== 2`) tendrá que decidir qué cuenta.
+- **2026-09-22, fase 3 escrita (la 334 reescrita; la 354 sigue verde).** Esta fase no tiene promesa que pase de
+  roja a verde, y se dice: la 354 se puso verde en la fase 2 (`fd008c3`), porque su caso nuevo es la misma regla.
+  Lo que la fase entrega es el registro y el sabotaje propio de la 354.
+  - **Qué cambió**: **0 líneas de producción**. En `Contrato.cs`, solo el texto del `Prueba(...)` de la 334 (+9/−1:
+    el enunciado y un comentario de 8 líneas con el porqué y la medida). El literal está en «Reconciliación», arriba,
+    y es el mismo en la spec 043, «Lo que pasó después» (M: comparado con un script que une las líneas de la cita y las contrasta con el `Prueba(...)`).
+  - **El fixture viejo de la 334 sigue byte a byte** (M): el cuerpo de `UnCampoDeTextoNoNavega`, 54 líneas, da el
+    mismo md5 (`1212778d…`) aquí y en `17560d0`, donde nació, quitando los CR. **La 299 y la 040 sin tocar** (M): el
+    cuerpo de `UnaPantallaAsentadaNoSeEspera` (95 líneas) y su enunciado son idénticos a los de `origin/main`, y
+    `docs/specs/040*` no tiene diff contra `origin/main`.
+  - **Contrato** (M, con `TEMP` propio): antes y después, `CONTRATO ROTO: 10 promesa(s) incumplida(s)` (302 ✔ /
+    5 ✘: 353, 356, 357, 358 y 359, de fases posteriores); 307 veredictos, iguales uno a uno. 334, 351, 354, 355 y 299
+    en ✔.
+  - **Sabotaje de la 354, el de la spec, verificado por diff.** La spec dice `if (!esCampo) huella = null;`, y la local
+    `huella` no existe: la línea es `if (!esCampo) Huella = null;`, sobre la propiedad, después de decidir el
+    presupuesto y antes de construir la espera (`PulsarSegunElNucleo.cs:233`). Diff 1+/0−; el ancla se buscó con
+    `\r\n` y coincidió 1 vez; compiló (0 errores, 36 warnings) → **`CONTRATO ROTO: 21`**. De la 354 cae **solo el
+    primer caso** («Guardar» con la pantalla asentada: 1.205 ms de 1.200); siguen en pie «dice que no cambió, sin
+    llamarle campo», «sin huella, el techo entero» y los dos campos. Pero **no cae solo la 354**: caen también la 351
+    (7 aserciones) y la 355 (2), y una aserción más de la 357, que ya estaba roja. Es lo mismo que midió el sabotaje (a)
+    de la fase 2, y por la misma razón: las tres juzgan la misma espera sobre un `Button`, que es lo que pide la 352.
+    Restaurado desde la copia (md5 idéntico, diff vacío, fecha tocada para que el build incremental no se quede con la
+    DLL rota) → `CONTRATO ROTO: 10`, veredicto a veredicto y aserción a aserción igual que antes del sabotaje.
+  - **Sitios**: esta fase no arregla ninguna clase de error. De los 11 sitios que calculan «cambió» por ubicación o
+    recuento siguen quedando **10**, como dejó la fase 2. Enunciados con «como siempre» (M, `grep` sobre los
+    `Prueba(` de `Contrato.cs`): **4** → **3**. El que se va es el de la 334, el único que lo decía de la duración de
+    la espera tras pulsar; los otros tres hablan de otra cosa (232: lanzar una app; 296: contar un cambio que sí
+    ocurrió; 331: buscar por nombre exacto) y no se tocan.
 
 ## Revisiones
 
@@ -645,12 +682,13 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Fase 1: 352 verde, 299 intacta, sabotaje de la spec verificado por diff y uno extra sobre la compuerta (2026-09-22)
 - [x] Antes de la fase 2: los dos «aún no» restados a `long.MinValue` (2 de 4 sitios), juzgados por la 355 (2026-09-22)
 - [ ] Fase 2 **escrita** (351 verde, y la 354 con ella; dos sabotajes por diff; 2026-09-22) — **no entra** hasta el nivel 4 de la fase 0: `PrimeraHuellaMs`/`RespiroMs` siguen siendo metas
+- [x] Fase 3: la 334 reescrita sin reciclar el número, con el cuerpo byte a byte; la 354 verde y su sabotaje propio verificado por diff (cae su primer caso, y con él la 351 y la 355) (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C
 - [ ] 351–359 verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), 360 reservada fuera del contrato
 - [ ] Un sabotaje por promesa, verificado por diff, con el veredicto literal en el PR
-- [ ] La 334 reescrita en el registro y anotada en la spec 043; la 299 y la 040 sin tocar
+- [x] La 334 reescrita en el registro y anotada en la spec 043; la 299 y la 040 sin tocar (2026-09-22, fase 3)
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
 - [ ] Probado en ≥3 pantallas, con nombre: ChatGPT.exe, Gmail en Chrome, Explorador «Descargas»
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)

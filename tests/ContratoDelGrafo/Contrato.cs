@@ -825,7 +825,15 @@ internal static class Contrato
         Prueba("333. pedir un subdominio no se cumple estando en el dominio padre: con scholar.google.com pedido, una pestaña en google.com no es «ya estaba abierto»; pedir el sitio a secas sí se cumple en un subdominio suyo, como hasta hoy; y www. no cuenta en ninguno de los dos lados", PedirUnSubdominioNoSeCumpleEnElPadre);
 
         // ── Spec 043: un campo de texto no navega ───────────────────────────────────────────────
-        Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera como siempre", UnCampoDeTextoNoNavega);
+        // LA 334 REESCRITA EL 2026-09-22, SIN RECICLAR EL NÚMERO (spec 047, fase 3; anotado en la 043, «Lo que pasó
+        // después»). Su última cláusula decía «y lo que no es un campo espera como siempre», y «como siempre» era el
+        // presupuesto entero: 1.797-1.825 ms en 13 de 13 clics que no navegaban (u-20260921.log, 16:34-16:39). Desde la
+        // fase 2 de la 047 un «Guardar» con huella sale al asentarse, así que el enunciado viejo ya no decía lo que hace la
+        // rama. El CUERPO no cambia ni un byte (igual al de 17560d0, donde nació): su caso 4, sin huella, sigue exigiendo el
+        // presupuesto entero, y «espera a que lo que se ve se asiente» lo juzga la 354 sobre el mismo mundo y el mismo
+        // «Guardar». La spec proponía «o el techo si nadie mira» y se quedaba corta: con huella, en SAP y ante una puerta con
+        // destino también se espera entero (la 351). Por eso esos casos se citan por el número de la promesa que los juzga.
+        Prueba("334. un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como cualquier navegación; y lo que no es un campo espera a que lo que se ve se asiente —el presupuesto entero si nadie mira, o en los demás casos en que la 351 espera como hoy—", UnCampoDeTextoNoNavega);
 
         // ── Spec 044: memoria personal de voz ──────────────────────────────────────────────────
         Prueba("335. la memoria personal de voz se guarda localmente y sobrevive a cerrar y volver a abrir la voz, sin depender de un backend legacy", MemoriaPersonalDeVozSobreviveALaSesion);
