@@ -14204,6 +14204,14 @@ internal static class Contrato
         }
         Debe(Lanza(6) && Lanza(-1), "ni seis barras ni menos de cero tienen alto: AltoDe lanza ArgumentOutOfRangeException en vez de inventarlo");
 
+        // LA VENTANA PINTA ESE XAML Y NO OTRO (fase 8, paso 8b; añadida antes que la ventana). Si PanelDeJev armara su
+        // árbol por otro camino, medir Xaml aquí juzgaría un señuelo y la 376 saldría verde con la ventana midiendo
+        // otra cosa. Va antes de la guarda de WPF porque leer un fuente no necesita WPF: sin el archivo es roja.
+        var fuenteDelPanel = FuenteDelRepo("windows-client/src/Ui/Jev/PanelDeJev.cs", "376");
+        if (fuenteDelPanel != null)
+            Debe(Apariciones(fuenteDelPanel, "XamlReader.Parse(Xaml)") == 1,
+                $"PanelDeJev.cs carga su contenido con XamlReader.Parse(Xaml), una vez: la ventana pinta el mismo XAML que aquí se mide (lo hace {Apariciones(fuenteDelPanel, "XamlReader.Parse(Xaml)")} vez/veces)");
+
         // EL XAML MEDIDO SIN PANTALLA DA LO MISMO (fase 8): el mismo XAML que pinta la ventana, parseado y
         // medido en un hilo STA del arnés. Si WPF no arranca aquí, SIN JUZGAR: ni verde ni rojo.
         var tPanel = Jev("PanelDeJev");
@@ -14325,6 +14333,34 @@ internal static class Contrato
         Debe(e1.R.X == 684 && e1.R.Y == 448 && e1.Esquina == "AbajoDerecha", $"a escala 1,5 el desplazamiento es (84, 48): {e1.R}");
         var e2 = C(new WPoint(1800, 400), grande, 1.5, sin, null);
         Debe(e2.Esquina == "AbajoIzquierda" && e2.R.X == 1800 - 84 - 510 && e2.R.Right <= 1920 - 18, $"y el margen es 18: {e2.R} · {e2.Esquina}");
+
+        // EL NOTCH QUE SE ESQUIVA ES EL QUE SE PONE (fase 8, paso 8b; añadidas antes que su código). El notch se pone
+        // en DIP del primario con ReglaDeLaBandeja.ArribaAlCentro(área libre, su tamaño) (PanelDeAcciones.Recolocar);
+        // el panel se calcula en físicos. NotchEnFisicos lleva ESE rect a físicos por Pantallas (380) —el mismo
+        // camino, no un segundo cálculo del sitio del notch (aprendizaje nº16)—: a escala 1,25 el notch de 340×62 que
+        // arriba al centro de un área libre de 1536×824 empieza en (598, 8) ocupa (747,5, 10, 425, 77,5).
+        var notchEnFisicos = t?.GetMethod("NotchEnFisicos");
+        var delMonitor = Capacidad("U.WindowsClient.Ui.Pantallas")?.GetMethod("DelMonitor");
+        if (notchEnFisicos == null || delMonitor == null)
+        {
+            Pendiente("Ui.Jev.DondeVaElPanel.NotchEnFisicos(libre en DIP del primario, conversor del primario)", "377", "049");
+            return;
+        }
+        var libre = new WRect(0, 0, 1536, 824);
+        var primario = delMonitor.Invoke(null, new object[] { new WRect(0, 0, 1920, 1080), 1.25 })!;
+        var notchFisico = (WRect)notchEnFisicos.Invoke(null, new[] { libre, primario })!;
+        var esperado = new WRect(747.5, 10, 425, 77.5);
+        bool Casi(WRect a, WRect b) => Math.Abs(a.X - b.X) < 0.01 && Math.Abs(a.Y - b.Y) < 0.01 && Math.Abs(a.Width - b.Width) < 0.01 && Math.Abs(a.Height - b.Height) < 0.01;
+        Debe(Casi(notchFisico, esperado), $"el notch que el panel esquiva es el de ArribaAlCentro llevado a físicos por la escala del primario: {notchFisico}, esperado {esperado}");
+        // Y con el ancla junto a ese notch, a escala 1,25, abajo a la derecha lo cruzaría (870..1295 × 60..308):
+        // abajo a la izquierda (305..730) cabe y no lo toca.
+        var bajoElNotch = C(new WPoint(800, 20), new WSize(425, 248.25), 1.25, new List<WRect> { notchFisico }, null);
+        Debe(!bajoElNotch.R.IntersectsWith(notchFisico) && bajoElNotch.Esquina == "AbajoIzquierda",
+            $"y el panel no lo cruza: se va abajo a la izquierda: {bajoElNotch.R} · {bajoElNotch.Esquina}, notch en {notchFisico}");
+        var ventana = FuenteDelRepo("windows-client/src/Ui/Jev/PanelDeJev.cs", "377");
+        if (ventana != null)
+            Debe(ventana.Contains("DondeVaElPanel.NotchEnFisicos(", StringComparison.Ordinal),
+                "y la ventana del panel da ese notch como obstáculo: PanelDeJev.cs llama DondeVaElPanel.NotchEnFisicos(");
     }
 
     /// <summary>Promesa 378.</summary>
@@ -15051,6 +15087,18 @@ internal static class Contrato
                 // PENDIENTE a juzgada). Lo prometido no cambia: el atajo abre dónde escribirle a Ü, con el foco.
                 Debe(cuerpo.Contains("AbrirChat(true)", StringComparison.Ordinal), "y sigue abriendo el chat con el foco en el campo (AbrirChat(true); ShowTalk hasta #113)");
             }
+        }
+
+        // (b) LA VENTANA DEL PANEL APLICA LA MÁSCARA Y NACE SIN ACTIVARSE (fase 8, paso 8b; añadidas antes que la
+        // ventana). La máscara se nombra UNA vez, en la línea que la toma: con un segundo nombre en un comentario o en
+        // la comprobación posterior, quitar la línea que la aplica dejaría esto verde (hallazgo del paso 8a).
+        var ventana = FuenteDelRepo("windows-client/src/Ui/Jev/PanelDeJev.cs", "385");
+        if (ventana != null)
+        {
+            int veces = Apariciones(ventana, "EstilosDeVentana.ExtendidosDelPanel");
+            Debe(veces == 1, $"PanelDeJev.cs aplica EstilosDeVentana.ExtendidosDelPanel, nombrada una vez, en la línea que la toma: la nombra {veces} vez/veces");
+            Debe(ventana.Contains("ShowActivated = false", StringComparison.Ordinal) && ventana.Contains("Focusable = false", StringComparison.Ordinal),
+                "y la ventana nace sin activarse ni tomar el foco: ShowActivated = false y Focusable = false");
         }
     }
 

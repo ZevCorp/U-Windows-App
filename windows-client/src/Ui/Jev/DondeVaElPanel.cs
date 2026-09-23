@@ -107,6 +107,22 @@ public static class DondeVaElPanel
         return delArea.FirstOrDefault(l => !l.Rect.IntersectsWith(cuadrado), delArea[0]);
     }
 
+    /// <summary>
+    /// EL NOTCH QUE EL PANEL ESQUIVA, en físicos: el MISMO rect con que se pone el notch —<see cref="ReglaDeLaBandeja.ArribaAlCentro"/>
+    /// sobre el área libre y con <see cref="MedidaDelNotch"/>, que es lo que hace <c>PanelDeAcciones.Recolocar</c>—
+    /// llevado a físicos por el conversor del primario (380). No se recalcula el sitio del notch por otro camino:
+    /// dos cálculos del mismo sitio acaban discrepando en silencio (aprendizaje nº16).
+    /// </summary>
+    /// <param name="libre">El área libre del primario en DIP, la de <c>LaBarraDeTareas.Mirar()</c>: la que usa el notch.</param>
+    /// <param name="primario">El conversor del monitor primario (<see cref="Pantallas.DelMonitor"/>), que es donde vive el notch.</param>
+    public static Rect NotchEnFisicos(Rect libre, ConversorDeMonitor primario)
+    {
+        ArgumentNullException.ThrowIfNull(primario);
+        var enDip = ReglaDeLaBandeja.ArribaAlCentro(libre, new Size(MedidaDelNotch.Ancho, MedidaDelNotch.Alto));
+        var arribaIzquierda = primario.AFisico(enDip.TopLeft);
+        return new Rect(arribaIzquierda.X, arribaIzquierda.Y, enDip.Width * primario.Escala, enDip.Height * primario.Escala);
+    }
+
     private static Rect JuntoAl(Point ancla, Size tamaño, EsquinaDelPanel esquina, double dx, double dy)
     {
         bool derecha = esquina is EsquinaDelPanel.AbajoDerecha or EsquinaDelPanel.ArribaDerecha;

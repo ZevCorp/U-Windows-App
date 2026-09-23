@@ -743,6 +743,43 @@ anotan. Lo que cambió en cada promesa está aplicado arriba; aquí queda por qu
   vista; (380) `Aplicar(ReglaDeDpi.RectTrasCambio(_rcMonitor, ahora), …)` → `Aplicar(ahora, …)`, 26.524 bytes →
   «ROTO: 7», solo la 380 pasa a ✘ con «sobreescribe OnDpiChanged y desde ahí llama ReglaDeDpi.RectTrasCambio(».
   Restaurado todo, «ROTO: 6» con marcas y motivos idénticos a la corrida verde (M).
+- **2026-09-23 (fase 8, paso 8b: solo la ventana del panel).** `Ui/Jev/PanelDeJev.cs` nace y pone en verde la
+  **376 entera**: su `Xaml` medido en el arnés da 64 sin resultados, 198,6 con cinco barras, «Resultados» a 314,0 y
+  340 de ancho, sin ⚠ («arnés · WPF mide sin pantalla: Consolas 10 → 11,71», M). **Cinco comprobaciones nuevas,
+  escritas antes que su código:** (376) la ventana carga su contenido con `XamlReader.Parse(Xaml)`, una vez —si armara
+  otro árbol, medir `Xaml` juzgaría un señuelo—; (377) `DondeVaElPanel.NotchEnFisicos(libre, primario)` es el rect de
+  `ReglaDeLaBandeja.ArribaAlCentro` llevado a físicos por `Pantallas` —a 1,25, (747,5, 10, 425, 77,5)—, el panel pedido
+  junto a él a 1,25 no lo cruza, y `PanelDeJev.cs` lo llama para sus obstáculos; (385) `PanelDeJev.cs` nombra
+  `EstilosDeVentana.ExtendidosDelPanel` una vez, en la línea que la aplica, y nace con `ShowActivated = false` y
+  `Focusable = false`. **Rojo antes del código** (M): «CONTRATO ROTO: 9» —376 con «falta el fuente PanelDeJev.cs» y su
+  `PENDIENTE`, 377 con el `PENDIENTE` de `NotchEnFisicos`, 385 con «falta el fuente»— y las otras 310 marcas idénticas
+  a las del 8a. **Verde:** «CONTRATO ROTO: 5» (antes 6), 376 ✘ → ✔, 377 y 385 ✔, 0 SIN JUZGAR, y las demás marcas
+  idénticas a las del 8a (M, `diff`). Quedan ✘ 379 y 381 (falta `VistaDeJev.cs`), 382 (`DespachadorDeWpf.cs`), 383
+  (`FaceWindow.Jev.cs`) y 384 (las dos llamadas en `FaceWindow.xaml.cs`). **Sitios** (patrón nº5, M por grep):
+  `ArribaAlCentro(` fuera de su regla, 2 —el notch (`PanelDeAcciones.cs:849`) y `NotchEnFisicos`—, por el mismo camino;
+  `XamlReader.Parse` en el cliente, 2 (`Estudio.cs:515`, un estilo, y el panel). **Sabotaje por diff** (archivos LF;
+  `sed -b`; cada uno restaurado con `cmp` idéntico): (376) el relleno inferior `PaddingAbajo` → `PaddingArriba` (7,6 →
+  10), 25.118 → 25.119 bytes → «ROTO: 6», solo la 376 con «y con cinco barras 198,6: 201,0»; (377) `NotchEnFisicos`
+  sin la escala en el tamaño, 9.141 → 9.105 bytes → «ROTO: 6», solo la 377 con «747,5;10;340;62, esperado
+  747,5;10;425;77,5»; (377, segunda, porque la llamada nunca se había visto roja) la ventana calcula el notch por su
+  cuenta y en DIP (`ReglaDeLaBandeja.ArribaAlCentro(…)` en vez de `NotchEnFisicos`), 25.134 bytes → «ROTO: 6», solo la
+  377 con «PanelDeJev.cs llama DondeVaElPanel.NotchEnFisicos(»; (385) la máscara escrita a mano `0x08080080` —sin
+  `WS_EX_TRANSPARENT`—, 25.093 bytes → «ROTO: 6», solo la 385 con «la nombra 0 vez/veces». Restaurado todo, «ROTO: 5»
+  con marcas y motivos idénticos a la corrida verde (M). **Vistas rojas solo por ausencia, y dicho:** la de
+  `XamlReader.Parse(Xaml)` (376) y la de `ShowActivated`/`Focusable` (385) solo se vieron rojas con el archivo ausente,
+  no con uno equivocado. **Sin juez, y dicho; para la 8c y el nivel 4:** (a) **nadie crea el panel todavía**: lo hará
+  `VistaDeJev`, que es quien pone `MaquinaDeLaVista.Obstaculos = PanelDeJev.Obstaculos()`, `TamanoDelPanel` y llama
+  `Colocar(RectDelPanel)`; (b) el panel **no anima**: los 0,16 s *easeInOut* de textos, barras y alto no están; (c)
+  `SizeToContent` crece hacia abajo desde su esquina de arriba, así que en una esquina de arriba pasar de 64 a 198,6 lo
+  acerca al ancla: la ventana no se recoloca sola —el sitio es de quien lo calcula— y lo dice con «CONTRASTE panel …:
+  el sitio se pidió para W×H y la ventana mide w×h físicos» (tolerancia 1,5 px por el redondeo de `Nitida()`); (d) el
+  obstáculo es el notch **cerrado** (340×62): con el chat abierto el notch mide 420×360 (`PanelDeAcciones.cs:397-398`,
+  L) y el panel podría cruzarlo; (e) el área libre sale de `LaBarraDeTareas.Mirar()` —`SystemParameters.WorkArea`, DIP
+  del primario—, la misma que usa el notch; si la escala del primario cambia después de iniciar sesión, las dos podrían
+  no casar (D); (f) `WM_WINDOWPOSCHANGING` reescribe solo la posición, el tamaño es del contenido; (g) una pista con
+  valor 0 no se rellena, donde el plano dice `max(2, …)` siempre: el modelo da relleno 0 para un medidor «—», y dos
+  DIP ahí enseñarían un dato que no vino (desviación declarada); (h) el divisor `#80373B39` no es un token de la 371
+  sino `BordeDelPanel` a la mitad de alfa; (i) el objetivo va en un `TextBlock`: sin campo de texto (§Lo que NO entra).
 
 ## Cierre
 
