@@ -425,45 +425,91 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
+    /// EL «DÓNDE» DEL PASO: el de la ubicación de TRABAJO, que es con el que la compuerta juzga (<c>DondeTrabajo</c>
+    /// en FaceWindow, el mismo que recibe <see cref="Navigation.RecorrerSegunElNucleo"/>). Null = <c>_where()</c>, el
+    /// dónde de la ventana de delante, que coincide con el de trabajo cuando no hay ninguna fijada.
+    /// </summary>
+    /// <remarks>
+    /// Aprendizaje nº16 (hallazgo del 2026-09-22 sobre la rama C): la 364 decidía «viva» con el dónde de DELANTE y la
+    /// compuerta juzga con el de TRABAJO. Con la ventana de trabajo en Paint y la persona en Chrome se preguntaba
+    /// siempre (60-107 ms), la respuesta salía sellada con el dónde de Chrome y la compuerta la descartaba «de otra
+    /// pantalla»: se pagaban la pregunta y la mirada, y el log decía que se había ahorrado una. Cableado a
+    /// DondeTrabajo, además, lo que paga la 364 lo encuentra la compuerta en su memoria de 400 ms (promesa 246).
+    /// </remarks>
+    public Func<string>? DondeDeTrabajo { get; set; }
+
+    /// <summary>El dónde del paso por <see cref="DondeDeTrabajo"/>, o «» si no se pudo saber (y se dice por qué).</summary>
+    private string DondeDelPaso()
+    {
+        try { return (DondeDeTrabajo != null ? DondeDeTrabajo() : _where()?.Id) ?? ""; }
+        catch (Exception e)
+        {
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            LogBus.Log("lectura", $"no pude saber dónde trabaja el paso ({causa})");
+            return "";
+        }
+    }
+
+    /// <summary>
     /// LA VISTA QUE EL PASO LLEVA: la respuesta de preguntar por su selector si hizo falta y el elemento está;
     /// si no, la observación compartida (363), que puede no haber.
     /// </summary>
+    /// <remarks>
+    /// EL ORDEN ES EL COSTE (hallazgo del 2026-09-22): lo gratis primero. Un selector de SAP sale antes de situarse
+    /// —antes de esto cada map_take pagaba un «dónde» de 12-194 ms (en SAP, COM) para acabar sin preguntar—; después
+    /// el dónde, una vez; después SAP por ubicación; y la ventana de trabajo solo si de verdad se va a preguntar
+    /// (<see cref="PreguntarSiHaceFalta"/>). Lo que costó situarse va a la cuenta del paso: el nivel 4 lo mide.
+    /// </remarks>
     private Uia.Observacion? VistaDelPaso(string salida)
     {
-        // UN SOLO «DÓNDE» para las dos decisiones (aprendizaje nº16): la observación compartida y las puertas
-        // vivas se piden por el mismo valor, y DondeEstoy no se paga dos veces (25 llamadas sin memoria, spec 048).
-        string aqui = _where()?.Id ?? "";
+        // UN SELECTOR DE SAP NI SE SITÚA, NI PREGUNTA, NI LLEVA VISTA: resuelve por su API, y lo que UIA lee de una
+        // ventana de SAP es el Pane opaco —contado en la compuerta, dejaba muertas las puertas de SAP (363)—.
+        if (U.Graph.Surfaces.SapSelector.Owns(salida))
+        {
+            LogBus.Log("lectura", $"«{salida}»: sin situarme, sin preguntar y sin observación (selector de SAP: se resuelve por su API); la compuerta decide como hoy");
+            _ultimaPregunta = "sin preguntar: selector de SAP";
+            return null;
+        }
+        // UN SOLO «DÓNDE» para las dos decisiones y para la compuerta (aprendizaje nº16): la observación compartida,
+        // las puertas vivas y el sello de la respuesta de uno salen del mismo valor, y del mismo sitio que el de la
+        // compuerta.
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        string aqui = DondeDelPaso();
+        crono.Stop();
+        string situarse = $"situarse {crono.ElapsedMilliseconds} ms";
+        // SAP NO ENTRA POR UBICACIÓN (spec 048, regla 6): ni un selector de UIA ni una etiqueta llevan la observación
+        // de UIA de una ventana de SAP, y preguntar por UIA dentro del Pane sería un camino que nadie ha medido.
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+        {
+            LogBus.Log("lectura", $"«{salida}»: sin preguntar y sin observación en «{aqui}» (en SAP se resuelve por su API; lo que UIA ve de su Pane no cuenta) · {situarse}");
+            _ultimaPregunta = $"sin preguntar: SAP · {situarse}";
+            return null;
+        }
         var compartida = VistaQueElPasoTrae(aqui);
-        var (deUno, comoFue) = PreguntarSiHaceFalta(salida, aqui, compartida);
-        _ultimaPregunta = comoFue;
+        var (deUno, comoFue) = PreguntarSiHaceFalta(salida, aqui, compartida, situarse);
+        _ultimaPregunta = $"{comoFue} · {situarse}";
         return deUno ?? compartida;
     }
 
     /// <summary>
-    /// ¿HACE FALTA PREGUNTAR? Solo si el selector es de UIA, hay ventana de trabajo y el grafo NO tiene esa
-    /// puerta viva. Devuelve la observación de uno si se preguntó y está, y la frase corta para la cuenta del
-    /// paso; la larga, con el camino y los ms, va al log en cada caso.
+    /// ¿HACE FALTA PREGUNTAR? Solo si el selector es de UIA, el grafo NO tiene esa puerta viva donde se trabaja, la
+    /// observación del paso no la trae y hay ventana de trabajo. Devuelve la observación de uno si se preguntó y está, y
+    /// la frase corta para la cuenta del paso; la larga, con el camino y los ms, va al log en cada caso.
     /// </summary>
-    private (Uia.Observacion? DeUno, string ComoFue) PreguntarSiHaceFalta(string salida, string aqui, Uia.Observacion? compartida)
+    private (Uia.Observacion? DeUno, string ComoFue) PreguntarSiHaceFalta(string salida, string aqui, Uia.Observacion? compartida, string situarse)
     {
-        (Uia.Observacion?, string) Sin(string linea, string corta) { LogBus.Log("lectura", linea); return (null, corta); }
+        (Uia.Observacion?, string) Sin(string linea, string corta) { LogBus.Log("lectura", $"{linea} · {situarse}"); return (null, corta); }
 
         if (!UiaSelector.Owns(salida))
             return Sin($"«{salida}»: sin preguntar (no es un selector de UIA); la compuerta decide como hoy", "sin preguntar: no es de UIA");
         if (aqui.Length == 0)
             return Sin($"«{salida}»: sin preguntar (no sé dónde estoy); la compuerta mira como hoy", "sin preguntar: no sé dónde estoy");
-        // SAP NO ENTRA (spec 048, regla 6): sus selectores resuelven por su API y su compuerta ya no mira
-        // (MirarOtraVezLaVentana devuelve false en sapgui://). Preguntar por UIA dentro del Pane opaco sería
-        // un camino nuevo que nadie ha medido en el hospital.
-        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
-            return Sin($"«{salida}»: sin preguntar (en SAP se resuelve por su API); la compuerta decide como hoy", "sin preguntar: SAP");
-        IntPtr ventana = VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero;
-        if (ventana == IntPtr.Zero)
-            return Sin($"«{salida}»: sin preguntar (no hay ventana de trabajo); la compuerta mira como hoy", "sin preguntar: sin ventana de trabajo");
 
         // VIVA EN EL GRAFO: la MISMA lista y la MISMA comparación que la compuerta —las vivas de DesdeAqui, por
-        // selector y por ordinal— (aprendizaje nº16): si aquí se dijera «viva» y allí no, se saltaría la pregunta
-        // que hacía falta.
+        // selector y por ordinal—, y en el MISMO dónde (aprendizaje nº16): si aquí se dijera «viva» y allí no, se
+        // saltaría la pregunta que hacía falta.
         var vivas = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string Selector, string Etiqueta, string Tipo)>();
         if (vivas.Any(p => p.Selector.Equals(salida, StringComparison.Ordinal)))
             return Sin($"«{salida}» viva en el grafo, sin preguntar ni leer: la compuerta la encuentra como hoy", "viva en el grafo, sin preguntar");
@@ -474,6 +520,15 @@ public sealed class SurfaceMapTools
             return Sin($"«{salida}» está en la observación v{compartida.Version} que el paso acaba de leer: sin preguntar, la compuerta la cuenta como su mirada",
                 "en la observación del paso, sin preguntar");
 
+        // LA VENTANA, SOLO PARA PREGUNTAR: sin ventana de trabajo fijada es otro «dónde» entero (VentanaObjetivo →
+        // DondeEstoy), y en los dos caminos de arriba no hace falta. Se mide aparte.
+        var cronoVentana = System.Diagnostics.Stopwatch.StartNew();
+        IntPtr ventana = VentanaDeTrabajo?.Invoke() ?? IntPtr.Zero;
+        cronoVentana.Stop();
+        string hallarLaVentana = $"hallar la ventana {cronoVentana.ElapsedMilliseconds} ms";
+        if (ventana == IntPtr.Zero)
+            return Sin($"«{salida}»: sin preguntar (no hay ventana de trabajo · {hallarLaVentana}); la compuerta mira como hoy", "sin preguntar: sin ventana de trabajo");
+
         var crono = System.Diagnostics.Stopwatch.StartNew();
         Uia.Observacion? respuesta;
         try { respuesta = (PreguntaPorSelector ?? PreguntarDeVerdad)(ventana, salida); }
@@ -483,28 +538,30 @@ public sealed class SurfaceMapTools
             string causa = "";
             for (var x = e; x != null; x = x.InnerException)
                 causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
-            return Sin($"no pude preguntar por «{salida}» en la ventana de trabajo ({causa}) · {crono.ElapsedMilliseconds} ms; la compuerta mira como hoy",
-                $"no pude preguntar · {crono.ElapsedMilliseconds} ms");
+            return Sin($"no pude preguntar por «{salida}» en la ventana de trabajo ({causa}) · {crono.ElapsedMilliseconds} ms · {hallarLaVentana}; la compuerta mira como hoy",
+                $"no pude preguntar · {crono.ElapsedMilliseconds} ms · {hallarLaVentana}");
         }
         crono.Stop();
         long ms = crono.ElapsedMilliseconds;
         string como = string.IsNullOrWhiteSpace(respuesta?.ComoSeLeyo) ? "sin decir cómo" : respuesta!.ComoSeLeyo;
         var suyo = respuesta?.Elementos.Where(e => e.Selector.Equals(salida, StringComparison.Ordinal)).ToList() ?? new List<Uia.ElementoVisto>();
         if (suyo.Count == 0)
-            return Sin($"pregunté por «{salida}» en la ventana de trabajo ({como}): no está · {ms} ms; la compuerta mira como hoy",
-                $"pregunté: no está · {ms} ms");
+            return Sin($"pregunté por «{salida}» en la ventana de trabajo ({como}): no está · {ms} ms · {hallarLaVentana}; la compuerta mira como hoy",
+                $"pregunté: no está · {ms} ms · {hallarLaVentana}");
 
+        // SELLADA CON EL DÓNDE DE TRABAJO, siempre: es el que la compuerta compara (PorQueLaVistaNoCuenta). Sellada con
+        // otro, la compuerta la descartaría «de otra pantalla» después de haberla pagado (aprendizaje nº16).
         var deUno = respuesta! with
         {
             Hwnd = respuesta.Hwnd != IntPtr.Zero ? respuesta.Hwnd : ventana,
-            Donde = respuesta.Donde.Length > 0 ? respuesta.Donde : aqui,
+            Donde = aqui,
             MsDeLectura = respuesta.MsDeLectura > 0 ? respuesta.MsDeLectura : ms,
             Elementos = suyo,
             Completa = false,
         };
-        LogBus.Log("lectura", $"pregunté por «{salida}» en la ventana de trabajo ({como}): está · {ms} ms; "
-            + "el paso la lleva como observación de uno, sin leer la ventana entera");
-        return (deUno, $"pregunté: está · {ms} ms");
+        LogBus.Log("lectura", $"pregunté por «{salida}» en la ventana de trabajo ({como}): está · {ms} ms · {hallarLaVentana}; "
+            + $"el paso la lleva como observación de uno de «{aqui}», sin leer la ventana entera · {situarse}");
+        return (deUno, $"pregunté: está · {ms} ms · {hallarLaVentana}");
     }
 
     /// <summary>La cuenta de lecturas desde el último accionar, para la línea de tiempos del paso.</summary>
@@ -521,6 +578,23 @@ public sealed class SurfaceMapTools
         _lecturasNuevas = 0;
         _lecturasReutilizadas = 0;
     }
+
+    /// <summary>
+    /// LAS MANOS QUE ACCIONAN SIN SER TAKE NI TYPE, contadas el 2026-09-22 (patrón nº5): desplazar, ir, abrir una app,
+    /// desbloquear, abrir una carpeta, un batch, una skill y el plan de una comprobación —8—. Las tres últimas pasan
+    /// además por la compuerta del núcleo, que invalida al volver cada mano; aquí se invalida al volver la tanda.
+    /// map_decidir y map_tramo no están: accionan por Take, y un decisor que dice «no» no tocó nada.
+    /// </summary>
+    private static readonly HashSet<string> ManosFueraDeTakeYType = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "map_scroll", "map_go_to", "map_open_app", "map_unblock", "file_open", "map_batch", "map_skill_run", "leccion_plan",
+    };
+
+    /// <summary>
+    /// LA MANO DE DESPLAZAR (map_scroll): dirección → lo que pasó. Null = <see cref="Uia.Desplazamiento.Mover"/>, que
+    /// desplaza de verdad. Inyectable para que el contrato juzgue que desplazar invalida sin mover la pantalla (362).
+    /// </summary>
+    public Func<string, string>? Desplaza { get; set; }
 
     private string LoQueVeo()
     {
@@ -2543,7 +2617,7 @@ public sealed class SurfaceMapTools
             "map_ahead" => TerrenoPorElNucleo == null
                 ? "todavía no sé mirar el terreno por delante."
                 : TerrenoPorElNucleo(A("exit"), A("levels")),
-            "map_scroll" => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(A("direction"))),
+            "map_scroll" => (Desplaza ?? (d => Uia.Desplazamiento.Mover(Uia.Desplazamiento.Leer(d))))(A("direction")),
 
             // Los verbos del explorador. Van por disco, no por pantalla: ver Explorador.cs.
             "file_where" => DondeEnDisco(),
@@ -2566,6 +2640,14 @@ public sealed class SurfaceMapTools
 
             _ => $"herramienta de mapa no soportada: {tool}",
         };
+
+        // ACCIONAR INVALIDA, TAMBIÉN SIN TAKE NI TYPE (regla 4 de la 048, promesa 362). Hasta el 2026-09-22 solo Take y
+        // Type olvidaban lo leído: un map_scroll sacaba X de la vista y el map_take de 800 ms después recibía la lectura
+        // de ANTES, la compuerta daba X por viva y se pulsaba lo que ya no se veía (hallazgo sobre la rama C). Aquí, en
+        // el despacho, y ANTES del inventario pegado, que así cuenta la pantalla de después. Lo que pasa por la compuerta
+        // del núcleo (batch, skill, plan, tramo) ya invalida al volver cada mano en RecorrerSegunElNucleo; estas lo
+        // hacen además al volver de la tanda entera.
+        if (ManosFueraDeTakeYType.Contains(tool)) InvalidarPorAccionar(tool);
 
         // CADA HERRAMIENTA CON SU RELOJ, Y AQUÍ PORQUE AQUÍ PASAN TODOS. El tiempo ya se medía en la
         // voz —el «✓ … (817 ms)» del panel— pero solo ahí: la sonda de desarrollo y el bucle del

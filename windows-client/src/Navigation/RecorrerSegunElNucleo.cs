@@ -183,7 +183,10 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
-                if (!_escribir(paso.Exit, paso.Texto))
+                bool escrito;
+                try { escrito = _escribir(paso.Exit, paso.Texto); }
+                finally { LaManoVolvio($"escribir en «{(paso.Exit.Length > 0 ? paso.Exit : "el campo con el foco")}»"); }
+                if (!escrito)
                     return Parcial(i, pasos.Count,
                         $"no pude escribir «{paso.Texto}»"
                         + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»." : "."), conVivos: true);
@@ -258,7 +261,9 @@ public sealed class RecorrerSegunElNucleo
             if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
                 return Parcial(i, pasos.Count, frenado, conVivos: false);
             alPulsar(elegido.Que.Selector);
-            var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
+            PulsarSegunElNucleo.Resultado r;
+            try { r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta); }
+            finally { LaManoVolvio($"pulsar «{elegido.Que.Etiqueta}» en el recorrido"); }
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
             ultimoPulso = r;
@@ -312,10 +317,25 @@ public sealed class RecorrerSegunElNucleo
             porque = $"el paso pide pulsar «{tecla}» y en este montaje no sé teclear.";
             return false;
         }
-        if (!_teclear(tecla)) { porque = $"no pude pulsar «{tecla}»."; return false; }
+        bool entro;
+        try { entro = _teclear(tecla); }
+        finally { LaManoVolvio($"teclear «{tecla}»"); }
+        if (!entro) { porque = $"no pude pulsar «{tecla}»."; return false; }
         porque = "";
         return true;
     }
+
+    /// <summary>
+    /// LA MANO ACABA DE VOLVER: lo leído antes ya no describe lo que hay delante (regla 4 de la 048, promesa 362).
+    /// </summary>
+    /// <remarks>
+    /// AQUÍ Y NO EN CADA HERRAMIENTA, porque por aquí pasan todas las manos del núcleo: el batch, las skills (con y sin
+    /// coreografía), el plan de una comprobación, los pasos del tramo y map_take. Hasta el 2026-09-22 solo Take y Type
+    /// invalidaban, al volver de la tanda ENTERA: un batch o una skill dejaban viva la observación de antes, y el señalar
+    /// del paso 2 reutilizaba la lectura de antes del paso 1 (hallazgo sobre la rama C). También cuando la mano lanza.
+    /// Invalida, además, la memoria del dónde (369): es la misma llamada.
+    /// </remarks>
+    private static void LaManoVolvio(string que) => Uia.Observatorio.Invalida($"accionar ({que})");
 
     /// <summary>
     /// ¿Aterrizó donde la demostración aterrizaba? La misma exigencia de la promesa 103, ahora
@@ -648,11 +668,19 @@ public sealed class RecorrerSegunElNucleo
     /// (aprendizaje nº16): el dónde es el de <c>_donde()</c>, que es el que la compuerta usa para todo lo
     /// demás, y la edad se mide con el reloj del observatorio, que es el que puso la fecha de lectura.
     /// </summary>
+    /// <remarks>
+    /// EN SAP NO CUENTA (hallazgo del 2026-09-22, deducido del código). Dentro de SAP GUI UIA ve un Pane opaco, y las
+    /// puertas de SAP las lee el latido por su Scripting API: contarle al núcleo lo que UIA vio SUSTITUÍA esa lista de
+    /// vivos, y «sap:…#tbbtn=NV44» quedaba muerta en cada paso del hospital. La guarda es la de MirarOtraVezLaVentana
+    /// y ObservarLaVentanaDeTrabajo: los tres sitios que podían volcar una lectura de UIA sobre una ubicación de SAP
+    /// dicen ahora lo mismo (el latido elige el sentido por mundo, y es el cuarto).
+    /// </remarks>
     private static string? PorQueLaVistaNoCuenta(Uia.Observacion? traida, string aqui, out Uia.Observacion? vista)
     {
         vista = null;
         if (traida == null) return "sin observación";
         if (aqui.Length == 0) return "no sé dónde estoy";
+        if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)) return "SAP se lee por su API";
         if (!string.Equals(traida.Donde, aqui, StringComparison.OrdinalIgnoreCase))
             return $"de otra pantalla «{traida.Donde}» → «{aqui}»";
         long edad = traida.EdadEn(Uia.Observatorio.Ahora());

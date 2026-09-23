@@ -374,6 +374,7 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     public bool TeclearEnLaVentana(IntPtr ventana, string texto, bool enter, out string error)
     {
+        AccionarInvalidaElBarrido("teclear en la ventana");
         error = "";
         if (!VentanaExiste(ventana)) { error = "la ventana en la que iba a teclear ya no existe"; L("    ✗ " + error); return false; }
         IntPtr focoAntes = GetForegroundWindow();
@@ -992,7 +993,26 @@ public sealed class UiaSurface : IUiSurface
         finally { _ventanaObjetivo = IntPtr.Zero; }
     }
 
+    /// <summary>
+    /// ACCIONAR INVALIDA EL BARRIDO (promesa 361, hallazgo del 2026-09-22). La vigencia de 100 ms impide que un sondeo
+    /// reciba el árbol del sondeo anterior, pero no que se sirva la captura tomada ANTES de una acción: en el
+    /// reproductor la huella del paso N+1 llega 60-90 ms después del Enter del paso N (PauseMs 40) y recibía la
+    /// pantalla de antes —un «⚠ HUELLA distinta» falso, y un recuento que puede dar Ready sin asentar—. Se invalida al
+    /// ENTRAR, antes incluso del freno (un paso frenado solo cuesta un barrido de más), y al SALIR, por si alguien
+    /// barrió mientras la mano actuaba. Las cuatro manos de esta clase lo hacen: Execute, EjecutarSobre,
+    /// TeclearEnLaVentana y TeclearEnElCampo.
+    /// </summary>
+    private void AccionarInvalidaElBarrido(string que) => _barrido?.Invalida($"invalidado al ejecutar {que}");
+
     public bool Execute(PlanStep step, out string error)
+    {
+        string que = $"«{(string.IsNullOrWhiteSpace(step.Label) ? step.Selector : step.Label)}»";
+        AccionarInvalidaElBarrido(que);
+        try { return ExecuteDentro(step, out error); }
+        finally { AccionarInvalidaElBarrido(que); }
+    }
+
+    private bool ExecuteDentro(PlanStep step, out string error)
     {
         error = "";
 
@@ -1081,6 +1101,7 @@ public sealed class UiaSurface : IUiSurface
     /// </summary>
     public bool EjecutarSobre(AutomationElement el, PlanStep step, out string error)
     {
+        AccionarInvalidaElBarrido($"«{step.Label}» (directo)");
         L($"Ejecutar directo «{step.Label}» · {step.ActionType} · sobre el elemento ya leído "
           + $"(name='{Safe(() => el.Current.Name)}' ct={Safe(() => el.Current.ControlType.ProgrammaticName)})");
 
@@ -1587,6 +1608,7 @@ public sealed class UiaSurface : IUiSurface
     /// </remarks>
     public bool TeclearEnElCampo(AutomationElement el, string texto, out string error)
     {
+        AccionarInvalidaElBarrido("teclear en el campo");
         error = "";
         string? antesDeTeclear = LoQueDiceElCampo(el);
         IntPtr focoAntes = GetForegroundWindow();

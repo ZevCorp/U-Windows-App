@@ -76,6 +76,19 @@ public static class BarridoUia
         public long LeidaEn { get; }
         public long Ms { get; }
         public List<string> Servidos { get; } = new();
+
+        private string? _invalidada;
+
+        /// <summary>
+        /// Por qué ya no vale aunque siga dentro de la vigencia —se accionó—, o null si vale. La vigencia protege
+        /// a un sondeo del árbol del sondeo anterior; esto protege de servir la pantalla de ANTES de una acción
+        /// (hallazgo del 2026-09-22: la huella del paso N+1 llegaba 60-90 ms después del Enter del paso N).
+        /// </summary>
+        public string? Invalidada => Volatile.Read(ref _invalidada);
+
+        /// <summary>Accionar la invalida: lo barrido antes de tocar la pantalla no describe la de después.</summary>
+        public void Invalida(string porque)
+            => Volatile.Write(ref _invalidada, string.IsNullOrWhiteSpace(porque) ? "se accionó" : porque);
     }
 
     /// <summary>
@@ -107,13 +120,15 @@ public static class BarridoUia
     /// Sirve la captura anterior si es de la misma ventana y más fresca que la vigencia; si no, barre.
     /// Cada llamada deja UNA línea en el log: «barrido nº N: M nodos en X ms · servido a Q» cuando se
     /// barre, o «barrido nº N reutilizado (E ms de edad) · servido a Q» cuando se sirve el mismo. Esa
-    /// línea es la medida de cuántos Walk paga un paso del reproductor.
+    /// línea es la medida de cuántos Walk paga un paso del reproductor. Una captura INVALIDADA (se accionó
+    /// después de tomarla) no se sirve aunque sea fresca, y la línea del barrido nuevo dice por qué.
     /// </summary>
     public static Captura Toma(IntPtr hwnd, Captura? anterior, Func<IntPtr, IReadOnlyList<Nodo>?> barre,
                                Func<long> reloj, string paraQuien, Action<string>? log)
     {
         long ahora = reloj();
-        if (anterior != null && anterior.Hwnd == hwnd && ahora - anterior.LeidaEn <= VigenciaMs)
+        string? invalidada = anterior?.Invalidada;
+        if (anterior != null && invalidada == null && anterior.Hwnd == hwnd && ahora - anterior.LeidaEn <= VigenciaMs)
         {
             anterior.Servidos.Add(paraQuien);
             log?.Invoke($"barrido nº{anterior.Numero} reutilizado ({ahora - anterior.LeidaEn} ms de edad) · servido a {paraQuien}");
@@ -134,7 +149,8 @@ public static class BarridoUia
 
         var c = new Captura((anterior?.Numero ?? 0) + 1, hwnd, nodos, ahora, sw.ElapsedMilliseconds);
         c.Servidos.Add(paraQuien);
-        log?.Invoke($"barrido nº{c.Numero}: {nodos.Count} nodos en {c.Ms} ms · servido a {paraQuien}");
+        log?.Invoke($"barrido nº{c.Numero}: {nodos.Count} nodos en {c.Ms} ms · servido a {paraQuien}"
+                    + (invalidada != null ? $" · el nº{anterior!.Numero} no se reutilizó: {invalidada}" : ""));
         return c;
     }
 }
