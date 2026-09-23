@@ -493,6 +493,37 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   cada una con su campo `_sap`. Un juez que resolviera los embudos por nombre suelto los confundiría
   (aprendizaje nº16) y dejaría la 399(b) roja para siempre por la mano que pulsa etiquetas: el nombre
   de un parámetro vale en su método y el de un campo en su tipo.
+- **2026-09-23 · Fase 0: romper a propósito cuando todo ya está rojo.** Un rojo no se puede «poner
+  rojo»; lo que se comprueba es que el juez **ve la línea rota** —que su rojo cambia justo ahí, con
+  archivo y línea— y que el arreglo equivocado no le basta. Un sabotaje por promesa, los seis a la vez
+  (archivos disjuntos), aplicados con edición que conserva la CRLF y verificados por `git diff` antes
+  de juzgar; el veredicto, exigido; restaurados con `git checkout` y el contrato vuelto a correr
+  **(M)**. Cada uno dio exactamente el cambio previsto y ninguno tocó las 298 anteriores:
+  (394) un `LogBus.Publico` de mentira (`=> Log(…)`) y uno con `«sentido-sap»` en `RellenadorSap.cs:410`
+  → el Pendiente de `Publico` desaparece y (c) nombra `:410` dos veces, por la etiqueta de fuera y por
+  no estar en el censo (1 en el código); (395) `LogBus.Logged += (_, l) => TelemetryBus.Emit("log",
+  label: l)` en `Encender` → (b) 11 en el código con `EspejoDelLog.cs:44` fuera del censo, y (c)
+  `:44: Logged += no es un canal censado`; (396) `SinValor.Forma` que devuelve el valor → el Pendiente
+  pasa a dos rojos por contenido (`Forma(null)` y `Forma("")` no dan `‹vacío›`), prueba de que el
+  nombre pedido por reflexión es el que la fase 1 va a escribir; (397) callar la línea «→» de `Call`
+  → (a) sigue roja con «anotó: » vacío: dejar de anotar no es anotar por la forma, y un «no contiene»
+  habría salido verde; (398) `usuario dijo: {…Length} car.`, la forma casi buena → roja por igualdad
+  exacta, y la 399(a) pasa a 1 de 35 (D2 solo pide que no haya hueco entero: es la 398 la que fija la
+  forma); (399) quitar el `.Length` de `UiaSurface.cs:403` → la 399(b) nombra `:403 (L()` con el hueco
+  `(texto??"")`, 13 en vez de 12.
+- **2026-09-23 · El embudo `Log` no tiene ámbito, y casa cualquier `Log(`.** Visto en el sabotaje de
+  la 394: el recuento de la 399(b) pasó de 147 a 148 sentencias sin ningún hueco nuevo. Una sonda de
+  solo lectura sobre los dos árboles (el saboteado y `HEAD`) enseñó la de más: el `=> Log(tag,
+  message)` del `Publico` de mentira, en `LogBus.cs` **(M)**. Siete embudos por inicializador
+  (`new UiaSurface { Log = s => LogBus.Log(…) }`, `WorkflowPlayer`, …: `EjecutorDeExportaciones.cs:263`,
+  `SurfaceMapTools.cs:31`, `WorkflowMcpRunner.cs:50`, `FaceWindow.xaml.cs:85, 4297, 4309`,
+  `WorkflowLibraryWindow.xaml.cs:58`) se resuelven al miembro `Log` de **otro** tipo y salen **sin
+  ámbito** —el octavo `Log`, `SurfaceMapTools.cs:1754`, sí está acotado— **(M, la misma sonda)**, así
+  que su forma `Log(` vale en todo el ámbito. Hoy no cambia ningún
+  veredicto y el error va hacia el rojo —un `Log($"… {texto}")` de una clase ajena saldría culpable,
+  con archivo y línea—, nunca hacia el verde. Si la fase 2 escribe `Publico` con un `Log(` pelado, el
+  148 no es una sentencia nueva. Se anota, no se arregla aquí: acotarlo al tipo del inicializador es
+  cambiar el juez, y va con la fase que lo necesite.
 
 ## Revisiones
 
