@@ -14108,6 +14108,58 @@ internal static class Contrato
         Debe(soloMano.Count == 1 && Cierto(soloMano[0], "Rosa") && (WRect)PropDe(soloMano[0], "Caja")! == mano && Cierto(soloMano[0], "EsLeida"),
             $"sin candidatas, la caja de la mano se pinta sola, rosa y leída: {soloMano.Count} caja(s)");
 
+        // AÑADIDAS EN LA FASE 3, ANTES QUE SU CÓDIGO: cuatro ramas que el enunciado ya promete y la tabla de
+        // juicio no miraba. El enunciado no cambia; esto es su forma ejecutable.
+        object DeLista(string? pulsadaId, params (string Id, string Etiqueta, WRect? Caja)[] cs) => de.Invoke(null, new object?[]
+        {
+            Lista(tCand, cs.Select(c => Crear(tCand, ("Id", c.Id), ("Etiqueta", c.Etiqueta), ("Tipo", "Button"), ("Caja", c.Caja), ("EsLeida", true)))),
+            pulsadaId,
+        })!;
+        List<object> Rosas(List<object> cs) => cs.Where(c => Cierto(c, "Rosa")).ToList();
+        string Ids(List<object> cs) => string.Join(", ", cs.Select(x => Texto(x, "Id")));
+
+        // (1) LA PULSADA LLEGA CON DOS FORMAS, Y LAS DOS DAN LA MISMA ROSA (aprendizaje nº16): el id entero, de quien
+        // tiene la lista, o su número, que es lo que lleva CicloDeJev.Pulsada —el «(n)» de la línea de progreso—.
+        // Un overlay que solo casara ids enteros recibiría «6» del ciclo y no pintaría nunca una rosa, en silencio.
+        foreach (var (pulsada, esperada) in new[] { ("6", "6) Buscar (Button)"), ("3", "3) Buscar (Button)") })
+        {
+            var rs = Rosas(Cajas(De(siete, pulsada)));
+            Debe(rs.Count == 1 && Texto(rs[0], "Id") == esperada,
+                $"con la pulsada «{pulsada}» —el número, como la trae el ciclo— hay UNA rosa y es «{esperada}»: hay {rs.Count} [{Ids(rs)}]");
+        }
+        Debe(Rosas(Cajas(De(siete, "Buscar"))).Count == 0 && Rosas(Cajas(De(siete, "6) Guardar (Button)"))).Count == 0,
+            "ni una etiqueta («Buscar») ni el id de otra lista («6) Guardar (Button)») es la pulsada: ninguna rosa");
+
+        // (2) CONTENCIÓN NO ES ALINEACIÓN (patrón nº7): la mano pulsó DENTRO del «Formulario», no el formulario. Lo
+        // que calza es la caja de lo pulsado, con unos píxeles de holgura; lo que solo la contiene, no.
+        var formulario = DeLista(null, ("1) Formulario (Pane)", "Formulario", new WRect(0, 0, 800, 600)), ("2) Buscar (Button)", "Buscar", new WRect(500, 500, 80, 20)));
+        var dentro = Cajas(conPulsada.Invoke(formulario, new object[] { mano })!);
+        Debe(dentro.Count == 3 && Rosas(dentro).Count == 1 && (WRect)PropDe(Rosas(dentro)[0], "Caja")! == mano,
+            $"la mano pulsó dentro del «Formulario» y no calza con ninguna: su caja va sola y rosa, y el formulario no se resalta: {dentro.Count} caja(s), rosa(s) [{Ids(Rosas(dentro))}]");
+        var corrida = Cajas(conPulsada.Invoke(formulario, new object[] { new WRect(503, 502, 80, 20) })!);
+        Debe(corrida.Count == 2 && Rosas(corrida).Count == 1 && Texto(Rosas(corrida)[0], "Id") == "2) Buscar (Button)",
+            $"y la que calza con unos píxeles de diferencia SÍ es la pulsada, sin caja nueva: {corrida.Count} caja(s), rosa(s) [{Ids(Rosas(corrida))}]");
+
+        // (3) UNA SOLA ROSA, SIEMPRE: la caja de la mano manda sobre la rosa de antes, y una segunda pulsación sin
+        // candidatas no deja pintada la primera (sería una caja que ni se ofreció ni es lo pulsado ahora).
+        var dosVeces = Cajas(conPulsada.Invoke(De(siete, "6) Buscar (Button)"), new object[] { siete.Caja(2) })!);
+        Debe(Rosas(dosVeces).Count == 1 && Texto(Rosas(dosVeces)[0], "Id") == "3) Buscar (Button)",
+            $"con la 6 rosa por su id y la mano pulsando la caja de la 3, UNA rosa y es la 3: [{Ids(Rosas(dosVeces))}]");
+        var otraMano = new WRect(400, 300, 60, 20);
+        var dosManos = Cajas(conPulsada.Invoke(conPulsada.Invoke(vacio, new object[] { mano })!, new object[] { otraMano })!);
+        Debe(dosManos.Count == 1 && (WRect)PropDe(dosManos[0], "Caja")! == otraMano,
+            $"sin candidatas, dos pulsaciones dejan UNA caja, la de la última: {dosManos.Count} caja(s)");
+
+        // (4) VACÍO NO ES AUSENTE (patrón nº9), en las dos entradas. UIA da Rect.Empty a lo que no está en pantalla
+        // (UiaSurface.cs lo filtra en 8 sitios) y TipTour descarta la caja de 2 o menos de lado (plano §Una caja,
+        // paso 1): lo que no se puede pintar no se pinta con un rect vacío, y se cuenta como sin caja.
+        var raras = DeLista(null, ("1) Nuevo (Button)", "Nuevo", WRect.Empty), ("2) Buscar (Button)", "Buscar", new WRect(10, 20, 0, 20)),
+                                  ("3) Ayuda (Button)", "Ayuda", new WRect(10, 20, 2, 2)), ("4) Cerrar (Button)", "Cerrar", new WRect(50, 20, 80, 20)));
+        Debe(Cajas(raras).Count == 1 && Texto(Cajas(raras)[0], "Id") == "4) Cerrar (Button)" && Convert.ToInt32(PropDe(raras, "SinCaja")) == 3,
+            $"una caja vacía, una sin ancho y una de 2×2 no se pintan y se cuentan como sin caja: [{Ids(Cajas(raras))}], SinCaja = {PropDe(raras, "SinCaja")}");
+        Debe(Cajas(conPulsada.Invoke(vacio, new object[] { WRect.Empty })!).Count == 0 && Cajas(conPulsada.Invoke(vacio, new object[] { new WRect(100, 200, 2, 2) })!).Count == 0,
+            "y una mano sin caja que se pueda pintar no deja una rosa vacía");
+
         // LAS CAJAS CADUCAN: la caducidad es pura...
         var caducado = caducar.Invoke(r, null);
         Debe(Cajas(caducado ?? r).Count == 0, "Caducar() deja el overlay vacío");
