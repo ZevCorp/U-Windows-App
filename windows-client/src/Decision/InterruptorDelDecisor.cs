@@ -78,10 +78,11 @@ public sealed class InterruptorDelDecisor
             ?? (_ => throw new InvalidOperationException("no hay transporte con el que hablarle a TypeSafe"));
         // EL MODELO QUE ENSEÑA EL BOTÓN ES EL QUE VIAJA EN EL CUERPO (392). Hasta el 2026-09-22 aquí se llamaba a
         // Elegir de seis, que armaba el cuerpo con ModeloPorDefecto: Estado decía «jev-1.13.0» y la petición pedía
-        // «jev-latest». La política es la de por defecto hasta que la fase 6 le dé la de cfg (393).
+        // «jev-latest». Y LA POLÍTICA QUE SE LEYÓ ES LA QUE SE APLICA (393): con la de por defecto aquí,
+        // U_DECISOR_TEXTO_VETADO se leía y no vetaba nada, y U_DECISOR_SAP_TEXTO=si no habilitaba nada (fase 6).
         _mapa.Decisor = (pantalla, objetivo, puertas) =>
             ElDecisor.ElegirConModelo(cfg.Quien, pantalla, objetivo, puertas, cfg.Confianza, transporte,
-                cfg.Modelo, PoliticaDeLoQueViaja.PorDefecto);
+                cfg.Modelo, cfg.Politica);
         Voice.ConversacionEnVivo.ConDecisor = true;
         Encendido = true;
         Estado = $"encendido: {cfg.Quien} ({cfg.Modelo}), umbral {cfg.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}.";

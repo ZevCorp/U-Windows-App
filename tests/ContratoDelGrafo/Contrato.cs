@@ -13821,6 +13821,48 @@ internal static class Contrato
         Debe(texto.Contains("uia://explorer.exe", StringComparison.Ordinal), $"y el cuerpo lleva el origin («{Recorte(texto)}»)");
         Debe(!texto.Contains("Historia clínica", StringComparison.Ordinal), $"pero NUNCA el título de la ventana ni la ruta («{Recorte(texto)}»)");
         Debe(Actuar046(d4), $"y con una respuesta en forma acciona (salió Actuar={Actuar046(d4)}: «{Porque046(d4)}»)");
+
+        // 4. EL CABLEADO REAL (añadido en la fase 6, 2026-09-22, y visto ROJO antes de su línea): la política que el
+        // interruptor lee del entorno es la que aplica el decisor del mapa. La tabla del juez no lo cubría, y sin esto
+        // U_DECISOR_TEXTO_VETADO se leería y NO vetaría nada en producción —un guardia que se cree puesto (aprendizaje
+        // nº18)— y U_DECISOR_SAP_TEXTO=si no habilitaría nada. Es el razonamiento de la 392: se juzga el cableado.
+        var tI = Capacidad("U.WindowsClient.Decision.InterruptorDelDecisor");
+        var pFabrica = tI?.GetProperty("FabricaDeTransporte");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pCon = Cap004("U.WindowsClient.Voice.ConversacionEnVivo")?.GetProperty("ConDecisor", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        if (tI == null || pFabrica == null || pDecisor == null || pCon == null)
+        {
+            Pendiente("InterruptorDelDecisor.FabricaDeTransporte + SurfaceMapTools.Decisor (el cableado de la política)", "393", "046");
+            return;
+        }
+        int deLaFabrica = 0;
+        var fabrica = (Func<U.WindowsClient.Decision.ConfiguracionDelDecisor, Func<string, string?>, Func<string, string>?>)((_, _) =>
+            _ => { deLaFabrica++; return RespuestaChoice("puerta", Puertas046[0], 0.9, Puertas046); });
+        bool antes = (bool)pCon.GetValue(null)!;
+        try
+        {
+            int PorElInterruptor(string pantalla, params (string k, string? v)[] mas)
+            {
+                deLaFabrica = 0;
+                var mapa = new SurfaceMapTools(() => null);
+                var interruptor = Activator.CreateInstance(tI, mapa, (Func<System.Threading.Tasks.Task>)(() => System.Threading.Tasks.Task.CompletedTask), (Action<string>)(_ => { }))!;
+                pFabrica.SetValue(interruptor, fabrica);
+                var todo = new List<(string k, string? v)> { ("U_DECISOR", "jev"), ("TYPESAFE_API_KEY", "sk-de-mentira") };
+                todo.AddRange(mas);
+                Func<string, string?> entorno = n => todo.FirstOrDefault(x => x.k == n).v;
+                Debe((bool)tI.GetMethod("Encender")!.Invoke(interruptor, new object[] { entorno })!, "con U_DECISOR=jev y clave, el interruptor enciende");
+                var decide = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>?)pDecisor.GetValue(mapa);
+                decide?.Invoke(pantalla, "abrir la historia", Puertas046);
+                return deLaFabrica;
+            }
+            int vetado = PorElInterruptor("web://historia/x", ("U_DECISOR_TEXTO_VETADO", "web://historia"));
+            Debe(vetado == 0, $"por el interruptor, U_DECISOR_TEXTO_VETADO=web://historia veta web://historia/x: el transporte no se toca (se llamó {vetado})");
+            int habilitado = PorElInterruptor(sap, ("U_DECISOR_SAP_TEXTO", "si"));
+            Debe(habilitado == 1, $"y por el interruptor U_DECISOR_SAP_TEXTO=si habilita sapgui://: 1 llamada (se llamó {habilitado})");
+            int sinHabilitar = PorElInterruptor(sap);
+            Debe(sinHabilitar == 0, $"y sin ella, por el interruptor, sapgui:// no viaja (se llamó {sinHabilitar})");
+        }
+        finally { pCon.SetValue(null, antes); }
     }
 
     private static void LasFilasNuncaViajanPorSuTexto()

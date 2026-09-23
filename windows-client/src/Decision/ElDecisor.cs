@@ -297,8 +297,8 @@ public static class ElDecisor
     /// <param name="modelo">El alias que va en <c>"model"</c> del cuerpo. Hasta el 2026-09-22 el interruptor leía
     /// <c>U_TYPESAFE_MODELO</c>, lo enseñaba en el botón, y el cuerpo llevaba el alias por defecto de todos modos:
     /// el estado nombraba un modelo y la petición pedía otro (392).</param>
-    /// <param name="politica">Qué superficies pueden mandar texto a Jev. La aplica la fase 6 (393); aquí ya viaja
-    /// para que la firma no cambie dos veces.</param>
+    /// <param name="politica">Qué superficies pueden mandar texto a Jev, y qué parte de la ubicación viaja (393).
+    /// <c>null</c> es la de por defecto —SAP no manda, vetados por defecto—: la ausencia no abre nada.</param>
     public static DecisionDeUnPaso ElegirConModelo(
         string quien,
         string pantalla,
@@ -316,7 +316,8 @@ public static class ElDecisor
         {
             case "jev":
                 return ConJev(pantalla, objetivo, puertas, umbral, transporte,
-                    string.IsNullOrWhiteSpace(modelo) ? ConfiguracionDelDecisor.ModeloPorDefecto : modelo.Trim());
+                    string.IsNullOrWhiteSpace(modelo) ? ConfiguracionDelDecisor.ModeloPorDefecto : modelo.Trim(),
+                    politica ?? PoliticaDeLoQueViaja.PorDefecto);
 
             case "simulado":
                 return Simulado(objetivo, puertas, umbral);
@@ -330,8 +331,14 @@ public static class ElDecisor
 
     private static DecisionDeUnPaso ConJev(
         string pantalla, string objetivo, IReadOnlyList<string> puertas, double umbral, Func<string, string> transporte,
-        string modelo)
+        string modelo, PoliticaDeLoQueViaja politica)
     {
+        // LA POLÍTICA ANTES DEL TRANSPORTE (393): lo que no puede viajar no se manda, y tampoco se decide por la regla
+        // local —con «jev» eso sería cambiar de juez—. El transporte no se toca ni una vez; decide Luna, y el porqué
+        // dice cuál de las dos reglas mordió (SAP sin habilitar, u origin vetado y bajo qué veto).
+        if (!politica.PuedeViajar(pantalla, out string noViaja))
+            return DecisionDeUnPaso.No(noViaja);
+
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
 
@@ -346,9 +353,11 @@ public static class ElDecisor
         string respuesta;
         try
         {
+            // DE LA UBICACIÓN VIAJA SOLO EL ORIGIN (393): hasta el 2026-09-22 viajaba entera, y en uia:// el pathname
+            // es el título vivo de la ventana («/Historia clínica de …»).
             string cuerpo = PeticionASystemOne.CuerpoDeEleccion(
                 modelo,
-                PeticionASystemOne.EstadoDeLaPantalla(pantalla, objetivo, puertas),
+                PeticionASystemOne.EstadoDeLaPantalla(PoliticaDeLoQueViaja.UbicacionQueViaja(pantalla), objetivo, puertas),
                 PeticionASystemOne.IdDeLaPuerta,
                 PeticionASystemOne.InstruccionesDeLaPuerta(objetivo),
                 queViaja);

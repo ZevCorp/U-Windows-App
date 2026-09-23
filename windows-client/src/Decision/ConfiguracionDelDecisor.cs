@@ -56,13 +56,20 @@ public sealed class ConfiguracionDelDecisor
     /// <summary>El modelo que se le pide a TypeSafe.</summary>
     public string Modelo { get; }
 
-    private ConfiguracionDelDecisor(string quien, string porque, double confianza, int tiempoMaximoMs, string modelo)
+    /// <summary>
+    /// Qué superficies pueden mandar su texto a Jev (393): <c>U_DECISOR_SAP_TEXTO</c> y <c>U_DECISOR_TEXTO_VETADO</c>,
+    /// leídas por <see cref="PoliticaDeLoQueViaja.Leer"/> —el único sitio que las interpreta— y no aquí.
+    /// </summary>
+    public PoliticaDeLoQueViaja Politica { get; }
+
+    private ConfiguracionDelDecisor(string quien, string porque, double confianza, int tiempoMaximoMs, string modelo, PoliticaDeLoQueViaja politica)
     {
         Quien = quien;
         Porque = porque;
         Confianza = confianza;
         TiempoMaximoMs = tiempoMaximoMs;
         Modelo = modelo;
+        Politica = politica;
     }
 
     /// <summary>
@@ -81,9 +88,10 @@ public sealed class ConfiguracionDelDecisor
         int plazo = Entero(entorno("U_TYPESAFE_TIMEOUT_MS"), TiempoMaximoPorDefectoMs);
         if (plazo < 100) plazo = TiempoMaximoPorDefectoMs;
         string modelo = Texto(entorno("U_TYPESAFE_MODELO")) ?? ModeloPorDefecto;
+        var politica = PoliticaDeLoQueViaja.Leer(entorno);
 
         ConfiguracionDelDecisor Con(string quien, string porque) =>
-            new ConfiguracionDelDecisor(quien, porque, confianza, plazo, modelo);
+            new ConfiguracionDelDecisor(quien, porque, confianza, plazo, modelo, politica);
 
         string? pedido = Texto(entorno(Interruptor));
         if (pedido == null)

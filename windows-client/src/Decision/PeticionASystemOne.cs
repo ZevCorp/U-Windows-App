@@ -130,9 +130,10 @@ public static class PeticionASystemOne
     /// El estado que se le manda: dónde estamos, qué se busca y qué puertas hay.
     /// </summary>
     /// <remarks>
-    /// SOLO ETIQUETAS Y TIPOS, NUNCA VALORES. El terreno es SAP de un hospital: las etiquetas son
-    /// cromo de la aplicación («Presión Arterial», «Crear Triage Administrativo») y se pueden
-    /// mandar; lo que un campo CONTIENE es un dato de un paciente y no sale de la máquina.
+    /// NUNCA VALORES DE CAMPOS, pero decir «solo etiquetas, que son cromo» era falso (hasta el 2026-09-22): la
+    /// ubicación viajaba entera —en uia:// el pathname es el título vivo de la ventana—, el objetivo va tal cual y las
+    /// etiquetas de una fila de rejilla son datos. Qué viaja lo decide <see cref="PoliticaDeLoQueViaja"/> (393), y
+    /// <see cref="ElDecisor"/> ya le pasa aquí solo el ORIGIN de la ubicación.
     /// </remarks>
     public static string EstadoDeLaPantalla(string pantalla, string objetivo, IReadOnlyList<string> puertas)
     {

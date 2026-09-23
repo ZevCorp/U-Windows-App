@@ -45,6 +45,8 @@ respuesta posible**— y su `confidence` permite no actuar cuando duda.
 | `U_TYPESAFE_CONFIANZA` | `0.70` | Mínimo de confianza para actuar. Se actúa **al alcanzarlo**, no solo al superarlo. |
 | `U_TYPESAFE_TIMEOUT_MS` | `2000` | Plazo total, esperas entre reintentos incluidas. |
 | `U_TYPESAFE_MODELO` | `jev-latest` | Alias o versión fija (`jev-1.13.0`). |
+| `U_DECISOR_SAP_TEXTO` | *(ausente)* → SAP no manda | Solo `si` deja que una pantalla `sapgui://` mande su texto a Jev. Vacío es ausente. Ver *Lo que se le manda*. |
+| `U_DECISOR_TEXTO_VETADO` | *(ausente)* | Orígenes que no mandan texto, separados por `;` (`web://historia;uia://chrome.exe`), **además** de los vetados por defecto. |
 
 ### La clave no vive en el código, y no viaja en el cuerpo
 
@@ -87,10 +89,20 @@ acciona a medias, y la excepción no sale de la pieza.
 
 ## Lo que se le manda a TypeSafe, y lo que no
 
-Se manda: el nombre de la pantalla, el objetivo, y **las etiquetas de las puertas accionables**.
+Lo decide **un solo sitio**, `Decision/PoliticaDeLoQueViaja.cs` (promesa 393, spec 046), y
+`ElDecisor` lo consulta **antes** de tocar el transporte. Hasta el 2026-09-22 esta sección decía «el
+nombre de la pantalla y las etiquetas, que son cromo»: era falso. La ubicación viajaba **entera** —en
+`uia://` el pathname es el título vivo de la ventana— y SAP mandaba lo mismo que cualquier otra app.
 
-No se manda: **el contenido de ningún campo**. El terreno es SAP de un hospital — las etiquetas son
-cromo de la aplicación («Presión Arterial»), lo que un campo contiene es un dato de un paciente.
+| Qué | ¿Viaja a Jev? |
+|---|---|
+| Una pantalla `sapgui://` | **No**, salvo `U_DECISOR_SAP_TEXTO=si` —y la variable no basta: hace falta además la decisión escrita del dueño y del hospital, que hoy no existe—. Sin eso el transporte no se toca, **no se decide por la regla local** y decide Luna |
+| Un origin vetado | **No**, y decide Luna. Vetados por defecto, sin variable: `web://itsmiracleai.com` y `web://itsmiracleai.com.co` (en `web://`, el host y sus subdominios); más los de `U_DECISOR_TEXTO_VETADO` |
+| La ubicación, en el resto | **Solo su origin** (`uia://explorer.exe`, `web://mail.google.com`), nunca el título de la ventana ni la ruta |
+| El objetivo | **Sí, tal cual**. Puede llevar un nombre: es un riesgo aceptado, no se limpia aquí |
+| Las etiquetas en `uia://` y `web://` | **Sí salen de la máquina**: botones, pestañas, nombres de archivo, asuntos de correo. Es lo que Jev necesita para decidir |
+| Las filas (`GuiGridFila`, `GuiTreeFila`, `GuiTreeCarpeta`) | Hoy **con su texto** donde el texto viaja; la promesa 350 (fase 7 de la spec 046) las hará viajar como «N) fila (tipo)» |
+| El valor escrito en un campo | El inventario nombra el campo por su etiqueta, no por lo que contiene (**deducido** de la lectura del código, sin medir). Lo que UIA publique como *nombre* de un elemento sí viaja, y en algunos controles ese nombre es su contenido |
 
 ## Cómo entra en el bucle vivo: `map_decidir`
 
