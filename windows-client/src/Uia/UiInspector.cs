@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using U.Graph.Surfaces;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Ui;
+using U.WindowsClient.Ui.Jev;
 
 namespace U.WindowsClient.Uia;
 
@@ -65,6 +66,14 @@ public sealed class UiInspector : IDisposable
     public void Start()
     {
         if (Active) return;
+        // CON EL OVERLAY DE JEV ENCENDIDO, EL INSPECTOR NO SE ENCIENDE (promesa 371, spec 049): comparten
+        // ámbar, verde y rosa con otro significado, y la única forma de que un color no diga dos cosas es
+        // que no se vean juntos. Aquí y no en Toggle porque Start es la puerta de las dos entradas.
+        if (!ExclusionConElInspector.PuedeEncender(ExclusionConElInspector.Cual.Inspector))
+        {
+            LogBus.Log("inspector", "no se enciende: " + ExclusionConElInspector.PorQueNo(ExclusionConElInspector.Cual.Inspector));
+            return;
+        }
         _overlay = new InspectorOverlay();
         _overlay.Show();
 
@@ -80,6 +89,7 @@ public sealed class UiInspector : IDisposable
         RefreshBoxes();
 
         Active = true;
+        ExclusionConElInspector.InspectorActivo = true;
     }
 
     public void Stop()
@@ -91,6 +101,7 @@ public sealed class UiInspector : IDisposable
         _proc = null;
         _overlay?.Close(); _overlay = null;
         Active = false;
+        ExclusionConElInspector.InspectorActivo = false;
     }
 
     private void RefreshBoxes()

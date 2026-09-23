@@ -502,6 +502,18 @@ anotan. Lo que cambió en cada promesa está aplicado arriba; aquí queda por qu
 - **2026-09-22.** El arnés tiene **dos conductas** para «no pude juzgar» (`:911`/`:925` inocente, `:7912` culpable), y
   ninguna es «no sé». La fase 0 de esta rama unifica las tres; hasta entonces, la 340 y la 341 pueden estar ✔ sin
   haber mirado nada si falta `U_REPO`.
+- **2026-09-22 (fase 1).** `TextoTerciario` (`0xFF6B736F`) sobre `FondoDelPanel` da **3,86:1** con la fórmula de
+  WCAG (M): por debajo del 4,5:1 de AA para texto normal, y el plano lo usa en metadatos de 9–10 DIP. Primario 16,1:1,
+  secundario 9,0:1, placeholder 6,2:1 (M). La 371 fija el ARGB del plano, así que cambiarlo es cambiar la promesa:
+  decisión del dueño, dicha en `PaletaDeJev.cs` para que no se descubra en el PC real.
+- **2026-09-22 (fase 1).** El veredicto «CONTRATO ROTO: N promesa(s) incumplida(s)» cuenta **comprobaciones**
+  fallidas, no promesas: el sabotaje de la 371 rompe dos `Debe` y el número pasó de 14 a **16** con una sola promesa
+  más en rojo (M, `Prueba` suma `_fallos` por cada `Debe`). El recuento por promesa (✔/✘) sí es exacto. No es de esta
+  rama; queda anotado porque un número que dice «promesas» y cuenta otra cosa es el aprendizaje nº2.
+- **2026-09-22 (fase 1).** Con el overlay de Jev encendido, `UiInspector.Start` no arranca y lo dice en el log
+  (`inspector · no se enciende: el overlay de Jev está encendido…`), pero la línea de estado de `OnToggleInspector`
+  (`FaceWindow.xaml.cs:4562`) dirá «Inspector apagado» sin el porqué. Hoy es inalcanzable (el overlay nace en la fase
+  8); la fase 9 decide si gasta una de sus ≤ 7 líneas en decirlo o si basta el log.
 - **2026-09-22.** `UiaSurface.Pulso` (`windows-graph/.../UiaSurface.cs:139`) ya avisa con la caja real de lo que la
   mano pulsa, en físicos, y la carita lo escucha (`FaceWindow.xaml.cs:1318`). Es lo que hace posible una rosa honesta
   sin esperar a C: lo que se resalta es lo que se pulsó, con la geometría de quien lo pulsó.
