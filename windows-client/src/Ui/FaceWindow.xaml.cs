@@ -789,6 +789,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     }
                 });
             pulsar.AvisoDeLaVentana = _trabajo.TomarAviso;
+            // LA ESPERA MIRA LO QUE SE VE (spec 047, fase 0: solo mide). Dos líneas, y son el cableado, no la UI: sin ellas la
+            // línea de la 355 diría «nadie miraba» en cada clic y la medida no valdría (aprendizaje nº11). El sitio va SIN la
+            // memoria de 400 ms (regla 2b). Lo decide el dueño al abrir el PR; si dice que no, salen a una rama de UI propia.
+            var huellaEnVivo = new Navigation.HuellaEnVivo(() => { _dondeTrabajo.Olvida(); return DondeTrabajo(); }, VentanaObjetivo);
+            pulsar.Huella = huellaEnVivo.Tomar; pulsar.SitioFresco = huellaEnVivo.SitioFresco;
             if (mcp.Map != null) mcp.Map.PulsarPorElNucleo = (sel, etq) =>
             {
                 string antes = FocoDeLaPersona();

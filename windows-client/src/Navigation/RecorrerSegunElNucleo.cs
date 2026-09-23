@@ -68,6 +68,14 @@ public sealed class RecorrerSegunElNucleo
         /// <summary>El selector que se pulsó de verdad en la tanda, si se pulsó algo: el tope cuenta los
         /// fallos por el botón tocado, no por cómo se pidió (promesa 204).</summary>
         public string? Pulsado { get; init; }
+
+        /// <summary>
+        /// Cuál de los cuatro veredictos dio el ÚLTIMO pulsar (spec 047, promesa 353): de sitio, dentro, delante o nada.
+        /// Viaja como dato hasta el detector de bucle del tramo, por <c>Mano</c>, por el mismo camino que
+        /// <see cref="Cambio"/>. Quien no lo dice hereda de <see cref="Cambio"/>: cambió = de sitio; no = nada.
+        /// </summary>
+        public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; } =
+            Cambio ? HuellaDeLoQueSeVe.QueCambio.DeSitio : HuellaDeLoQueSeVe.QueCambio.Nada;
     }
 
     private readonly Nucleo.Grafo _grafo;
@@ -138,8 +146,46 @@ public sealed class RecorrerSegunElNucleo
     ///
     /// 400 ms y no menos: es del orden de lo que tarda en verse un cambio tras un clic (mediana 405-510 ms ese
     /// mismo día). Más corto, y una página que aún no empezó a pintarse pasaría por asentada.
+    ///
+    /// LA LLEGADA USA EL MISMO NÚMERO (356, spec 047): antes de esto, lo que se ve tras escribir o teclear no se da por
+    /// asentado en ningún sitio, por la misma razón. Un número y no dos.
     /// </remarks>
     public int EsperaDeAsentarMs { get; init; } = 400;
+
+    /// <summary>
+    /// Quién mira lo que se ve al comprobar la llegada (spec 047, promesa 356). Nulo = los ojos del pulsar que ya usa este
+    /// batch; y si ese tampoco tiene, nadie mira y la llegada se espera como hoy: la ubicación, hasta el techo.
+    /// </summary>
+    /// <remarks>
+    /// LAS MISMAS MANOS, LOS MISMOS OJOS. La spec preveía que FaceWindow lo asignara (`recorrer.Huella = pulsar.Huella`)
+    /// dentro de las ≤2 líneas de la fase 0, y esas dos ya las gastó el pulsar (FaceWindow :795-796). No hace falta una
+    /// tercera en la zona de choque de la UI: este batch recibe EL MISMO pulsar (FaceWindow :809-812), y sus ojos ya están ahí.
+    /// </remarks>
+    public Func<HuellaDeLoQueSeVe?>? Huella { get => _huella ?? _pulsar.Huella; set => _huella = value; }
+    private Func<HuellaDeLoQueSeVe?>? _huella;
+
+    /// <summary>
+    /// CUÁNTO SE SIGUE MIRANDO una pantalla que se asentó en OTRA —ni la esperada ni la de partida— antes de declarar el
+    /// desvío (356). Contado desde que se asentó allí. Sin asignar, ES EL TECHO: con eso la llegada no recorta nada.
+    /// </summary>
+    /// <remarks>
+    /// UNA WEB PASA A MENUDO POR UNA INTERMEDIA que se asienta unos cientos de ms y salta: `map_go_to docs.google.com` «y ya
+    /// en …/document/u/0 (redirigió)», 12:10:56 del 18-09, spec 044 de Jose (M). Hasta el 22-09 la llegada no lo sabía:
+    /// agotaba el techo mirando la ubicación y declaraba el desvío con la última que viera.
+    ///
+    /// SIN MEDIR, y por eso vale el techo: tiene que salir del p95 de los «ms entre dos cambios de sitio seguidos» en
+    /// navegaciones con redirección —la medida (d) de la fase 0—, y esa medida la deja la línea de la llegada en el diario.
+    /// Con el techo, una asentada en otra a los N ms vencería a los N + techo: después del techo. Nada se recorta.
+    /// </remarks>
+    public int PresupuestoDeRedireccionMs { get => _presupuestoDeRedireccionMs ?? EsperaMaximaMs; init => _presupuestoDeRedireccionMs = value; }
+    private readonly int? _presupuestoDeRedireccionMs;
+
+    /// <summary>
+    /// Cuánto tienen que separarse dos huellas iguales para dar la llegada por asentada. Sin asignar, el del pulsar: es la
+    /// misma regla (351), y una META hasta el nivel 4 de la fase 0, así que un número y no dos.
+    /// </summary>
+    public int RespiroMs { get => _respiroMs ?? _pulsar.RespiroMs; init => _respiroMs = value; }
+    private readonly int? _respiroMs;
 
     /// <summary>
     /// DÓNDE DEJA DICHO LA COMPUERTA cuánto esperó y por qué dejó de esperar. El 2026-09-18 no se pudo medir si la
@@ -175,6 +221,7 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
+                string partida = LaDePartida(paso);
                 if (!_escribir(paso.Exit, paso.Texto))
                     return Parcial(i, pasos.Count,
                         $"no pude escribir «{paso.Texto}»"
@@ -187,7 +234,7 @@ public sealed class RecorrerSegunElNucleo
                 if (paso.Tecla.Length > 0 && !Teclea(paso.Tecla, out string porque))
                     return Parcial(i, pasos.Count, porque, conVivos: true);
 
-                if (!LlegoDondeTocaba(paso, out string desvio))
+                if (!LlegoDondeTocaba(paso, partida, out string desvio))
                     return Parcial(i, pasos.Count, desvio, conVivos: true);
                 continue;
             }
@@ -196,8 +243,9 @@ public sealed class RecorrerSegunElNucleo
             // elemento que buscar, así que no pasa por la compuerta de vida. Su llegada sí se exige.
             if (paso.Exit.Length == 0 && paso.Tecla.Length > 0)
             {
+                string partida = LaDePartida(paso);
                 if (!Teclea(paso.Tecla, out string porque)) return Parcial(i, pasos.Count, porque, conVivos: true);
-                if (!LlegoDondeTocaba(paso, out string desvio)) return Parcial(i, pasos.Count, desvio, conVivos: true);
+                if (!LlegoDondeTocaba(paso, partida, out string desvio)) return Parcial(i, pasos.Count, desvio, conVivos: true);
                 continue;
             }
 
@@ -250,7 +298,11 @@ public sealed class RecorrerSegunElNucleo
             if (paso.AntesDePulsar?.Invoke(elegido.Que.Selector) is string frenado)
                 return Parcial(i, pasos.Count, frenado, conVivos: false);
             alPulsar(elegido.Que.Selector);
-            var r = _pulsar.Pulsa(elegido.Que.Selector, elegido.Que.Etiqueta);
+            // CON LA LLEGADA DEL PASO (revisión del 23-09): pulsar sabe que tiene que haber una navegación y no da la pantalla por
+            // asentada antes de que cambie de sitio. De los 3 sitios que juzgan la llegada de un paso, la fase 6 llevó la mirada a
+            // 2 (escribir y teclear) y este, el del clic, seguía juzgando `r.Hasta` en el acto sobre una asentada que podía llegar
+            // a los ~480 ms, antes que una web lenta.
+            var r = _pulsar.PulsaParaLlegar(elegido.Que.Selector, elegido.Que.Etiqueta, paso.Llegada);
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
             ultimoPulso = r;
@@ -288,7 +340,7 @@ public sealed class RecorrerSegunElNucleo
         if (ultimoPulso is { } u)
             return new(pasos.Count, pasos.Count, fin, true,
                 $"hice los {pasos.Count} paso(s): {u.Cuenta}",
-                u.CambioLaPantalla);
+                u.CambioLaPantalla) { QueCambio = u.QueCambio };
         return new(pasos.Count, pasos.Count, fin, true,
             $"hice los {pasos.Count} paso(s): quedaste en «{fin}».");
     }
@@ -310,34 +362,216 @@ public sealed class RecorrerSegunElNucleo
     }
 
     /// <summary>
+    /// LA DE PARTIDA, leída ANTES de actuar (356): asentada ahí no es un desvío, es una página que aún no empezó a
+    /// pintarse. Solo si el paso trae llegada y alguien mira: sin ojos se espera como hoy y no se paga ni una lectura más.
+    /// </summary>
+    private string LaDePartida(Paso paso) => paso.Llegada.Length > 0 && Huella != null ? _donde() ?? "" : "";
+
+    /// <summary>
     /// ¿Aterrizó donde la demostración aterrizaba? La misma exigencia de la promesa 103, ahora
     /// también para escribir y teclear: un Enter que no cambia de pantalla no hizo su trabajo, y
     /// seguir el plan sobre la pantalla de antes es el «29 de 30» del salto-adelante otra vez.
     /// </summary>
-    private bool LlegoDondeTocaba(Paso paso, out string desvio)
+    /// <param name="partida">Dónde se estaba antes de actuar (<see cref="LaDePartida"/>); vacío = no se leyó.</param>
+    /// <remarks>
+    /// LA LLEGADA MIRA LO QUE SE VE (spec 047, promesa 356). Hasta el 2026-09-22 esto agotaba el techo entero mirando solo
+    /// la ubicación, y al agotarlo declaraba el desvío con la última que hubiera visto: no sabía si lo que veía estaba
+    /// quieto, ni si era la de partida. Con ojos (<see cref="Huella"/>) distingue tres pantallas:
+    ///
+    ///   · LA ESPERADA: contesta en cuanto la ubicación coincide, como hoy.
+    ///   · LA DE PARTIDA, asentada: se sigue esperando hasta el techo, porque una página que aún no empezó a pintarse
+    ///     parece asentada.
+    ///   · OTRA, asentada: se sigue mirando el presupuesto de redirección, contado DESDE QUE SE ASENTÓ allí —«cuando se
+    ///     asentó en otra… se sigue mirando», dice el enunciado—. Si al agotarlo sigue allí, desvío nombrando las dos; si
+    ///     en ese plazo llega a la esperada, es una llegada.
+    ///
+    /// «ASENTADA» ES LA REGLA DE PULSAR, NO UNA SEGUNDA: una <see cref="EsperaAsentada"/> por sitio que se juzga —dos huellas
+    /// iguales con un respiro en medio, desde <see cref="EsperaDeAsentarMs"/>, y el sitio releído fresco justo antes—.
+    /// «Asentada» se decide en un solo sitio; una segunda manera de decidirla sería el aprendizaje nº16 otra vez.
+    /// </remarks>
+    private bool LlegoDondeTocaba(Paso paso, string partida, out string desvio)
     {
         desvio = "";
         if (paso.Llegada.Length == 0) return true;
 
-        // La pantalla nueva tarda en pintarse y en ser leída: declarar el desvío sin esperar sería
-        // juzgar la de antes, que es el mismo desfase que la compuerta evita antes de pulsar.
-        string donde = "";
-        // EL RELOJ MANDA (promesa 245): el presupuesto se agota con el tiempo, no con las vueltas.
-        var compasLlegada = new Compas(EsperaMaximaMs);
-        do
-        {
-            donde = _donde() ?? "";
-            // La pantalla cogida a medio cambiar es la misma pantalla (promesa 226): comparar con
-            // Equals dejó una comprobación entera en «17 de 19» el 2026-09-11. La espera la lleva
-            // el Compas (promesa 245), no un Sleep de esta función.
-            if (Superficies.MismaPantalla(paso.Llegada, donde)) return true;
-        }
-        while (compasLlegada.Respira(120));
-
         string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
+        // EN EL DIARIO, SIN EL TEXTO (revisión del 23-09): el diario de la app es el log («compuerta») y EspejoDelLog sube cada
+        // línea al backend. La línea de la llegada sale en CADA paso de escritura con llegada —en SAP y también cuando sale bien—,
+        // y el texto de una skill de IS-H es el documento del paciente. Antes de esta rama solo quedaba en el log si fallaba.
+        // La respuesta al modelo (`desvio`) sí lo lleva: es el texto que el propio modelo pidió escribir.
+        string queParaElDiario = paso.Texto.Length > 0
+            ? $"escribir {paso.Texto.Length} carácter(es)" + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»" : "") + (paso.Tecla.Length > 0 ? $" y pulsar «{paso.Tecla}»" : "")
+            : $"pulsar «{paso.Tecla}»";
+        var ojos = Huella;
+        // POR QUÉ SE ESPERA COMO HOY, con palabras que distinguen cada causa (patrón nº2); vacío = los ojos deciden.
+        string comoHoy = PorQueLaLlegadaSeEsperaComoHoy(ojos, partida, paso.Llegada);
+        // EL SITIO FRESCO ES EL DEL PULSAR (regla 2b): en la app, sin la memoria de 400 ms; en el contrato, «dónde».
+        Func<string> sitioFresco = _pulsar.SitioFresco ?? _donde;
+
+        // LO QUE SE VIO, para la línea del diario: cada sitio nuevo con su instante —la medida (d), de la que tiene que salir
+        // el presupuesto— y cada asentada con el suyo.
+        var cambios = new List<string>();
+        var asentadas = new List<string>();
+        string ultimoVisto = partida;
+        void Vio(string sitio, long t)
+        {
+            if (sitio.Length == 0 || Superficies.MismaPantalla(sitio, ultimoVisto)) return;
+            cambios.Add($"«{sitio}» a los {t} ms");
+            ultimoVisto = sitio;
+        }
+
+        // EL SITIO QUE SE JUZGA, con su espera: una por sitio, porque «asentada» es asentada AQUÍ. `quietaDesde` es desde
+        // cuándo la huella no cambia en ese sitio: solo sirve para mirar justo cuando la regla ya puede decidir (abajo).
+        string juzgado = "";
+        long desdeQueSeJuzga = 0, asentadaA = -1, quietaDesde = 0;
+        int movidas = 0;
+        EsperaAsentada? espera = null;
+        void Juzga(string sitio, long t)
+        {
+            juzgado = sitio; desdeQueSeJuzga = t; asentadaA = -1; quietaDesde = t; movidas = 0;
+            // CON EL COMPARADOR DE ESTA LLEGADA (revisión del 23-09): aquí todo sitio se compara con Superficies.MismaPantalla, y la
+            // espera comparaba el suyo con Ordinal; con «www.» y sin él, la relectura fresca reiniciaba el juicio una vez.
+            espera = new EsperaAsentada(ojos!, sitioFresco,
+                HuellaDeLoQueSeVe.De(sitio, "", Array.Empty<string>(), Array.Empty<string>()), RespiroMs, EsperaDeAsentarMs,
+                Superficies.MismaPantalla);
+        }
+        // «Ni la esperada ni la de partida»: la esperada ya contestó arriba en cada vuelta; aquí se descarta la de partida.
+        bool AsentadaEnOtra() => asentadaA >= 0 && !Superficies.MismaPantalla(juzgado, partida);
+
+        string PorQueNoDecidio()
+        {
+            if (espera == null) return "no hubo ubicación que juzgar (el «dónde» llegó vacío en todas las vueltas)";
+            if (asentadaA >= 0 && !AsentadaEnOtra())
+                return $"asentada en la de partida («{partida}»), y una página que aún no empezó a pintarse parece asentada: ahí no se declara nada antes del techo";
+            if (asentadaA >= 0)
+                return $"asentada en «{juzgado}» a los {asentadaA} ms, y el presupuesto de redirección ({PresupuestoDeRedireccionMs} ms) no venció antes del techo";
+            if (espera.AvisoDelSitio.Length > 0) return espera.AvisoDelSitio + $" (en «{juzgado}»)";
+            return espera.VecesQueSeMovio > 0
+                ? $"la pantalla no paró de moverse en «{juzgado}» (se movió en {espera.VecesQueSeMovio} de {espera.Sondeos} sondeo(s))"
+                : $"no le dio tiempo a asentarse en «{juzgado}»: la miraba desde los {desdeQueSeJuzga} ms ({espera.Sondeos} sondeo(s))";
+        }
+
+        void Linea(long t, string porQue) => Diario?.Invoke(
+            $"🛬 llegada a «{paso.Llegada}» tras {queParaElDiario}: "
+            + (partida.Length > 0 ? $"partida «{partida}»" : "partida sin leer")
+            + " · " + (cambios.Count > 0 ? "cambió a " + string.Join(" → ", cambios) : "no cambió de sitio")
+            + (asentadas.Count > 0 ? " · " + string.Join(" · ", asentadas) : "")
+            + (espera != null ? $" · {espera.Sondeos} sondeo(s) de huella en «{juzgado}»" : "")
+            + $" · dejó de esperar a los {t} ms: {porQue}");
+
+        string donde = "";
+        // EL RELOJ MANDA (promesa 245): el presupuesto se agota con el tiempo, no con las vueltas. Y es un Stopwatch, no el
+        // reloj por defecto del Compas: Environment.TickCount64 avanza a saltos de ~15,6 ms, y aquí se decide por la
+        // DIFERENCIA de dos instantes —asentada y presupuesto vencido—, que con ese reloj puede salir 15 ms corta o larga (el
+        // mismo hallazgo de la fase 4 con MsHastaElVeredicto). Mide el mismo tiempo de pared: sin ojos, se espera lo mismo.
+        var reloj = System.Diagnostics.Stopwatch.StartNew();
+        var compasLlegada = new Compas(EsperaMaximaMs, () => reloj.ElapsedMilliseconds);
+        for (;;)
+        {
+            long t = compasLlegada.Transcurrido;
+            donde = _donde() ?? "";
+            Vio(donde, t);
+            // La pantalla cogida a medio cambiar es la misma pantalla (promesa 226): comparar con
+            // Equals dejó una comprobación entera en «17 de 19» el 2026-09-11.
+            if (Superficies.MismaPantalla(paso.Llegada, donde)) { Linea(t, "llegó"); return true; }
+
+            if (comoHoy.Length == 0 && donde.Length > 0)
+            {
+                if (espera == null || !Superficies.MismaPantalla(donde, juzgado)) Juzga(donde, t);
+                switch (espera!.Sondea(t - desdeQueSeJuzga))
+                {
+                    case EsperaAsentada.Paso.NoSePudoMirar:
+                        comoHoy = espera.Causa;   // ya no se mira: se espera como hoy, y la línea dice por qué
+                        break;
+                    case EsperaAsentada.Paso.CambioDeSitio:
+                        // EL SITIO RELEÍDO FRESCO MANDA (regla 2b): «dónde» sale de una memoria de 400 ms y puede ir por detrás.
+                        Vio(espera.SitioAhora, t);
+                        if (Superficies.MismaPantalla(paso.Llegada, espera.SitioAhora)) { Linea(t, "llegó (lo vio el sitio releído fresco)"); return true; }
+                        Juzga(espera.SitioAhora, t);
+                        break;
+                    case EsperaAsentada.Paso.Asentada:
+                        asentadaA = t;
+                        asentadas.Add($"asentada en «{juzgado}» a los {t} ms");
+                        break;
+                    default:
+                        // SE MOVIÓ DESPUÉS DE ASENTARSE: ya no está asentada, y su presupuesto no puede seguir corriendo.
+                        if (asentadaA >= 0 && espera.VecesQueSeMovioTrasAsentarse > 0)
+                        {
+                            asentadas.Add($"se movió en «{juzgado}» a los {t} ms");
+                            Juzga(juzgado, t);
+                        }
+                        break;
+                }
+                if (espera != null && espera.VecesQueSeMovio != movidas) { movidas = espera.VecesQueSeMovio; quietaDesde = t; }
+
+                // ASENTADA EN OTRA Y SIGUIÓ ALLÍ EL PRESUPUESTO DE REDIRECCIÓN: ahora sí es un desvío, y no antes.
+                if (comoHoy.Length == 0 && AsentadaEnOtra() && t - asentadaA >= PresupuestoDeRedireccionMs)
+                {
+                    // ANTES DE DECLARARLO, EL SITIO FRESCO (regla 2b), como antes de declarar una asentada.
+                    string fresco = "";
+                    try { fresco = sitioFresco() ?? ""; }
+                    catch (Exception e) { comoHoy = "no pude releer el sitio antes de declarar el desvío: " + EsperaAsentada.Cadena(e); }
+                    // Vacío no es «sigue allí» (patrón nº9): sin saber dónde, no se declara nada y se espera como hoy.
+                    if (comoHoy.Length == 0 && fresco.Length == 0)
+                        comoHoy = "el sitio releído fresco llegó vacío antes de declarar el desvío";
+                    if (comoHoy.Length == 0)
+                    {
+                        Vio(fresco, t);
+                        if (Superficies.MismaPantalla(paso.Llegada, fresco)) { Linea(t, "llegó (lo vio el sitio releído fresco)"); return true; }
+                        if (Superficies.MismaPantalla(fresco, juzgado))
+                        {
+                            long alli = t - asentadaA;
+                            Linea(t, $"desvío: asentada en «{juzgado}» —ni la esperada ni la de partida— y siguió allí {alli} ms, el presupuesto de redirección ({PresupuestoDeRedireccionMs} ms)");
+                            desvio = $"{que} y quedé en «{juzgado}», pero la demostración llegaba a «{paso.Llegada}»: la pantalla se "
+                                   + $"asentó en «{juzgado}» y siguió allí {alli} ms sin saltar a la esperada, así que no era una "
+                                   + "redirección. Eso NO es haberlo hecho, y no sigo sobre una pantalla que no es la del plan.";
+                            return false;
+                        }
+                        Juzga(fresco, t);
+                    }
+                }
+            }
+
+            // SE MIRA CUANDO SE PUEDE DECIDIR, no hasta 120 ms tarde: en el instante en que la regla ya puede dar la pantalla
+            // por asentada (un respiro quieta, y pasada la primera), y en el instante en que vence el presupuesto de
+            // redirección. Medido el 22-09 en el caso 1 de la 356: con la vuelta fija de 120 ms y el reloj a saltos, el desvío
+            // salió a los 603 ms de un plazo que empieza a los ~500 (100 hasta asentarse, 400 de presupuesto): cada decisión
+            // llegaba una vuelta tarde. Sin ojos no cambia nada: la vuelta es la de siempre.
+            long siguiente = 120;
+            if (comoHoy.Length == 0 && espera != null)
+            {
+                long ahora = compasLlegada.Transcurrido;
+                if (asentadaA < 0)
+                {
+                    long puedeDecidir = Math.Max(quietaDesde + RespiroMs, desdeQueSeJuzga + EsperaDeAsentarMs);
+                    if (puedeDecidir > ahora) siguiente = Math.Min(siguiente, puedeDecidir - ahora);
+                }
+                else if (AsentadaEnOtra())
+                    siguiente = Math.Min(siguiente, asentadaA + PresupuestoDeRedireccionMs - ahora);
+            }
+            if (!compasLlegada.Respira((int)Math.Clamp(siguiente, 1, 120))) break;
+        }
+
+        Linea(compasLlegada.Transcurrido, comoHoy.Length > 0 ? "llegó al techo, como hoy: " + comoHoy : "llegó al techo: " + PorQueNoDecidio());
         desvio = $"{que} y quedé en «{donde}», pero la demostración llegaba a «{paso.Llegada}»: eso "
                + "NO es haberlo hecho, y no sigo sobre una pantalla que no es la del plan.";
         return false;
+    }
+
+    /// <summary>
+    /// POR QUÉ LA LLEGADA NO MIRA y se espera como hoy (356), con palabras que distinguen cada causa (patrón nº2); vacío =
+    /// sí mira. Los casos de la regla 4 de la spec 047 que aplican aquí, con las mismas palabras que en <c>Pulsa</c>.
+    /// </summary>
+    private static string PorQueLaLlegadaSeEsperaComoHoy(Func<HuellaDeLoQueSeVe?>? ojos, string partida, string llegada)
+    {
+        if (ojos == null) return "nadie miraba (sin huella inyectada)";
+        // Sin la de partida no se distingue «aún no empezó a pintarse» de «se fue a otra»: vacío no es ausente (patrón nº9).
+        if (partida.Length == 0) return "no supe dónde estaba antes de actuar (la ubicación llegó vacía), y sin la de partida no se distingue «aún no se pintó» de «se fue a otra»";
+        // SAP: desde UIA una sesión es un Pane opaco; lo de dentro no cambiaría nunca y toda pantalla saldría «asentada».
+        // Con el presupuesto en el techo no cambiaría nada; el día que la medida (d) lo baje, SAP no puede quedar debajo.
+        if (Teach.Mundos.EsSap(partida) || Teach.Mundos.EsSap(llegada))
+            return "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)";
+        return "";
     }
 
     /// <summary>
@@ -406,11 +640,20 @@ public sealed class RecorrerSegunElNucleo
 
         // LA PANTALLA ASENTADA NO SE ESPERA (promesa 299). La huella es lo que una mirada deja en el grafo: dónde
         // estamos y qué puertas están vivas. Dos miradas con la misma huella = nada se está pintando.
-        string? huellaDeLaPrimera = null;
+        //
+        // UNA SOLA DEFINICIÓN DE «CAMBIÓ» (promesa 352, spec 047). Hasta el 2026-09-22 esta compuerta fabricaba su
+        // propia huella —un texto «dónde + selectores unidos por |»— mientras la espera de después de pulsar comparaba
+        // otra cosa, y «cambió» se calculaba con criterios distintos según el sitio (aprendizaje nº16: dos lados de una
+        // comparación que salen de funciones distintas). Ahora se construye por HuellaDeLoQueSeVe.De y se compara por
+        // MismaPantallaQueVe, que juzga SOLO el sitio y lo de dentro: las dos partes de siempre, así que la 299 dice lo
+        // mismo que decía. Aquí «dentro» son los selectores de las puertas vivas que dejó la mirada, no los RuntimeId de
+        // la huella barata de la espera: la misma forma (identidades ordenadas por De) y el mismo comparador. «Delante» y
+        // «ventanas» van vacías a propósito: la compuerta no las mira, y MismaPantallaQueVe no las compara.
+        HuellaDeLoQueSeVe? huellaDeLaPrimera = null;
         bool asentada = false, seMovio = false;
         long msDeLaUltimaMirada = 0;
-        string Huella(string donde) => donde + "\n" + string.Join("|",
-            _grafo.DesdeAqui(donde).Where(a => a.Vivo).Select(a => a.Que.Selector).OrderBy(x => x, StringComparer.Ordinal));
+        HuellaDeLoQueSeVe HuellaDeLaCompuerta(string donde) => HuellaDeLoQueSeVe.De(
+            donde, "", _grafo.DesdeAqui(donde).Where(a => a.Vivo).Select(a => a.Que.Selector), Array.Empty<string>());
         bool Mira(string donde)
         {
             var crono = System.Diagnostics.Stopwatch.StartNew();
@@ -475,7 +718,7 @@ public sealed class RecorrerSegunElNucleo
                 {
                     miradas = 1;
                     // Sin haber podido mirar no hay huella, y sin huella no se sabe si está asentada: no se adivina.
-                    if (Mira(aqui)) { huellaDeLaPrimera = Huella(aqui); continue; }
+                    if (Mira(aqui)) { huellaDeLaPrimera = HuellaDeLaCompuerta(aqui); continue; }
                 }
 
                 // ¿ASENTADA? La segunda mirada se adelanta: si ve lo mismo que la primera, esperar no trae nada.
@@ -485,7 +728,7 @@ public sealed class RecorrerSegunElNucleo
                     miradas = 2;
                     if (Mira(aqui))
                     {
-                        if (Huella(_donde() ?? "") == huellaDeLaPrimera) asentada = true; else seMovio = true;
+                        if (HuellaDeLoQueSeVe.MismaPantallaQueVe(HuellaDeLaCompuerta(_donde() ?? ""), huellaDeLaPrimera)) asentada = true; else seMovio = true;
                         continue;   // una vuelta más: la mirada pudo traer la puerta, y eso se comprueba arriba
                     }
                 }

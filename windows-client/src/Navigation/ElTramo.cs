@@ -22,7 +22,8 @@ namespace U.WindowsClient.Navigation;
 ///
 /// PARA SOLO, Y DICE POR CUÁL (292): objetivo cumplido, tope, el decisor no se atreve, la mano no pudo, el
 /// freno, o la misma puerta tres veces sin que cambie la pantalla —el detector de bucle que el diagnóstico
-/// pide desde los 80 taps en (330,222)—. Cada paso cuenta, hecho o no (patrón nº10).
+/// pide desde los 80 taps en (330,222)—, o cinco sin cambiar nunca de sitio (353: una ventana que cambia sola).
+/// Cada paso cuenta, hecho o no (patrón nº10).
 ///
 /// ESTA CLASE NO LEE LA PANTALLA NI PULSA: lo hace el paso que le dan (<see cref="Manos.Paso"/>), que es el
 /// mismo de <c>map_decidir</c>. Así el contrato la juzga entera con delegados falsos, sin pantalla.
@@ -35,10 +36,34 @@ public sealed class ElTramo
     /// <summary>La misma puerta, sin que cambie la pantalla, estas veces seguidas: se para.</summary>
     public const int RepeticionesQueParan = 3;
 
+    /// <summary>
+    /// La misma puerta sin cambiar NUNCA de sitio —solo dentro o delante— estas veces seguidas: también se para (353, revisión del
+    /// 23-09).
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ HACE FALTA, además de la de arriba. El veredicto compara lo que se veía antes del clic con lo último que se vio, así
+    /// que en una ventana que cambia SOLA —ChatGPT.exe mientras genera, Gmail cuando entra correo, una web con anuncios que rotan—
+    /// sale «dentro» en cada clic, lo haga el clic o no. Con el detector contando solo «nada», un botón muerto se pulsaba hasta el
+    /// tope de 15, esperando el techo en cada paso: el «lado seguro» de la espera (una pantalla que no para de moverse llega al
+    /// techo) era el inseguro del detector. CINCO Y NO TRES: un desplegable que se abre y se cierra para elegir da «dentro» con
+    /// razón, y la 353 exige que tres de esos no sean un bucle. Es una red, no una medida: la afina el nivel 4.
+    /// </remarks>
+    public const int RepeticionesSinSitioQueParan = 5;
+
     /// <summary>Lo que pasó en un paso del tramo. Lo produce el mapa; el tramo solo lo lee.</summary>
+    /// <remarks>
+    /// <paramref name="QueCambio"/> (spec 047, promesa 353): cuál de los cuatro veredictos dio pulsar. Es lo que lee el
+    /// detector de bucle, no <paramref name="Cambio"/>, que solo mira el sitio. Quien no lo dice —los once parámetros de
+    /// siempre— hereda de <paramref name="Cambio"/>: cambió = de sitio; no cambió = nada. Así un paso que se construyó
+    /// antes de que hubiera huella dice lo mismo que decía.
+    /// </remarks>
     public readonly record struct Paso(
         bool Actuo, bool Termino, bool Cambio, string Selector, string Etiqueta, string Numero, double Confianza, string Cuenta, string Porque, bool Cumplido,
-        string Tiempos = "");
+        string Tiempos = "", HuellaDeLoQueSeVe.QueCambio QueCambio = HuellaDeLoQueSeVe.QueCambio.Nada)
+    {
+        public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; } =
+            Cambio && QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada ? HuellaDeLoQueSeVe.QueCambio.DeSitio : QueCambio;
+    }
 
     /// <summary>Las manos del tramo, todas inyectables.</summary>
     public sealed record Manos(
@@ -130,7 +155,7 @@ public sealed class ElTramo
     private void Bucle()
     {
         _manos.AlEmpezar?.Invoke($"tramo: {_objetivo}");
-        int hechos = 0, repetidas = 0;
+        int hechos = 0, repetidas = 0, sinSitio = 0;
         string motivo;
         try
         {
@@ -167,13 +192,27 @@ public sealed class ElTramo
 
                 if (!p.Termino) { motivo = $"la mano no pudo: {p.Cuenta}"; break; }
 
-                // EL DETECTOR DE BUCLE: la misma puerta, y la pantalla que no cambia. Tres seguidas paran.
-                bool repite = p.Selector == _ultimoSelector && !p.Cambio;
+                // EL DETECTOR DE BUCLE: la misma puerta, y NADA que cambiara. Tres seguidas paran. Hasta el 22-09 contaba
+                // «!Cambio», que solo mira el sitio: una puerta que abre un menú —cambió dentro— tres veces seguidas paraba
+                // por «bucle», y un desplegable que se abre para elegir no es un bucle (353). «Dentro» y «delante» no son
+                // llegada (44), pero tampoco son «nada».
+                bool repite = p.Selector == _ultimoSelector && p.QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada;
                 repetidas = repite ? repetidas + 1 : 1;
+                // Y LA MISMA PUERTA SIN CAMBIAR NUNCA DE SITIO (revisión del 23-09): «dentro» y «delante» no son «nada», pero en una
+                // ventana que cambia sola salen en cada clic. Se cuentan aparte, con su propio umbral.
+                bool repiteSinSitio = p.Selector == _ultimoSelector && p.QueCambio != HuellaDeLoQueSeVe.QueCambio.DeSitio;
+                sinSitio = repiteSinSitio ? sinSitio + 1 : 1;
                 _ultimoSelector = p.Selector;
                 if (repetidas >= RepeticionesQueParan)
                 {
                     motivo = $"pulsé la misma puerta «{p.Etiqueta}» tres veces y la pantalla no cambió: esto es un bucle, y no sigo.";
+                    break;
+                }
+                if (sinSitio >= RepeticionesSinSitioQueParan)
+                {
+                    // DICE LO QUE NO PUEDE DISTINGUIR (patrón nº2): «cambió dentro» cinco veces puede ser el clic o la ventana sola.
+                    motivo = $"pulsé la misma puerta «{p.Etiqueta}» cinco veces seguidas y nunca cambió de sitio, solo por dentro o delante: "
+                           + "no distingo si lo cambió mi clic o si la ventana cambia sola, y no sigo.";
                     break;
                 }
             }
@@ -201,7 +240,7 @@ public sealed class ElTramo
     {
         string conf = p.Confianza.ToString("0.00", CultureInfo.InvariantCulture);
         string linea = hecho
-            ? $"paso {k}: «{p.Etiqueta}» ({p.Numero}) conf {conf} · {(p.Termino ? (p.Cambio ? "cambió" : "no cambió") : "no pudo")}"
+            ? $"paso {k}: «{p.Etiqueta}» ({p.Numero}) conf {conf} · {(p.Termino ? QueCambioEnPalabras(p.QueCambio) : "no pudo")}"
             : $"paso {k}: sin acción · {p.Porque}";
         // LOS TIEMPOS POR FASE VAN AL LOG Y NO AL NOTCH: son para medir la fase 4 del plan (esperar es
         // suscribirse), y en el notch serían ruido.
@@ -209,6 +248,18 @@ public sealed class ElTramo
         try { _manos.Progreso(linea); } catch { }
         lock (_candado) _pasos.Append(hecho ? $"«{p.Etiqueta}» ({p.Numero}) {(p.Termino ? "✓" : "✗")}, " : $"sin acción en el {k}, ");
     }
+
+    /// <summary>
+    /// Qué cambió en el paso, con las palabras de la 353. Hasta el 22-09 era «cambió / no cambió» por el sitio, y un menú
+    /// que se abría se contaba «no cambió»: la línea decía lo mismo de una puerta muerta que de una que sí hizo algo.
+    /// </summary>
+    private static string QueCambioEnPalabras(HuellaDeLoQueSeVe.QueCambio que) => que switch
+    {
+        HuellaDeLoQueSeVe.QueCambio.DeSitio => "cambió de sitio",
+        HuellaDeLoQueSeVe.QueCambio.Dentro => "cambió dentro",
+        HuellaDeLoQueSeVe.QueCambio.Delante => "cambió delante",
+        _ => "no cambió",
+    };
 
     private static string Seguro(Func<string> f) { try { return f() ?? ""; } catch { return ""; } }
     private static bool Seguro(Func<bool> f) { try { return f(); } catch { return false; } }
