@@ -6,7 +6,7 @@ namespace U.WindowsClient.Cardio;
 
 /// <summary>
 /// Qué se le manda al modelo y cómo se entiende lo que devuelve. Es pura: no abre red ni pantalla, y
-/// por eso el contrato la juzga entera (promesas 346-348).
+/// por eso el contrato la juzga entera (promesas 350-352).
 /// </summary>
 /// <remarks>
 /// LOS PROMPTS VIVEN AQUÍ Y NO EN GRAPH, y es una decisión con precio (spec 046): Graph es otro repo
@@ -131,7 +131,7 @@ public static class LecturaCardio
         });
 
     /// <summary>
-    /// Una pregunta. NO LLEVA IMÁGENES (promesa 348): trabaja sobre lo ya extraído, que es más barato,
+    /// Una pregunta. NO LLEVA IMÁGENES (promesa 352): trabaja sobre lo ya extraído, que es más barato,
     /// más rápido y más privado —las fotos no vuelven a salir del equipo por una pregunta—.
     /// </summary>
     public static string CuerpoPreguntar(string modelo, IReadOnlyList<ResultadoFoto> resultados, string resumen,
@@ -154,7 +154,7 @@ public static class LecturaCardio
 
     /// <summary>
     /// Lo que viaja de las fotos cuando no viajan las fotos: SOLO las cardiológicas, y de ellas solo lo
-    /// leído. Las omitidas no entran ni con su motivo (promesa 347), aunque alguien las haya rellenado.
+    /// leído. Las omitidas no entran ni con su motivo (promesa 351), aunque alguien las haya rellenado.
     /// </summary>
     private static string Extracciones(IReadOnlyList<ResultadoFoto> resultados)
     {
@@ -247,7 +247,7 @@ public static class LecturaCardio
     }
 
     /// <summary>
-    /// UN RESULTADO POR FOTO, en el orden de las fotos (promesa 346). Primero por id; lo que no casa, por
+    /// UN RESULTADO POR FOTO, en el orden de las fotos (promesa 350). Primero por id; lo que no casa, por
     /// orden entre lo que sobró; y lo que se quede sin nada, <see cref="EstadoDeFoto.SinLeer"/>.
     /// </summary>
     public static List<ResultadoFoto> Emparejar(string respuesta, IReadOnlyList<string> ids)
@@ -322,7 +322,7 @@ public static class LecturaCardio
 
         if (cardio != true)
         {
-            // DE LA OMITIDA SOLO EL MOTIVO (promesa 347). Lo demás que haya devuelto el modelo se tira
+            // DE LA OMITIDA SOLO EL MOTIVO (promesa 351). Lo demás que haya devuelto el modelo se tira
             // aquí, en código: que la interfaz la pinte «omitida» no bastaría para que su contenido no
             // acabara en el resumen o en una respuesta del chat.
             string motivo = Cadena(e, "motivo_omision");

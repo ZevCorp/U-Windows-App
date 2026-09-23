@@ -48,7 +48,7 @@ public sealed class ClienteCardio
     /// </summary>
     /// <remarks>
     /// LO QUE FALTA es lo que no tiene lectura o quedó «sin leer»: una foto ya leída no se vuelve a
-    /// pagar al agregar otras (promesa 353). Si un lote falla, lo leído antes se queda, se lanza
+    /// pagar al agregar otras (promesa 357). Si un lote falla, lo leído antes se queda, se lanza
     /// diciendo QUÉ lote y POR QUÉ, y no se hace resumen: uno a medias parecería completo.
     /// </remarks>
     public async Task GenerarAsync(SesionCardio s, Action<string> progreso, CancellationToken ct)

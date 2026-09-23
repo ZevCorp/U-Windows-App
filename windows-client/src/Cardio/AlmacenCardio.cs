@@ -6,7 +6,7 @@ using U.WindowsClient.Diagnostics;
 namespace U.WindowsClient.Cardio;
 
 /// <summary>
-/// Dónde vive la sesión de estudios entre dos arranques de Ü, y cuándo deja de vivir (promesa 350).
+/// Dónde vive la sesión de estudios entre dos arranques de Ü, y cuándo deja de vivir (promesa 354).
 /// </summary>
 /// <remarks>
 /// ES EL INDEXEDDB DE LA PETICIÓN, EN WINDOWS: <c>%LOCALAPPDATA%\U\cardio\</c>, con la sesión en
