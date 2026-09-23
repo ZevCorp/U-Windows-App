@@ -850,10 +850,10 @@ internal static class Contrato
         // 386-393: 341-349 los gastó main el mismo día (la 344 fue de esta spec hasta el merge de 7380fd8, y 345-349 hasta el de 043addc), y 351-385 son de las ramas B, C y D.
         Prueba("388. la distribución de Jev se valida ENTERA antes de cualquier compuerta: cada probabilidad finita y en [0,1], la suma 1 (±0,02), las claves exactamente las que viajaron —ni una de más ni una de menos—, la elegida el máximo y sin empate, y la confianza finita y en [0,1]; cualquier cosa fuera de forma es «no sé»: no se acciona, el porqué nombra CADA regla que falló con su campo y su valor crudo —no solo la primera—, la decisión conserva la confianza cruda y no ofrece alternativas, y nada se convierte en 0 ni se satura; y un cuerpo de error que no se pudo leer dice por qué en vez de callarlo", LaDistribucionSeValidaEntera);
         Prueba("389. «cumplido» y «peligro» fallan cerrados: si alguna falta, no es número, no es finita o está fuera de [0,1] se toma el caso peor —peligro 1, cumplido 0—, no se acciona, y el porqué dice cuál falta o cuál vino y con qué valor; un 0 solo abre la compuerta cuando Jev lo dijo", LasNoulsFallanCerradas);
-        Prueba("390. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
+        Prueba("390. lo irreversible no se pulsa por decisión: una candidata cuya etiqueta es peligrosa —grabar, guardar, finalizar, borrar, eliminar, enviar, firmar— o destructiva —send, delete, comprar, pagar: la lista de SafeToClick.EsDestructivo— no se pulsa desde map_decidir ni desde el tramo, ni como elegida ni como segunda mejor, aunque Jev la dé con confianza 0,99 y peligro 0; la mano no la recibe, la decisión vetada deja de decir que acciona —la línea «decisor:» no dice ACCIONA, dice que está vetada—, la cuenta dice cuál se vetó y por qué, el control vuelve con el inventario; y el cuerpo deja de pedirle a Jev «la que menos daño haga»", LoIrreversibleNoSePulsaPorDecision);
         Prueba("391. «ninguna» es una opción de la pregunta: además de TODAS las puertas ofrecidas viaja «0) ninguna» —nada de esta pantalla avanza hacia el objetivo— como una opción más del choice; si Jev la elige no se acciona y se dice que no lo ve en esta pantalla, con su probabilidad; y la añade quien pregunta, no CuerpoDeEleccion, así que la 282 sigue tal cual", NingunaEsUnaOpcionDeLaPregunta);
         Prueba("392. el modelo configurado llega al cuerpo: con U_TYPESAFE_MODELO=X el cuerpo que manda el interruptor lleva «model»:«X», sin la variable lleva el alias por defecto, y el estado del botón y el cuerpo nombran el mismo modelo; la firma Elegir de seis argumentos se conserva como el ÚNICO método con ese nombre y delega en ElegirConModelo con los valores por defecto", ElModeloConfiguradoLlegaAlCuerpo);
-        Prueba("393. a Jev solo viaja lo que la política permite: en sapgui:// sin U_DECISOR_SAP_TEXTO=si el transporte no se toca ni una vez y no se acciona —la decisión dice que no manda texto y que decide Luna, sin caer a ninguna regla local—; un origin vetado (los del portal clínico por defecto, más los de U_DECISOR_TEXTO_VETADO) tampoco viaja ni se decide; de la ubicación viaja solo el origin, nunca el título ni la ruta; y la política vive en un solo sitio y compara el prefijo por el mismo camino que el resto del código", AJevSoloViajaLoQueLaPoliticaPermite);
+        Prueba("393. a Jev solo viaja lo que la política permite: en SAP —sapgui://, o su ventana vista por UIA (uia://sap…)— sin U_DECISOR_SAP_TEXTO=si el transporte no se toca ni una vez y no se acciona —la decisión dice que no manda texto y que decide Luna, sin caer a ninguna regla local—; un origin vetado (los del portal clínico por defecto, más los de U_DECISOR_TEXTO_VETADO) tampoco viaja ni se decide; de la ubicación viaja solo el origin, nunca el título ni la ruta; y la política vive en un solo sitio y compara el prefijo por el mismo camino que el resto del código", AJevSoloViajaLoQueLaPoliticaPermite);
         Prueba("350. las filas nunca viajan por su texto: GuiGridFila, GuiTreeFila y GuiTreeCarpeta llegan a Jev como «N) fila (tipo)», sin etiqueta, también con SAP habilitado; la respuesta se mapea por id a la puerta ofrecida y la mano sigue pulsando por selector; y lo que viajó no se registra por su texto: la línea «decisor:», el relato de map_decidir y la línea «paso k:» del tramo nombran una fila por número y tipo, y dicen cuántos ids viajaron de cuántos, cuántas filas fueron sin texto y cuántos caracteres se mandaron", LasFilasNuncaViajanPorSuTexto);
         Prueba("386. «cumplido» solo con evidencia: un cumplido alto deja de accionar y el tramo para diciendo que Jev cree que ya está —con el porqué del decisor detrás— sin declarar el objetivo cumplido; lo decide el número, no el texto del porqué; y la cuenta del tramo devuelve el turno con lo que hay delante, para que lo compruebe quien sí puede —la llegada o la persona—", CumplidoSoloConEvidencia);
         Prueba("387. la masa de los cinco mejores y los tokens son señal, no compuerta: la decisión lleva N, la masa de los 5 mejores y los input_tokens que usage trajo —sin usage, «sin medir»—; los tres salen en la cuenta y en la línea «decisor:», también cuando no se acciona; ninguna decisión cambia por ellos; y «absent» no se pregunta", LaMasaYLosTokensSonSenalNoCompuerta);
@@ -13511,6 +13511,10 @@ internal static class Contrato
         // las claves: exactamente las que viajaron.
         NoCuadra(D(Respuesta046(N, new[] { (N, "0.9"), (B, "0.1"), (IdNinguna, "0"), ("Grabar", "0") }, "0.9")), "una clave de más", "sobra «Grabar»");
         NoCuadra(D(Respuesta046(N, new[] { (N, "1.0"), (IdNinguna, "0") }, "1.0")), "una clave de menos", $"falta «{B}»");
+        // UNA CLAVE REPETIDA (añadido tras la fase 9, 2026-09-22, y visto ROJO antes de su línea): JsonDocument de .NET 8
+        // enumera las dos, y hasta hoy la repetida desactivaba EN SILENCIO la suma y el máximo —4 leídas contra 3 vistas—
+        // sin añadir ninguna violación: esta respuesta, con la elegida a 0,05 y otra a 0,90, salía «en forma» y accionaba.
+        NoCuadra(D(Respuesta046(N, new[] { (N, "0.05"), (B, "0.90"), (IdNinguna, "0.05"), (B, "0.0") }, "0.9")), "una clave repetida", $"repetida «{B}»");
 
         // la elegida tiene que ser el máximo, y sin empate.
         NoCuadra(D(Respuesta046(N, new[] { (N, "0.31"), (B, "0.58"), (IdNinguna, "0.11") }, "0.31")), "choice no es el máximo", "0.31 < 0.58", c => Math.Abs(c - 0.31) < 1e-9);
@@ -13617,12 +13621,20 @@ internal static class Contrato
         pDecisor.SetValue(m.mapa, Decide((_, _, _) => DecisionCon(
             Decision("Si", "2) Grabar (Button)", 0.99, "Jev eligió «2) Grabar (Button)» con confianza 0.99."),
             new[] { ("2) Grabar (Button)", 0.99), ("1) Nuevo (Button)", 0.01) }, cumplido: 0.1, peligro: 0.0)));
-        string r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "guardar el triage" });
+        string r = "";
+        var lineas = LineasDelLog(() => r = m.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "guardar el triage" }));
         Debe(pulsos.Count == 0, $"«Grabar» elegida con 0,99 y peligro 0: la mano no la recibe; se pulsó [{string.Join(" · ", pulsos)}]");
         Debe(r.Contains("Grabar", StringComparison.Ordinal) && r.Contains("no se puede deshacer", StringComparison.Ordinal),
             $"y la cuenta dice cuál se vetó y por qué (dijo: «{Recorte(r)}»)");
         Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), "y el control vuelve con el inventario");
         Debe(m.mapa.UltimaMano is { } mano && !(bool)PropDe(mano, "Intento")!, "y la mano no lo cuenta como intento");
+        // LA DECISIÓN VETADA DEJA DE DECIR QUE ACCIONA (añadido tras la fase 9, 2026-09-22, y visto ROJO antes de su línea).
+        // Hasta hoy el veto se aplicaba DESPUÉS de registrar la decisión: la línea «decisor:» decía «ACCIONA «Grabar»» y la
+        // decisión seguía con Actuar=true, y un observador de la decisión —el evento de la rama C, el ticker de la D— diría
+        // «pulsando «Grabar»» sobre algo que no se pulsó: una caja que miente (patrón nº8) sobre lo irreversible.
+        string? decisorLinea = lineas.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal) && !l.Contains("✋", StringComparison.Ordinal));
+        Debe(decisorLinea != null && !decisorLinea.Contains("ACCIONA", StringComparison.Ordinal) && decisorLinea.Contains("vetada", StringComparison.Ordinal),
+            $"y la línea «decisor:» no dice ACCIONA de una vetada: dice que no acciona y que está vetada («{Recorte(decisorLinea ?? "(no hay)")}»)");
 
         // 2. LA SEGUNDA MEJOR TAMPOCO: A no está viva y la segunda es «Guardar» a 0,40. Se pulsa A, no Guardar.
         var m2 = MapaParaDecidir(pPuertas, ("A", "Button"), ("Guardar", "Button"), ("Buscar", "Button"))!.Value;
@@ -13645,6 +13657,36 @@ internal static class Contrato
         Debe(t.Pulsados.Count == 0, $"por el tramo tampoco se pulsa «Grabar»: se pulsó [{string.Join(" · ", t.Pulsados)}]");
         Debe(estado.Contains("Grabar", StringComparison.Ordinal) && estado.Contains("no se puede deshacer", StringComparison.Ordinal),
             $"y el tramo para diciendo cuál se vetó (dijo: «{Recorte(estado)}»)");
+
+        // 4. LO DESTRUCTIVO TAMBIÉN (añadido tras la fase 9, 2026-09-22, y visto ROJO antes de su línea). El veto solo
+        // consultaba PuertasPeligrosas —verbos en español hechos para SAP— y ya frenaba al decisor en web:// y uia://, donde
+        // «Send», «Delete», «Comprar ahora» o «Pagar» no muerden ahí: con el código de d905e6a los cuatro se pulsaban —medido
+        // en este rojo—, y SafeToClick.EsDestructivo sí los caza. Dos listas para la misma clase de error, y se consultaba una (patrón
+        // nº5): el freno que quedaba era la noul «peligro», el modelo juzgándose a sí mismo. Aquí Jev los da con 0,9 y
+        // peligro 0,3, por debajo de PeligroMaximo.
+        foreach (string destructiva in new[] { "Send", "Delete", "Comprar ahora", "Pagar" })
+        {
+            var md = MapaParaDecidir(pPuertas, ("Reply", "Button"), (destructiva, "Button"))!.Value;
+            var pulsosD = new List<string>();
+            md.mapa.RecorrerPorElNucleo = pasos => { pulsosD.Add(pasos[0].Exit); return Pulsado(pasos[0].Exit); };
+            pDecisor.SetValue(md.mapa, Decide((_, _, _) => DecisionCon(
+                Decision("Si", $"2) {destructiva} (Button)", 0.9, $"Jev eligió «2) {destructiva} (Button)» con confianza 0.90."),
+                new[] { ($"2) {destructiva} (Button)", 0.9), ("1) Reply (Button)", 0.1) }, cumplido: 0.1, peligro: 0.3)));
+            string rd = md.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "respóndele a Juan que sí" });
+            Debe(pulsosD.Count == 0, $"«{destructiva}» elegida con 0,9 y peligro 0,3: la mano no la recibe; se pulsó [{string.Join(" · ", pulsosD)}]");
+            Debe(rd.Contains(destructiva, StringComparison.Ordinal) && rd.Contains("no se puede deshacer", StringComparison.Ordinal),
+                $"y la cuenta dice que «{destructiva}» se vetó y por qué (dijo: «{Recorte(rd)}»)");
+        }
+        var mc = MapaParaDecidir(pPuertas, ("A", "Button"), ("Comprar ahora", "Button"))!.Value;
+        var pulsosC = new List<string>();
+        mc.mapa.RecorrerPorElNucleo = pasos => { pulsosC.Add(pasos[0].Exit); return pasos[0].Exit.Contains("name=A;") ? NoEsta(pasos[0].Exit) : Pulsado(pasos[0].Exit); };
+        pDecisor.SetValue(mc.mapa, Decide((_, _, _) => DecisionCon(
+            Decision("Si", "1) A (Button)", 0.6, "Jev eligió «1) A (Button)» con confianza 0.60."),
+            new[] { ("1) A (Button)", 0.60), ("2) Comprar ahora (Button)", 0.40) }, cumplido: 0.1, peligro: 0.0)));
+        string rc = mc.mapa.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "x" });
+        Debe(pulsosC.Count == 1 && pulsosC[0].Contains("name=A;"), $"A se pulsa y «Comprar ahora» (segunda, 0,40) NO: se pulsó [{string.Join(" · ", pulsosC)}]");
+        Debe(rc.Contains("Comprar ahora", StringComparison.Ordinal) && rc.Contains("no se puede deshacer", StringComparison.Ordinal),
+            $"y la cuenta dice que se vetó la segunda destructiva y por qué (dijo: «{Recorte(rc)}»)");
     }
 
     private static void NingunaEsUnaOpcionDeLaPregunta()
@@ -13666,7 +13708,10 @@ internal static class Contrato
         var transporte = (Func<string, string>)(c =>
         {
             cuerpo = c;
-            return Respuesta046(IdNinguna, new[] { (Puertas046[0], "0.15"), (Puertas046[1], "0.05"), (IdNinguna, "0.80") }, "0.80");
+            // LA CONFIANZA Y LA PROBABILIDAD DE «NINGUNA» SON NÚMEROS DISTINTOS (0,91 frente a 0,93 en el ejemplo documentado
+            // de TypeSafe). Hasta el 2026-09-22 el juez las ponía iguales, 0,80 y 0,80, y no podía ver que el porqué imprimía la
+            // confianza: la promesa salía verde sin comprobar lo que dice. Desde ahí van distintas, y se exige la probabilidad.
+            return Respuesta046(IdNinguna, new[] { (Puertas046[0], "0.15"), (Puertas046[1], "0.05"), (IdNinguna, "0.80") }, "0.91");
         });
         var d = elegir.Invoke(null, new object[] { "jev", "uia://explorer.exe/Descargas", "firmar el acta", Puertas046, 0.7, transporte })!;
 
@@ -13684,6 +13729,8 @@ internal static class Contrato
         Debe(!Actuar046(d), $"si Jev elige «ninguna», no se acciona (salió Actuar={Actuar046(d)})");
         Debe(Porque046(d).Contains("no lo veo en esta pantalla", StringComparison.Ordinal) && Porque046(d).Contains("0.80", StringComparison.Ordinal),
             $"y se dice que no lo ve en esta pantalla, con su probabilidad (dijo: «{Porque046(d)}»)");
+        Debe(!Porque046(d).Contains("0.91", StringComparison.Ordinal),
+            $"y lo que se dice como su probabilidad no es la confianza, 0,91 (dijo: «{Porque046(d)}»)");
 
         // LA AÑADE QUIEN PREGUNTA, NO CuerpoDeEleccion: con 3 opciones siguen saliendo 3 criterios (282, intacta).
         string json = (string)cuerpoDeEleccion.Invoke(null, new object[] { "jev-latest", "en x", "puerta", "¿qué puerta?", new[] { "1) A (Button)", "2) B (Button)", "3) C (Button)" } })!;
@@ -13805,6 +13852,24 @@ internal static class Contrato
         D(sap, Politica(Entorno(("U_DECISOR_SAP_TEXTO", "si"))));
         Debe(llamadas == 1, $"con U_DECISOR_SAP_TEXTO=si viaja: 1 llamada (se llamó {llamadas})");
 
+        // 1b. SAP VISTO POR UIA TAMBIÉN ES SAP (añadido tras la fase 9, 2026-09-22, y visto ROJO antes de su línea). Cuando el
+        // Scripting no da identidad —SAP Busy, o Identity() sin contestar—, SurfaceLocator cae al esquema uia:// con el
+        // proceso de SAP: «uia://saplogon.exe/…». La política solo reconocía sapgui://, y con el código de d905e6a esta
+        // pantalla viajaba —medido en este rojo: 1 llamada y Actuar=True—. Dos identidades para la misma pantalla
+        // (aprendizaje nº16). El criterio es el del localizador —el proceso empieza por «sap»—, no una lista de versiones.
+        llamadas = 0;
+        foreach (string porUia in new[] { "uia://saplogon.exe/Historia clinica de prueba", "uia://sapgui.exe/x" })
+        {
+            var dUia = D(porUia, Politica(_ => null));
+            Debe(llamadas == 0 && !Actuar046(dUia),
+                $"SAP GUI visto por UIA («{porUia}») sin U_DECISOR_SAP_TEXTO tampoco viaja ni se decide (llamadas={llamadas}, Actuar={Actuar046(dUia)})");
+            Debe(Porque046(dUia).Contains("U_DECISOR_SAP_TEXTO", StringComparison.Ordinal) && Porque046(dUia).Contains("Decide Luna", StringComparison.Ordinal)
+                 && !Porque046(dUia).Contains("simulad", StringComparison.OrdinalIgnoreCase),
+                $"y dice que no manda texto de SAP y que decide Luna, sin regla local (dijo: «{Porque046(dUia)}»)");
+        }
+        D("uia://saplogon.exe/x", Politica(Entorno(("U_DECISOR_SAP_TEXTO", "si"))));
+        Debe(llamadas == 1, $"y con U_DECISOR_SAP_TEXTO=si viaja como SAP: 1 llamada (se llamó {llamadas})");
+
         // 2. UN ORIGIN VETADO POR DEFECTO —el portal clínico— con un entorno VACÍO: no depende de ninguna variable.
         llamadas = 0;
         var d2 = D("web://app.itsmiracleai.com/consulta", Politica(_ => null));
@@ -13924,8 +13989,12 @@ internal static class Contrato
         // 2. map_decidir: la línea «decisor:» y el relato nombran la fila por número y tipo, y dicen cuánto viajó.
         var m = MapaParaDecidir(pPuertas, ("Nuevo", "Button"), (Fila, "GuiGridFila"), ("Triage/Urgencias", "GuiTreeFila"), ("Favoritos", "GuiTreeCarpeta"))!.Value;
         var pulsos = new List<string>();
-        // LA MANO FALSA NO REPITE LA ETIQUETA: lo que la mano real escribe («mano:») es anterior a Jev y queda fuera de la 350.
-        m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true); };
+        // LA MANO FALSA REPITE LA ETIQUETA, COMO LA REAL (RecorrerSegunElNucleo pasa elegido.Que.Etiqueta a PulsarSegunElNucleo,
+        // que cuenta «pulsé «{etiqueta}»»), y en una GuiGridFila esa etiqueta es el texto de la fila. Hasta el 2026-09-22 este
+        // juez usaba una mano que NO la repetía —«solo afecta a las líneas mano:»—, y lo que quedaba sin juzgar era el propio
+        // relato que la promesa nombra: salía «…pulsé «GIRALDO HERNAN · 2394346»…» por map_decidir y por «mapa-mcp ←» al log.
+        var manoReal = m.mapa.RecorrerPorElNucleo!;
+        m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return manoReal(pasos); };
         m.mapa.InventarioParaLosActos = () => "EN PANTALLA AHORA, en «uia://sap/NV2000» (1 elemento(s)):\n  «Nuevo» (Button)\n";
         U.WindowsClient.Decision.DecisionDeUnPaso Elegida() => Con046(
             DecisionCon(Decision("Si", ofrecidas[1], 0.85, "Jev eligió «2) fila (GuiGridFila)» con confianza 0.85."), cumplido: 0.1, peligro: 0.1),
@@ -13939,12 +14008,18 @@ internal static class Contrato
             $"y dice cuántos ids viajaron de cuántos, cuántas filas sin texto y cuántos caracteres («{Recorte(decisorLinea ?? "")}»)");
         Debe(decisorLinea != null && !decisorLinea.Contains(Fila, StringComparison.Ordinal), $"y no lleva el texto de la fila («{Recorte(decisorLinea ?? "")}»)");
         Debe(r.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && !r.Contains(Fila, StringComparison.Ordinal),
-            $"el relato de map_decidir nombra «fila 2 (GuiGridFila)» y no su texto (dijo: «{Recorte(r)}»)");
+            $"el relato de map_decidir nombra «fila 2 (GuiGridFila)» y no su texto, tampoco en lo que cuenta la mano (dijo: «{Recorte(r)}»)");
+        string? conTexto = lineas.FirstOrDefault(l => l.Contains(Fila, StringComparison.Ordinal));
+        Debe(conTexto == null, $"y ninguna línea del log de esa llamada lleva el texto de la fila, tampoco «mapa-mcp ←» («{Recorte(conTexto ?? "")}»)");
         Debe(pulsos.Count == 1 && pulsos[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano recibe el SELECTOR de la fila (recibió [{string.Join(" · ", pulsos)}])");
 
-        // 3. EL TRAMO: la línea «paso 1:», al log y al notch, tampoco lleva el texto.
+        // 3. EL TRAMO: la línea «paso 1:», al log y al notch, tampoco lleva el texto. Y cuando la mano NO termina, el tramo
+        // para con «la mano no pudo: {la cuenta del paso}» —al log («← tramo…») y al notch—: con una mano que, como la real,
+        // cuenta por la etiqueta y deja detrás lo que sigue vivo, ni la fila pulsada ni las otras filas salen por su texto
+        // (añadido tras la fase 9, 2026-09-22, y visto ROJO antes de su línea: ese motivo no lo juzgaba nadie).
         var t = MapaParaTramo(_ => Elegida(),
-            mano: _ => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true),
+            mano: _ => new RecorrerSegunElNucleo.Resultado(0, 1, "uia://sap/NWP1", false,
+                $"hice 0 de 1 y paré en el paso 1: no pude pulsar «{Fila}»: no respondió. Estás en «uia://sap/NWP1». Vivo aquí: «Triage/Urgencias», «Nuevo»."),
             puertas: new[] { ("Nuevo", "Button"), (Fila, "GuiGridFila"), ("Triage/Urgencias", "GuiTreeFila"), ("Favoritos", "GuiTreeCarpeta") })!;
         var lineasTramo = LineasDelLog(() => { t.Mapa.Call("map_tramo", Args(("objetivo", "abrir la primera fila"), ("tope", "1"))); EsperarTramo(t.Mapa, 8000); }, esperaMs: 100);
         string? pasoLog = lineasTramo.FirstOrDefault(l => l.Contains("paso 1:", StringComparison.Ordinal));
@@ -13954,6 +14029,15 @@ internal static class Contrato
         Debe(pasoNotch != null && !pasoNotch.Contains(Fila, StringComparison.Ordinal),
             $"y la del notch tampoco («{Recorte(pasoNotch ?? "(no hay)")}»)");
         Debe(t.Pulsados.Count == 1 && t.Pulsados[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano del tramo recibe el selector (recibió [{string.Join(" · ", t.Pulsados)}])");
+        string? noPudoLog = lineasTramo.FirstOrDefault(l => l.Contains("la mano no pudo", StringComparison.Ordinal));
+        string? noPudoNotch; lock (t.Progreso) noPudoNotch = t.Progreso.FirstOrDefault(l => l.Contains("la mano no pudo", StringComparison.Ordinal));
+        Debe(noPudoLog != null && noPudoNotch != null, $"el tramo para con «la mano no pudo», al log y al notch (log: «{Recorte(noPudoLog ?? "(no hay)")}»; notch: «{Recorte(noPudoNotch ?? "(no hay)")}»)");
+        Debe(noPudoLog != null && noPudoLog.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && noPudoLog.Contains("fila 3 (GuiTreeFila)", StringComparison.Ordinal),
+            $"y ese motivo nombra la fila pulsada y la que sigue viva por número y tipo («{Recorte(noPudoLog ?? "(no hay)")}»)");
+        string? filaEnTramo = lineasTramo.FirstOrDefault(l => l.Contains(Fila, StringComparison.Ordinal) || l.Contains("Triage/Urgencias", StringComparison.Ordinal));
+        string? filaEnNotch; lock (t.Progreso) filaEnNotch = t.Progreso.FirstOrDefault(l => l.Contains(Fila, StringComparison.Ordinal) || l.Contains("Triage/Urgencias", StringComparison.Ordinal));
+        Debe(filaEnTramo == null && filaEnNotch == null,
+            $"y ni el log ni el notch del tramo llevan el texto de ninguna fila (log: «{Recorte(filaEnTramo ?? "")}»; notch: «{Recorte(filaEnNotch ?? "")}»)");
 
         // 4. UNA FILA VETADA TAMPOCO SE NOMBRA POR SU TEXTO (390 + 350), ni como elegida ni como segunda mejor. El veto de
         // la fase 5 escribe dos líneas más con la etiqueta —la cuenta del veto y «✋ … vetada» en el log— y PorQue nombra por

@@ -93,10 +93,19 @@ public sealed class PoliticaDeLoQueViaja
         porque = "";
         string origin = UbicacionQueViaja(pantalla);
 
-        if (origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase) && !SapHabilitado)
+        // SAP TIENE DOS IDENTIDADES, y las dos son SAP (aprendizaje nº16). Cuando el Scripting no da identidad —SAP Busy,
+        // Identity() sin contestar—, SurfaceLocator cae al esquema uia:// con el proceso de SAP: «uia://saplogon.exe/…».
+        // Hasta el 2026-09-22 aquí solo se miraba sapgui://, y esa pantalla viajaba a Jev con lo que UIA y el terreno
+        // publicaran de ella (medido en el rojo de la fase 10, con el código de d905e6a: 1 llamada y Actuar=True). Se reconoce
+        // con el MISMO criterio que la acuñó (SurfaceLocator.IsSap: el proceso empieza por «sap»), no con una lista de
+        // versiones ni con Mundos.EsSapVistoPorUia, que solo conoce saplogon.exe.
+        bool sapPorUia = origin.StartsWith("uia://", StringComparison.OrdinalIgnoreCase)
+                         && U.WindowsClient.Uia.SurfaceLocator.IsSap(origin["uia://".Length..]);
+        if ((origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase) || sapPorUia) && !SapHabilitado)
         {
             string leido = _leidoSap.Length == 0 ? $"sin {VariableSap}=si" : $"con {VariableSap}=«{_leidoSap}» (se habilita solo con «si»)";
-            porque = $"sapgui:// {leido}: no se manda texto de SAP a Jev y no decido por regla local. Decide Luna.";
+            string cual = sapPorUia ? $"«{origin}» es SAP GUI visto por UIA," : "sapgui://";
+            porque = $"{cual} {leido}: no se manda texto de SAP a Jev y no decido por regla local. Decide Luna.";
             return false;
         }
 

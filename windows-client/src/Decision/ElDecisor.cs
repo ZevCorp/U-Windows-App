@@ -79,6 +79,15 @@ public sealed class DecisionDeUnPaso
     /// <summary>Lo que <c>usage.input_tokens</c> trajo (387). <c>null</c> = «sin medir»: un 0 sería un dato.</summary>
     public int? InputTokens { get; init; }
 
+    /// <summary>
+    /// Vacío si nada se vetó. Si no, POR QUÉ la puerta que Jev eligió no se pulsa aunque Jev quisiera: la lista determinista
+    /// de lo irreversible mordió (390). Con algo aquí, <see cref="Actuar"/> es falso. ES UN DATO, como <see cref="QueNoCuadro"/>:
+    /// hasta el 2026-09-22 el veto se aplicaba después y la decisión seguía diciendo Actuar=true —la línea «decisor:» escribía
+    /// «ACCIONA «Grabar»»—, y quien observara la decisión en vez del paso habría dicho «pulsando «Grabar»» sobre algo que no se
+    /// pulsó. «Se pulsó» lo dice el paso (<c>ElTramo.Paso.Actuo</c>); la decisión dice si se puede, y ya contando el veto.
+    /// </summary>
+    public string Veto { get; init; } = "";
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -93,27 +102,39 @@ public sealed class DecisionDeUnPaso
     internal static DecisionDeUnPaso No(string porque, double confianza = 0) =>
         new DecisionDeUnPaso(false, "", confianza, porque);
 
-    // LAS TRES COPIAS LLEVAN TODAS LAS PROPIEDADES (patrón nº5): una que se olvidara N/Masa5/InputTokens los devolvería a
-    // «sin medir» en silencio, y la línea «decisor:» diría que no se midió lo que sí se midió.
+    // LAS CUATRO COPIAS LLEVAN TODAS LAS PROPIEDADES (patrón nº5): una que se olvidara N/Masa5/InputTokens los devolvería a
+    // «sin medir» en silencio, y la línea «decisor:» diría que no se midió lo que sí se midió; una que se olvidara el Veto
+    // volvería a presentar como pulsable lo que la lista vetó.
     internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro, string queNoCuadro = "") =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro,
               Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
-              N = N, Masa5 = Masa5, InputTokens = InputTokens };
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto };
 
     /// <summary>La misma decisión, con lo que viajó para tomarla (350).</summary>
     internal DecisionDeUnPaso ConLoQueViajo(int viajaron, int filasSinTexto, int caracteres) =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
               Viajaron = viajaron, FilasSinTexto = filasSinTexto, Caracteres = caracteres,
-              N = N, Masa5 = Masa5, InputTokens = InputTokens };
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto };
 
     /// <summary>La misma decisión, con la señal de la respuesta (387). Nada de lo que decide cambia.</summary>
     internal DecisionDeUnPaso ConLaSenal(int n, double masa5, int? inputTokens) =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
               Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
-              N = n, Masa5 = masa5, InputTokens = inputTokens };
+              N = n, Masa5 = masa5, InputTokens = inputTokens, Veto = Veto };
+
+    /// <summary>
+    /// LA MISMA DECISIÓN, VETADA (390): ya no acciona, la puerta queda vacía —como en toda decisión que no acciona—, el porqué
+    /// pasa a ser el del veto, y el veto queda como dato en <see cref="Veto"/>. La confianza, las alternativas, las nouls, lo
+    /// que viajó y la señal se conservan: son lo que Jev contestó, y el veto no lo cambia.
+    /// </summary>
+    internal DecisionDeUnPaso ConVeto(string veto, string porque) =>
+        new DecisionDeUnPaso(false, "", Confianza, porque)
+            { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
+              Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = veto };
 
     /// <summary>
     /// LA SEÑAL EN UNA FRASE (387): «N=6 · masa5 0.98 · 1.2× lo plano · tokens 312». La escriben la línea «decisor:» y la
@@ -220,6 +241,7 @@ internal sealed class RespuestaDeJev
         // LAS PROBABILIDADES: cada una número, finita y en [0,1]; y las claves, exactamente las que viajaron.
         var vistas = new HashSet<string>(StringComparer.Ordinal);
         var leidas = new List<(string Puerta, double Probabilidad)>();
+        int propiedades = 0;
         bool hayObjeto = puerta.TryGetProperty("probabilities", out var probs) && probs.ValueKind == JsonValueKind.Object;
         if (!hayObjeto)
             violaciones.Add(puerta.TryGetProperty("probabilities", out var raw) ? $"probabilities={Recorta(raw.GetRawText())} no es un objeto" : "falta «probabilities»");
@@ -227,7 +249,12 @@ internal sealed class RespuestaDeJev
         {
             foreach (var pr in probs.EnumerateObject())
             {
-                vistas.Add(pr.Name);
+                propiedades++;
+                // UNA CLAVE REPETIDA ES UNA RESPUESTA AMBIGUA, y se dice (388). JsonDocument de .NET 8 enumera las dos; hasta
+                // el 2026-09-22 el HashSet se tragaba la segunda y la lista no, y esa diferencia apagaba EN SILENCIO la suma y el
+                // máximo de abajo sin añadir ninguna violación: la respuesta salía «en forma» y accionaba sobre una elegida a
+                // 0,05 con otra a 0,90. ¿Cuál de las dos vale? No se adivina: violación con nombre, y la repetida no se lee.
+                if (!vistas.Add(pr.Name)) { violaciones.Add($"repetida «{pr.Name}»"); continue; }
                 if (pr.Value.ValueKind != JsonValueKind.Number)
                 {
                     violaciones.Add($"probabilities[«{pr.Name}»]={pr.Value.GetRawText()} no es número");
@@ -244,8 +271,9 @@ internal sealed class RespuestaDeJev
         }
 
         // LA SUMA Y EL MÁXIMO solo se juzgan cuando cada valor que vino se pudo leer: la suma de un NaN no dice
-        // nada de la distribución, y ya se dijo arriba qué clave no era número.
-        bool todasLeidas = hayObjeto && leidas.Count == vistas.Count && leidas.Count > 0;
+        // nada de la distribución, y ya se dijo arriba qué clave no era número. Contra las PROPIEDADES que vinieron, no
+        // contra las claves distintas: con una repetida, juzgar la suma sobre la primera sería juzgar datos ambiguos.
+        bool todasLeidas = hayObjeto && leidas.Count == propiedades && leidas.Count > 0;
         if (todasLeidas)
         {
             double suma = 0;
@@ -566,10 +594,19 @@ public static class ElDecisor
         // «NINGUNA» VIAJÓ Y JEV LA ELIGIÓ (391): no es una puerta, así que no se acciona; se dice con su
         // probabilidad para poder mirar, con cien pasos, si separa aciertos de pérdidas. No es compuerta
         // calibrada: se registra y se devuelve a Luna.
+        // SU PROBABILIDAD, NO LA CONFIANZA: son números distintos —0,91 frente a 0,93 en el ejemplo documentado de TypeSafe,
+        // que calcula la confianza «from how probabilities is spread»—. Hasta el 2026-09-22 aquí salía la confianza con el
+        // nombre de la otra, y la calibración de «ninguna» se habría hecho con el número equivocado. La confianza ya va en la
+        // línea «decisor:» con su nombre (conf=). Aquí la distribución está validada (388), así que «ninguna» está en ella.
         if (!ofrecida && string.Equals(elegida, PeticionASystemOne.IdNinguna, StringComparison.Ordinal))
+        {
+            double pNinguna = double.NaN;
+            foreach (var (k, p) in alternativas)
+                if (string.Equals(k, PeticionASystemOne.IdNinguna, StringComparison.Ordinal)) { pNinguna = p; break; }
             return DecisionDeUnPaso.No(
-                $"Jev eligió «ninguna» ({confianza.ToString("0.00", CultureInfo.InvariantCulture)}): no lo veo en esta pantalla "
+                $"Jev eligió «ninguna» con probabilidad {pNinguna.ToString("0.00", CultureInfo.InvariantCulture)}: no lo veo en esta pantalla "
               + "—nada de lo que hay avanza hacia el objetivo—. No se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
+        }
 
         if (!ofrecida)
             return DecisionDeUnPaso.No(

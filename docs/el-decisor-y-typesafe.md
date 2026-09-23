@@ -45,7 +45,7 @@ respuesta posible**— y su `confidence` permite no actuar cuando duda.
 | `U_TYPESAFE_CONFIANZA` | `0.70` | Mínimo de confianza para actuar. Se actúa **al alcanzarlo**, no solo al superarlo. |
 | `U_TYPESAFE_TIMEOUT_MS` | `2000` | Plazo total, esperas entre reintentos incluidas. |
 | `U_TYPESAFE_MODELO` | `jev-latest` | Alias o versión fija (`jev-1.13.0`). |
-| `U_DECISOR_SAP_TEXTO` | *(ausente)* → SAP no manda | Solo `si` deja que una pantalla `sapgui://` mande su texto a Jev. Vacío es ausente. Ver *Lo que se le manda*. |
+| `U_DECISOR_SAP_TEXTO` | *(ausente)* → SAP no manda | Solo `si` deja que una pantalla de SAP —`sapgui://`, o su ventana vista por UIA, `uia://saplogon.exe/…`— mande su texto a Jev. Vacío es ausente. Ver *Lo que se le manda*. |
 | `U_DECISOR_TEXTO_VETADO` | *(ausente)* | Orígenes que no mandan texto, separados por `;` (`web://historia;uia://chrome.exe`), **además** de los vetados por defecto. |
 
 ### La clave no vive en el código, y no viaja en el cuerpo
@@ -96,12 +96,12 @@ nombre de la pantalla y las etiquetas, que son cromo»: era falso. La ubicación
 
 | Qué | ¿Viaja a Jev? |
 |---|---|
-| Una pantalla `sapgui://` | **No**, salvo `U_DECISOR_SAP_TEXTO=si` —y la variable no basta: hace falta además la decisión escrita del dueño y del hospital, que hoy no existe—. Sin eso el transporte no se toca, **no se decide por la regla local** y decide Luna |
+| Una pantalla de SAP: `sapgui://`, **o su ventana vista por UIA** (`uia://saplogon.exe/…`, lo que el localizador acuña cuando el Scripting no da identidad; se reconoce con su mismo criterio, el proceso empieza por «sap») | **No**, salvo `U_DECISOR_SAP_TEXTO=si` —y la variable no basta: hace falta además la decisión escrita del dueño y del hospital, que hoy no existe—. Sin eso el transporte no se toca, **no se decide por la regla local** y decide Luna. Hasta el 2026-09-22 la de UIA sí viajaba |
 | Un origin vetado | **No**, y decide Luna. Vetados por defecto, sin variable: `web://itsmiracleai.com` y `web://itsmiracleai.com.co` (en `web://`, el host y sus subdominios); más los de `U_DECISOR_TEXTO_VETADO` |
 | La ubicación, en el resto | **Solo su origin** (`uia://explorer.exe`, `web://mail.google.com`), nunca el título de la ventana ni la ruta |
 | El objetivo | **Sí, tal cual**. Puede llevar un nombre: es un riesgo aceptado, no se limpia aquí |
 | Las etiquetas en `uia://` y `web://` | **Sí salen de la máquina**: botones, pestañas, nombres de archivo, asuntos de correo. Es lo que Jev necesita para decidir |
-| Las filas (`GuiGridFila`, `GuiTreeFila`, `GuiTreeCarpeta`) | **Nunca su texto**, ni con SAP habilitado: viajan como «2) fila (GuiGridFila)» (promesa 350). La respuesta vuelve a la fila ofrecida y la mano pulsa por su selector. Y tampoco se **registran** por su texto: la línea `decisor:`, el relato de `map_decidir`, el veto y la línea `paso k:` del tramo la nombran «fila 2 (GuiGridFila)» |
+| Las filas (`GuiGridFila`, `GuiTreeFila`, `GuiTreeCarpeta`) | **Nunca su texto**, ni con SAP habilitado: viajan como «2) fila (GuiGridFila)» (promesa 350). La respuesta vuelve a la fila ofrecida y la mano pulsa por su selector. Y tampoco se **registran** por su texto: la línea `decisor:`, el relato de `map_decidir` —también lo que la mano cuenta dentro de él, «pulsé «…»», y por eso `mapa-mcp ←`—, el veto, la línea `paso k:` del tramo y su «la mano no pudo: …» la nombran «fila 2 (GuiGridFila)» |
 | El valor escrito en un campo | El inventario nombra el campo por su etiqueta, no por lo que contiene (**deducido** de la lectura del código, sin medir). Lo que UIA publique como *nombre* de un elemento sí viaja, y en algunos controles ese nombre es su contenido |
 
 ## Cómo entra en el bucle vivo: `map_decidir`
