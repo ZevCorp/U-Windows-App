@@ -35,6 +35,7 @@ public sealed class InterruptorDelDecisor
         _mapa = mapa ?? throw new ArgumentNullException(nameof(mapa));
         _reenviarCatalogo = reenviarCatalogo ?? (() => Task.CompletedTask);
         _log = log ?? (_ => { });
+        FabricaDeTransporte = (cfg, entorno) => ClienteTypeSafe.TransporteSegun(cfg, entorno, _log);
     }
 
     /// <summary>Si el decisor está enchufado ahora.</summary>
@@ -42,6 +43,18 @@ public sealed class InterruptorDelDecisor
 
     /// <summary>Qué hay, en una línea: para el botón y para el log.</summary>
     public string Estado { get; private set; } = "apagado: decide Luna.";
+
+    /// <summary>
+    /// De dónde sale el transporte con el que se le habla a TypeSafe. Por defecto,
+    /// <see cref="ClienteTypeSafe.TransporteSegun"/>; se puede fijar para juzgar el cableado sin red.
+    /// </summary>
+    /// <remarks>
+    /// ES UNA PROPIEDAD Y NO UN CUARTO ARGUMENTO porque la 290 instancia el interruptor por reflexión con el
+    /// constructor de tres. Y existe porque la 392 tiene que juzgar EL CUERPO QUE PRODUCE ESTE INTERRUPTOR,
+    /// no el del decisor a secas: lo que estaba roto era el cableado (el botón enseñaba <c>cfg.Modelo</c> y la
+    /// petición pedía el alias por defecto), y una prueba que llamara al decisor directamente no lo vería.
+    /// </remarks>
+    public Func<ConfiguracionDelDecisor, Func<string, string?>, Func<string, string>?> FabricaDeTransporte { get; set; }
 
     /// <summary>
     /// Enciende según lo que diga el entorno. Devuelve si quedó encendido; si no, <see cref="Estado"/> dice por qué.
@@ -61,10 +74,15 @@ public sealed class InterruptorDelDecisor
             return false;
         }
 
-        var transporte = ClienteTypeSafe.TransporteSegun(cfg, entorno, _log)
+        var transporte = (FabricaDeTransporte ?? ((c, e) => ClienteTypeSafe.TransporteSegun(c, e, _log)))(cfg, entorno)
             ?? (_ => throw new InvalidOperationException("no hay transporte con el que hablarle a TypeSafe"));
+        // EL MODELO QUE ENSEÑA EL BOTÓN ES EL QUE VIAJA EN EL CUERPO (392). Hasta el 2026-09-22 aquí se llamaba a
+        // Elegir de seis, que armaba el cuerpo con ModeloPorDefecto: Estado decía «jev-1.13.0» y la petición pedía
+        // «jev-latest». Y LA POLÍTICA QUE SE LEYÓ ES LA QUE SE APLICA (393): con la de por defecto aquí,
+        // U_DECISOR_TEXTO_VETADO se leía y no vetaba nada, y U_DECISOR_SAP_TEXTO=si no habilitaba nada (fase 6).
         _mapa.Decisor = (pantalla, objetivo, puertas) =>
-            ElDecisor.Elegir(cfg.Quien, pantalla, objetivo, puertas, cfg.Confianza, transporte);
+            ElDecisor.ElegirConModelo(cfg.Quien, pantalla, objetivo, puertas, cfg.Confianza, transporte,
+                cfg.Modelo, cfg.Politica);
         Voice.ConversacionEnVivo.ConDecisor = true;
         Encendido = true;
         Estado = $"encendido: {cfg.Quien} ({cfg.Modelo}), umbral {cfg.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}.";

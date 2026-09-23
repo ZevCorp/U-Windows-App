@@ -263,15 +263,42 @@ public sealed class SurfaceMapTools
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
         // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
         // (2026-09-18, 03:33-03:34): la etiqueta no es única; el id sí, y detrás lleva su selector.
+        // Y CON SU NOMBRE PARA CONTAR (promesa 350): la etiqueta, o «fila 2 (GuiGridFila)» si es una fila. Es lo que
+        // escriben la línea «decisor:», el relato y el Paso del tramo —que lo lleva a «paso k:», al log y al notch—: lo
+        // que no viaja a Jev por su texto tampoco se escribe por su texto. 1 sitio: el tramo no construye nombres,
+        // cuenta el que le dan. Lo decide la política, por el mismo camino con que decide qué viaja (aprendizaje nº16).
         var ids = new List<string>(puertas.Count);
-        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta)>(StringComparer.Ordinal);
+        var selectorDe = new Dictionary<string, (string Selector, string Etiqueta, string Nombre)>(StringComparer.Ordinal);
         for (int i = 0; i < puertas.Count; i++)
         {
             string id = $"{i + 1}) {puertas[i].Etiqueta} ({puertas[i].Tipo})";
             ids.Add(id);
-            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta);
+            selectorDe[id] = (puertas[i].Selector, puertas[i].Etiqueta, Decision.PoliticaDeLoQueViaja.NombreParaContar(id, puertas[i].Etiqueta));
         }
         var etiquetas = ids;
+        string Nombre(string id) => selectorDe.TryGetValue(id, out var p) ? p.Nombre : Decision.PoliticaDeLoQueViaja.NombreParaContar(id, id);
+
+        // LO QUE OTROS CUENTAN TAMPOCO LLEVA EL TEXTO DE UNA FILA (350, 2026-09-22). La mano real cuenta por la ETIQUETA
+        // —«pulsé «{etiqueta}»», «no pude pulsar «{etiqueta}»», los homónimos con su selector, «Vivo aquí: «…»»— y en una
+        // GuiGridFila la etiqueta es el texto de la fila y el selector lleva sus pares columna=valor. Esa cuenta se pega al
+        // relato de map_decidir —y de ahí a «mapa-mcp ←» en el log— y al Paso del tramo, que la escribe en «la mano no pudo:»
+        // al log y al notch. Hasta hoy salía tal cual: «…pulsé «GIRALDO HERNAN · 2394346»…», y el juez de la 350 no lo veía
+        // porque su mano falsa no repetía la etiqueta. Aquí se sustituye, entre comillas «», la etiqueta y el selector de
+        // CADA fila de esta pantalla por su nombre para contar —todas viajaron sin texto, no solo la elegida—; el resto, tal
+        // cual. Lo usan la cuenta de la mano y la frase del veto: un solo mecanismo para las dos (aprendizaje nº16).
+        string SinTextoDeFilas(string texto)
+        {
+            foreach (var p in selectorDe.Values)
+            {
+                if (string.Equals(p.Nombre, p.Etiqueta, StringComparison.Ordinal)) continue;
+                if (p.Selector.Length > 0) texto = texto.Replace($"«{p.Selector}»", $"«{p.Nombre}»", StringComparison.Ordinal);
+                if (p.Etiqueta.Length > 0) texto = texto.Replace($"«{p.Etiqueta}»", $"«{p.Nombre}»", StringComparison.Ordinal);
+                string recortada = p.Etiqueta.Trim();
+                if (recortada.Length > 0 && recortada.Length != p.Etiqueta.Length)
+                    texto = texto.Replace($"«{recortada}»", $"«{p.Nombre}»", StringComparison.Ordinal);
+            }
+            return texto;
+        }
 
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         Decision.DecisionDeUnPaso d;
@@ -288,15 +315,74 @@ public sealed class SurfaceMapTools
         }
         reloj.Stop();
 
+        // LO IRREVERSIBLE NO SE PULSA POR DECISIÓN (promesa 390, spec 046), y se mira AQUÍ, al construir las
+        // candidatas y antes de cualquier Take: es el único sitio por el que pulsan map_decidir y el tramo. Hasta el
+        // 2026-09-22 el único freno era la noul «peligro», que es el MODELO juzgándose a sí mismo: con «Grabar» a
+        // 0,99 y peligro 0 la mano lo recibía, y el tramo lo pulsó tres veces seguidas en el contrato. La lista
+        // determinista manda sobre el modelo. Consecuencia deliberada: ni el tramo ni map_decidir pulsan «Guardar» aunque
+        // el objetivo sea guardar; eso lo pulsa la persona, o Luna con un map_take explícito.
+        // LAS DOS LISTAS DEL REPO, NO UNA (patrón nº5, 2026-09-22): PuertasPeligrosas —verbos en español hechos para SAP,
+        // con «guardar»— y SafeToClick.EsDestructivo —la de responder diálogos, en español e inglés, sin «guardar» a
+        // propósito—. Con solo la primera el veto no veía «Send», «Delete», «Comprar ahora» ni «Pagar» (medido en el rojo de la
+        // fase 10: los cuatro se pulsaban), y ya frenaba al decisor también en web:// y uia://. Vetar si muerde cualquiera de las dos.
+        // UNA FILA VETADA SE NOMBRA POR NÚMERO Y TIPO (350): la frase nombra por la etiqueta, y la de una fila es dato. Se
+        // sustituye el nombre dentro de la frase (SinTextoDeFilas, arriba) en vez de escribir otra. Si la frase cambiara de
+        // forma y la sustitución dejara de casar, el texto volvería al log — y la parte 4 del juez de la 350 se pondría
+        // roja: esta línea tiene juez, no es una red que se cree puesta (aprendizaje nº18).
+        string Vetada(string id)
+        {
+            if (!selectorDe.TryGetValue(id, out var p)) return "";
+            bool peligrosa = Navigation.PuertasPeligrosas.EsPeligrosa(p.Etiqueta);
+            if (!peligrosa && !Navigation.SafeToClick.EsDestructivo(p.Etiqueta, out _)) return "";
+            // LA MISMA FRASE para las dos listas: «no se puede deshacer» es lo que la persona tiene que oír, venga de donde venga.
+            string porque = peligrosa ? Navigation.PuertasPeligrosas.PorQue(p.Etiqueta)
+                                      : $"«{p.Etiqueta.Trim()}» no se puede deshacer: te la dejo a ti.";
+            return SinTextoDeFilas(porque);
+        }
+        static string NumeroDe(string id) => id.Contains(')') ? id.Substring(0, id.IndexOf(')')) : id;
+
+        // EL VETO ES UN DATO DE LA DECISIÓN, NO UNA NOTA DETRÁS DE UN «ACCIONA» (390, 2026-09-22). Hasta hoy se miraba después de
+        // registrarla: la línea «decisor:» decía «ACCIONA «Grabar»» y la decisión seguía con Actuar=true, así que quien la
+        // observara —el evento de una decisión, un ticker que pinta «pulsando…»— diría que se pulsó algo que no se pulsó: una
+        // caja que miente (patrón nº8) sobre lo irreversible. Desde aquí la decisión vetada sale con Actuar=false y su Veto, y
+        // TODO lo que viene detrás —la línea, la cuenta, cualquier observador— ve la misma.
+        string elegidaId = d.Puerta;
+        string vetoElegida = d.Actuar ? Vetada(elegidaId) : "";
+        if (vetoElegida.Length > 0)
+            d = d.ConVeto(vetoElegida, $"Jev eligió «{Nombre(elegidaId)}» ({NumeroDe(elegidaId)}) y está vetada: {vetoElegida}");
+
         // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
-        // datos del terreno, y los datos son estas líneas.
-        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · {reloj.ElapsedMilliseconds} ms → "
-            + (d.Actuar ? $"ACCIONA «{d.Puerta}»" : "no acciona")
+        // datos del terreno, y los datos son estas líneas. Y CON LO QUE VIAJÓ (350): cuántos ids de cuántos, cuántos
+        // sin texto y cuántos caracteres —«viajan 0 de N» cuando no se le preguntó a nadie—; la elegida, por su nombre
+        // para contar. Hasta el 2026-09-22 esta línea escribía el id entero: una fila de NWP1, con su texto, al disco.
+        // Y CON LA SEÑAL (387): N, la masa de los 5 mejores «× lo plano» y los tokens —«sin medir» si no los hay—. UNA
+        // composición, la de la decisión, para la línea y para cada rama de la cuenta de abajo: dos frases para lo mismo
+        // acaban discrepando (aprendizaje nº16). SEÑAL, NO COMPUERTA: nada de este método la mira para decidir.
+        int sinTexto = d.FilasSinTexto;
+        string senal = d.Senal();
+        LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · viajan {d.Viajaron} de {etiquetas.Count} · "
+            + $"{sinTexto} {(sinTexto == 1 ? "fila" : "filas")} sin texto · {d.Caracteres} caracteres · {senal} · {reloj.ElapsedMilliseconds} ms → "
+            + (d.Actuar ? $"ACCIONA «{Nombre(d.Puerta)}»" : d.Veto.Length > 0 ? "no acciona: vetada" : "no acciona")
             + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
 
+        if (vetoElegida.Length > 0)
+        {
+            // LA ELEGIDA VETADA NO CAE A LA SEGUNDA: la segunda es para «no estaba», no para «Jev quiso pulsar algo
+            // que no se deshace». Si Jev apunta ahí, lo que hay que decidir ya no es de esta pieza.
+            var vetada = selectorDe[elegidaId];
+            string conf = d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+            LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Nombre}» ({NumeroDe(elegidaId)}) conf={conf}: {d.Veto}");
+            return Sin($"no se acciona: Jev eligió «{vetada.Nombre}» ({NumeroDe(elegidaId)}) con confianza {conf}, y {d.Veto} "
+                     + $"Lo irreversible no se pulsa por decisión. [{senal}]",
+                d.Porque, d.Confianza);
+        }
+
+        // «JEV CREE QUE YA ESTÁ» LO DECIDE EL NÚMERO, NO EL TEXTO DEL PORQUÉ (promesa 386, spec 046). Hasta el 2026-09-22
+        // también bastaba la palabra «cumplido» en el porqué: «…y el objetivo no parece cumplido…», con Cumplido=0,1, paraba
+        // el tramo por «ya está». El porqué es prosa para leer; lo que Jev contestó a la pregunta es el número.
         if (!d.Actuar)
-            return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
-                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo || d.Porque.Contains("cumplido", StringComparison.OrdinalIgnoreCase));
+            return Sin($"no se acciona: {d.Porque} [{senal}]", d.Porque, d.Confianza,
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo);
 
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
         // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
@@ -306,18 +392,31 @@ public sealed class SurfaceMapTools
             .Where(a => a.Puerta != d.Puerta && a.Probabilidad >= Decision.ElDecisor.SegundaMejorMinima && selectorDe.ContainsKey(a.Puerta))
             .OrderByDescending(a => a.Probabilidad)
             .FirstOrDefault();
-        if (segunda.Puerta != null) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+        // LA SEGUNDA VETADA NO SE AÑADE, y tampoco se busca una tercera en su lugar (sería adivinar, arriba). Queda
+        // anotado para decirlo si la primera no estaba: un paso no ejecutado deja rastro (patrón nº10).
+        string vetoSegunda = "";
+        if (segunda.Puerta != null)
+        {
+            vetoSegunda = Vetada(segunda.Puerta);
+            if (vetoSegunda.Length == 0) candidatos.Add((segunda.Puerta, segunda.Probabilidad));
+            else
+            {
+                vetoSegunda = $"la segunda, «{selectorDe[segunda.Puerta].Nombre}» ({NumeroDe(segunda.Puerta)}) con probabilidad "
+                            + $"{segunda.Probabilidad.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}, no la pruebo: {vetoSegunda}";
+                LogBus.Log("decisor", $"✋ «{aqui}» · vetada {vetoSegunda}");
+            }
+        }
 
         var relato = new System.Text.StringBuilder();
         for (int k = 0; k < candidatos.Count; k++)
         {
             var (id, prob) = candidatos[k];
             if (!selectorDe.TryGetValue(id, out var puerta))
-                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.",
+                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna. [{senal}]",
                     $"contestó «{id}», que no se ofreció", d.Confianza);
             string numero = id.Substring(0, id.IndexOf(')'));
             var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
-            string cuenta = Take(puerta.Selector, "", decir, recuerdo);
+            string cuenta = SinTextoDeFilas(Take(puerta.Selector, "", decir, recuerdo));
             relojPulsar.Stop();
             var mano = _ultimaMano;
             string tiempos = $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · pulsar {relojPulsar.ElapsedMilliseconds} ms";
@@ -329,18 +428,23 @@ public sealed class SurfaceMapTools
             // homónimos (eso es otra clase de respuesta: falta elegir cuál de las iguales, no otra puerta).
             bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0)
                          && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
+            // LA SEÑAL VA UNA VEZ, pegada a la elegida por Jev —la primera candidata—, sea cual sea la rama (387).
+            string conSenal = k == 0 ? $" [{senal}]" : "";
             if (noEstaba && k + 1 < candidatos.Count)
             {
-                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
+                relato.Append($"«{puerta.Nombre}» ({numero}){conSenal} no estaba: {cuenta}; probé la segunda: ");
                 continue;
             }
             if (noEstaba)
-                relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}");
+                relato.Append($"«{puerta.Nombre}» ({numero}){conSenal} no estaba: {cuenta}")
+                      .Append(vetoSegunda.Length > 0 ? $"; {vetoSegunda}" : "");
             else
-                relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
+                relato.Append($"elegida «{puerta.Nombre}» ({numero}) {medida}{conSenal}: {cuenta}");
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
-            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
+            // EL TRAMO RECIBE EL NOMBRE PARA CONTAR en el campo Etiqueta (350): lo escribe en «paso k:», en la cuenta y
+            // en «la misma puerta tres veces». Pulsa por Selector, así que no necesita el texto para nada.
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Nombre, numero, prob, relato.ToString(), d.Porque, false, tiempos);
         }
         return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }
