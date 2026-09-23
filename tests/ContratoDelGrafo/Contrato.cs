@@ -13947,6 +13947,12 @@ internal static class Contrato
         double acumulado2 = Numero(coste, "Acumulado");
         Debe(Texto(dos, "Coste") == "$0.00007" && acumulado2 > acumulado1,
             $"dos pasos acumulan «$0.00007» (875·2·0,042/10⁶ = 0,0000735) y el acumulado crece: dijo «{Texto(dos, "Coste")}», {acumulado1:0.0000000} → {acumulado2:0.0000000}");
+        // UNA DECISIÓN SE FACTURA UNA VEZ: las líneas de progreso que llegan después son el mismo ciclo con
+        // la línea puesta, llevan sus tokens consigo y no vuelven a sumar. Sin esto cada «paso k: … · cambió»
+        // duplicaría el gasto del paso. (Añadida en la fase 2, antes que el código que la cumple.)
+        var trasLinea = Pinta(t, new CicloDeMentira { TokensFacturados = 875, Fase = "linea", Linea = "paso 2: «Buscar» (6) conf 0.52 · cambió" }, coste);
+        Debe(Texto(trasLinea, "Coste") == "$0.00007" && Math.Abs(Numero(coste, "Acumulado") - acumulado2) < 1e-12,
+            $"la línea de progreso de un paso ya facturado no vuelve a sumar: dijo «{Texto(trasLinea, "Coste")}», acumulado {acumulado2:0.0000000} → {Numero(coste, "Acumulado"):0.0000000}");
         var sinTokens = Pinta(t, new CicloDeMentira { TokensFacturados = null }, coste);
         Debe(Texto(sinTokens, "Coste") == "—" && Math.Abs(Numero(coste, "Acumulado") - acumulado2) < 1e-12,
             $"sin tokens facturados se enseña «—» y el acumulado NO crece: nunca se inventa un número (dijo «{Texto(sinTokens, "Coste")}», acumulado {Numero(coste, "Acumulado"):0.0000000})");
@@ -14002,6 +14008,28 @@ internal static class Contrato
             "«Grabar» no se deshace (peligro 0.80). Me detengo.", 0.42, "peligro alto, con la etiqueta de la elegida por su id");
         Dice(new CicloDeMentira { Actuar = false, Puerta = "", Confianza = 0.31, Cumplido = 0.1, Peligro = 0.1, Porque = "0.31 no llega al mínimo" },
             "No estoy seguro (0.31). Me detengo.", 0.42, "confianza bajo el umbral");
+        // «NO ESTOY SEGURO» ES UNA CAUSA —Jev dudó— y solo se dice cuando Jev contestó con su distribución.
+        // Sin ella el decisor no llegó a dudar (no contestó, contestó vacío, decide Luna), y su porqué ya
+        // distingue esas causas (ElDecisor.cs): se enseña tal cual (aprendizaje nº2). Y actuar se dice como
+        // lo que es, con la etiqueta y el número de la elegida por su id. (Las dos, añadidas en la fase 2
+        // antes que el código que las cumple: eran ramas del ticker sin juez.)
+        Dice(new CicloDeMentira { Actuar = false, Puerta = "", Confianza = 0, Probabilidades = null, Cumplido = 0, Peligro = 0,
+                Porque = "TypeSafe no contestó: HttpRequestException: sin red. Decide Luna." },
+            "TypeSafe no contestó: HttpRequestException: sin red. Decide Luna.", 0.42, "el decisor no se pronunció y no hay distribución");
+        Dice(new CicloDeMentira(), "Pulsando «Buscar» (6)", 0.82, "Jev actúa sobre la elegida, sin pulsada ni línea todavía");
+        // TAMPOCO DUDÓ si eligió una que no se ofreció: ElDecisor lo comprueba antes que nada y devuelve «no» CON
+        // la distribución (ElDecisor.cs, «que no está entre las N puertas»). Hay reparto, pero la primera no es de
+        // esta pantalla: su porqué lo dice, y «no estoy seguro» sería otra causa. (Añadida en la fase 2, antes
+        // que su código.)
+        const string porqueNoOfrecida = "Jev contestó «9) Grabar (Button)», que no está entre las 7 puertas de esta pantalla: no se acciona. Decide Luna.";
+        var decisionNoOfrecida = Crear(t.Decision, ("Actuar", false), ("Puerta", ""), ("Confianza", 0.7),
+            ("Alternativas", new List<(string Puerta, double Probabilidad)> { ("9) Grabar (Button)", 0.7), ("1) Nuevo (Button)", 0.3) }),
+            ("Cumplido", 0.1), ("Ausente", 0.1), ("Peligro", 0.0), ("Porque", porqueNoOfrecida));
+        var cicloNoOfrecida = Crear(t.Ciclo, ("Objetivo", "x"), ("Paso", 1), ("Candidatas", new CicloDeMentira().Candidatas(t.Candidata)),
+            ("Decision", decisionNoOfrecida), ("MsDecidir", 300), ("Fase", "decidido"));
+        var rNoOfrecida = t.De.Invoke(null, new[] { cicloNoOfrecida, Activator.CreateInstance(t.Coste)! })!;
+        Debe(Texto(rNoOfrecida, "Ticker") == porqueNoOfrecida && Math.Abs(Numero(rNoOfrecida, "Punto") - 0.42) < 0.001,
+            $"Jev eligió una que no se ofreció: su porqué tal cual y el punto a 0,42 (dijo «{Texto(rNoOfrecida, "Ticker")}», {Numero(rNoOfrecida, "Punto"):0.00})");
         // PULSAR LA SEGUNDA MEJOR SE DICE COMO LO QUE ES, venga por donde venga la noticia.
         Dice(new CicloDeMentira { Puerta = "1) Nuevo (Button)", Confianza = 0.6, Probabilidades = new[] { 0.6, 0.3, 0.05, 0.02, 0.02, 0.01, 0.0 }, Pulsada = "2", Fase = "linea", Linea = "paso 3: «Detalles» (2) conf 0.30 · no cambió" },
             "la 1.ª no estaba: pulsé la 2.ª «Detalles» (2)", 0.82, "la mano pulsó la segunda");
