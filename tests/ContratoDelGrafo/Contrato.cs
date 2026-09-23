@@ -13654,11 +13654,39 @@ internal static class Contrato
         var l2 = LineasDeMedida(inquieta);
         Debe(l2.Count == 1 && l2[0].Contains("nunca se asentó"), $"con una huella que nunca coincide la línea dice «nunca se asentó»: [{inquieta.DiarioJunto}]");
 
+        // 2b. Y AUNQUE NO SE ASIENTE, EL SITIO FRESCO SE SIGUE MIDIENDO (regla 2b: una relectura por respiro). Medido en la
+        // corrida de la fase 1 (22-09): con esta misma huella la línea decía «sitio fresco: 0 veces» en 1.200 ms con respiro
+        // 100. «Todavía no toca» se calculaba restando a long.MinValue, y la resta desborda a negativo (sonda del 22-09:
+        // -9,2e18), así que la relectura periódica no ocurría nunca antes de la primera asentada. El coste del sitio fresco
+        // es una de las partes que el nivel 4 tiene que medir (c), y en las pantallas que no se asientan no se medía.
+        var fresco = System.Text.RegularExpressions.Regex.Match(l2.FirstOrDefault() ?? "", @"sitio fresco \d+/\d+ ms × (\d+)");
+        int vecesFresco = fresco.Success ? int.Parse(fresco.Groups[1].Value) : 0;
+        Debe(vecesFresco >= 5,
+            $"y aunque no se asiente, el sitio fresco se relee una vez por respiro y la línea dice lo que costó: {vecesFresco} relectura(s) en {Techo047} ms con respiro 100: «{l2.FirstOrDefault()}»");
+
         // 3. NADIE MIRA: lo dice, con esas palabras. En el nivel 4 estas líneas tienen que ser 0, o la huella no llegó a
         // inyectarse y la medida no vale (refutación 7).
         var ciega = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null)!;
         var l3 = LineasDeMedida(ciega);
         Debe(l3.Count == 1 && l3[0].Contains("nadie miraba"), $"sin huella inyectada la línea sale igual y dice que nadie miraba: [{ciega.DiarioJunto}]");
+
+        // 4. LA HUELLA REAL LLEVA EL SITIO DESDE LA PRIMERA TOMA. HuellaEnVivo decidía «toca releer el sitio» con
+        // `ahora - _tSitio >= respiro` y _tSitio = long.MinValue: la misma resta que desborda, así que la PRIMERA huella de
+        // cada sesión salía con el sitio vacío y la segunda ya lo traía. En la línea de esa primera pulsación la parte que
+        // «lo vio» sería el sitio («» → el de verdad) sin que nada hubiera cambiado, y el sitio fresco «cambió» también: una
+        // medida falsa en el nivel 4 y, con la regla de la 351, un veredicto falso. Se juzga sin pantalla: sin ventana de
+        // trabajo, Tomar lanza; lo que se mira es si ANTES de lanzar leyó el sitio. El arnés SUPONE ese orden (el sitio
+        // primero, como está escrito en Tomar): si lanza por otra causa, no puede juzgarla y lo dice (aprendizaje nº17).
+        var tVivo = Capacidad("U.WindowsClient.Navigation.HuellaEnVivo");
+        if (tVivo == null) { Pendiente("Navigation.HuellaEnVivo (la huella real)", "355", "047"); return; }
+        int lecturas = 0;
+        var vivo = Activator.CreateInstance(tVivo, (Func<string>)(() => { lecturas++; return A047; }), (Func<IntPtr>)(() => IntPtr.Zero))!;
+        string porQueLanzo = "";
+        try { tVivo.GetMethod("Tomar")!.Invoke(vivo, null); }
+        catch (TargetInvocationException e) { porQueLanzo = e.InnerException?.Message ?? e.Message; }
+        if (!porQueLanzo.Contains("no hay ventana de trabajo"))
+        { Console.WriteLine($"   ⚠ NO PUDE JUZGAR la primera toma de HuellaEnVivo: sin ventana de trabajo esperaba «no hay ventana de trabajo» y fue «{porQueLanzo}»"); return; }
+        Debe(lecturas == 1, $"la primera huella de una sesión ya lee el sitio de trabajo (si no, la línea diría que el sitio cambió sin haber cambiado): {lecturas} lectura(s)");
     }
 
     private static void ComprobarLaLlegadaNoAgotaElTechoNiDeclaraEnElActo()

@@ -546,6 +546,29 @@ dé el presupuesto de redirección.
     máquina. Con las cuatro ramas de Jev juzgándose a la vez, un juez puede cargar los binarios de otra rama y
     dar el veredicto de otro código (D, no observado). Esta fase corrió con `TEMP` apuntando a una carpeta propia.
     Los scripts quedan fuera del alcance de la 047: anotado para una rama `chore/` con su promesa.
+- **2026-09-22, antes de la fase 2: dos «todavía no» que eran «nunca».** La corrida de la fase 1 decía, para una
+  huella que nunca se asentaba, `sitio fresco: 0 veces` en 1.200 ms con respiro 100 (M, `grafo-fase1.txt`): la
+  relectura del sitio «una vez por respiro» de la regla 2b no ocurría. La causa es aritmética: el «aún no se hizo»
+  se guardaba como `long.MinValue` y se preguntaba `t - _t >= respiro`, y esa resta **desborda a negativo** (sonda
+  de solo lectura del 22-09 con `Add-Type`: `ahora - long.MinValue = -9.223.372.036.479.354.230`, «≥ 250» → falso).
+  - **Sitios de la clase** (M, `grep MinValue` en `windows-client/src`, `windows-graph/src` y `nucleo`): **4**
+    marcas `long.MinValue` de «nunca»; **2** con guarda (`HuellaEnVivo._tDentro`, que pregunta `== long.MinValue`,
+    y `MemoriaCorta._cuando`, que va detrás de `_hay`) y **2 sin guarda, las dos de la fase 0 de esta rama**:
+    `EsperaAsentada._tFresco` (la relectura periódica no ocurría hasta la primera asentada) y `HuellaEnVivo._tSitio`
+    (la **primera** huella de cada sesión salía con el sitio vacío; la segunda ya lo traía, así que la línea de la
+    355 de la primera pulsación diría «cambió de sitio (lo vio: sitio, «» → «…»)» y «sitio fresco cambió» sin que
+    nada cambiara, y con la regla de la 351 sería un veredicto falso). Las dos pasan a `long?` (nulo = aún no), y la
+    clase queda en **0** sin guarda. Los `DateTime.MinValue` no son esta clase: su resta no desborda.
+  - **La 355 lo juzga ahora** (dos aserciones nuevas, rojas antes del arreglo: `CONTRATO ROTO: 19`, la 355 como
+    única promesa nueva en rojo, con «0 relectura(s)» y «0 lectura(s)»): con una huella que no se asienta la línea
+    cuenta ≥5 relecturas del sitio fresco en 1.200 ms; y la primera toma de `HuellaEnVivo` lee el sitio (se juzga
+    sin pantalla: sin ventana de trabajo `Tomar` lanza, y se mira si antes leyó el sitio; si lanza por otra causa
+    el arnés dice «no pude juzgarla»). Tras el arreglo `CONTRATO ROTO: 17`, veredicto a veredicto igual que la fase 1.
+    Dos sabotajes por diff, uno por línea, cada uno pone roja solo su aserción (`CONTRATO ROTO: 18`); restaurados
+    con hash idéntico → 17. Voz: `VOZ ÍNTEGRA` (46 ✔).
+  - **Para el nivel 4 de la fase 0**: se corre sobre **este commit**, no sobre la fase 2. Sin este arreglo la primera pulsación de cada sesión mediría un cambio de
+    sitio falso y la relectura del sitio no se mediría en las pantallas que no se asientan; y con la fase 2 la espera
+    deja de mirar al asentarse, así que ya no puede contar las «asentadas falsas» de la cuenta (b).
 
 ## Revisiones
 

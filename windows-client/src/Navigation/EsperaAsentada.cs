@@ -41,7 +41,9 @@ public sealed class EsperaAsentada
     private HuellaDeLoQueSeVe? _referencia;   // la huella con la que empezó la racha quieta
     private long _tReferencia;
     private HuellaDeLoQueSeVe? _ultima;
-    private long _tFresco = long.MinValue;
+    // NULO = AÚN NO SE RELEYÓ, y no long.MinValue: «t - long.MinValue» desborda a negativo (sonda del 22-09: -9,2e18) y la
+    // relectura de cada respiro no ocurría nunca antes de la primera asentada; la 355 lo midió: «sitio fresco: 0 veces».
+    private long? _tFresco;
     private bool _rota;
 
     /// <summary>A los cuántos ms dos huellas coincidieron por primera vez con un respiro en medio; -1 = nunca.</summary>
@@ -109,7 +111,7 @@ public sealed class EsperaAsentada
             return Paso.Asentada;
         }
 
-        if (t - _tFresco >= _respiroMs && ReleeElSitio(t)) return Paso.CambioDeSitio;
+        if ((_tFresco is not long tFresco || t - tFresco >= _respiroMs) && ReleeElSitio(t)) return Paso.CambioDeSitio;
         return Paso.Sigue;
     }
 

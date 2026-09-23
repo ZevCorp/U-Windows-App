@@ -31,7 +31,9 @@ public sealed class HuellaEnVivo
     public int RespiroMs { get; set; } = 250;
 
     private string _sitio = "";
-    private long _tSitio = long.MinValue;
+    // NULO = AÚN NO SE LEYÓ. Con long.MinValue, «ahora - _tSitio» desbordaba a negativo (sonda del 22-09) y la PRIMERA
+    // huella de cada sesión salía con el sitio vacío: su línea habría dicho que el sitio cambió sin cambiar (355).
+    private long? _tSitio;
     private IReadOnlyList<string> _dentro = Array.Empty<string>();
     private long _tDentro = long.MinValue;
     private string _delanteDeLaUltima = "";
@@ -65,7 +67,7 @@ public sealed class HuellaEnVivo
 
         // 1. EL SITIO, fresco como mucho cada respiro.
         long sitioMs = 0;
-        if (ahora - _tSitio >= RespiroMs) { SitioFresco(); sitioMs = crono.ElapsedMilliseconds; }
+        if (_tSitio is not long tSitio || ahora - tSitio >= RespiroMs) { SitioFresco(); sitioMs = crono.ElapsedMilliseconds; }
 
         // 2. LA VENTANA DE DELANTE, por Win32 (saltando las de Ü, la misma regla que la ventana de delante del localizador).
         crono.Restart();
