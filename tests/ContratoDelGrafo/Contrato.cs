@@ -14366,6 +14366,76 @@ internal static class Contrato
         tick.Invoke(vigilante, null);
         Debe(subidos.Count == 6 && subidos[5] == new IntPtr(5), "y la flecha, cuando se ve, sube la última: arriba del todo");
 
+        // ── Añadidas en la fase 7, antes que su código: cuatro ramas que la tabla de juicio dejaba pasar. ──
+        // (1) LA MISMA VENTANA REGISTRADA DOS VECES SUBE UNA. EntraAlGrupo puede volver a llamarse sobre la misma
+        // ventana —un Sincronizar repetido, como el Envolver de la 382— y una lista que la apunte dos veces la sube
+        // dos veces por tick: «una vez por ventana visible» deja de ser cierto sin que nada lo diga.
+        subidos.Clear();
+        Registra(4, "PanelDeJev");
+        tick.Invoke(vigilante, null);
+        Debe(subidos.Count == 6 && subidos.Count(h => h == new IntPtr(4)) == 1,
+            $"registrar dos veces la misma ventana no la sube dos veces: [{string.Join(", ", subidos.Select(h => h.ToInt64()))}]");
+
+        // (2) UNA VENTANA QUE SE CIERRA SALE DEL GRUPO. Las tres de Jev nacen al encenderlo y se cierran al apagarlo
+        // (383): sin salir, cada vuelta de Jev deja tres entradas que sujetan su ventana cerrada, y el reloj pregunta
+        // por ellas para siempre. Se juzga con una «visible» que dice que sí a propósito: fuera es fuera, no
+        // «escondida».
+        var sale = tVig.GetMethod("Sale");
+        if (sale == null) Debe(false, "VigilanteEnOrden.Sale(handle): una ventana que se cierra sale del grupo (falta el método)");
+        else
+        {
+            subidos.Clear();
+            sale.Invoke(vigilante, new object[] { new IntPtr(12) });
+            tick.Invoke(vigilante, null);
+            Debe(subidos.Count == 5 && !subidos.Contains(new IntPtr(12)),
+                $"la que salió no se sube aunque diga que se ve, y las demás sí: [{string.Join(", ", subidos.Select(h => h.ToInt64()))}]");
+
+            subidos.Clear();
+            if (p == typeof(IntPtr)) alMostrar.Invoke(vigilante, new object[] { new IntPtr(12) });
+            Debe(subidos.Count == 0, $"y mostrarla después de salir no reordena: [{string.Join(", ", subidos.Select(h => h.ToInt64()))}]");
+        }
+
+        // (3) «CUANDO UNA DEL GRUPO SE MUESTRA», y solo entonces: mostrar una ventana que no es del grupo no reordena
+        // nada; el reloj ya pasará. Para eso AlMostrar tiene que saber QUÉ ventana se mostró: con la capa sola, «una
+        // de las overlays» no dice cuál.
+        subidos.Clear();
+        if (p != typeof(IntPtr)) Debe(false, $"AlMostrar recibe el handle de la que se mostró, no {p.Name}");
+        else
+        {
+            alMostrar.Invoke(vigilante, new object[] { new IntPtr(99) });
+            Debe(subidos.Count == 0, $"mostrar una ventana que no es del grupo no reordena: [{string.Join(", ", subidos.Select(h => h.ToInt64()))}]");
+        }
+
+        // (4) UNA VENTANA QUE NO SE PUEDE SUBIR NO DEJA SIN SUBIR A LAS DE ENCIMA, Y LO DICE. El Vigilar de antes se lo
+        // tragaba con un catch mudo (patrón nº3): con un solo reloj para todas, lo que lance al subir la carita no
+        // puede dejar el notch, el panel y la flecha donde estaban, ni lo que lance al preguntar si una se ve. Y un
+        // fallo que se repite en cada tick —cada 3 s, para siempre— se dice una vez, no 1.200 por hora.
+        var conFallo = new List<IntPtr>();
+        var vigilanteConFallo = Activator.CreateInstance(tVig, new object[] { (Action<IntPtr>)(h =>
+        {
+            if (h == new IntPtr(2)) throw new InvalidOperationException("la carita de mentira no sube");
+            conFallo.Add(h);
+        }) })!;
+        foreach (var (h, capa, ve) in new (int, string, Func<bool>)[]
+        {
+            (2, "Carita", () => true), (3, "Notch", () => true),
+            (7, "PanelDeJev", () => throw new InvalidOperationException("el panel de mentira no sabe si se ve")),
+            (5, "Flecha", () => true),
+        })
+            registra.Invoke(vigilanteConFallo, new object[] { new IntPtr(h), Capa(capa), ve });
+        for (int vuelta = 0; vuelta < 2; vuelta++)
+        {
+            try { tick.Invoke(vigilanteConFallo, null); }
+            catch (TargetInvocationException e) { Debe(false, $"lo que lanza una ventana no sale del tick: salió {e.InnerException?.GetType().Name}: {e.InnerException?.Message}"); }
+        }
+        Debe(conFallo.SequenceEqual(new[] { new IntPtr(3), new IntPtr(5), new IntPtr(3), new IntPtr(5) }),
+            $"si la carita no sube y el panel no sabe si se ve, el notch y la flecha suben igual, en orden, en cada tick: [{string.Join(", ", conFallo.Select(h => h.ToInt64()))}]");
+        var lineasDelFallo = U.WindowsClient.Diagnostics.LogBus.Snapshot().Where(l => l.Contains("la carita de mentira no sube", StringComparison.Ordinal)).ToList();
+        Debe(lineasDelFallo.Count == 1 && lineasDelFallo[0].Contains("InvalidOperationException", StringComparison.Ordinal) && lineasDelFallo[0].Contains("Carita", StringComparison.Ordinal),
+            $"el log dice cuál no subió, con su tipo y su mensaje, y una sola vez en dos ticks: {lineasDelFallo.Count} línea(s)");
+        Debe(U.WindowsClient.Diagnostics.LogBus.Snapshot().Count(l => l.Contains("el panel de mentira no sabe si se ve", StringComparison.Ordinal)) == 1,
+            "y lo mismo si lo que lanza es preguntar si se ve: una línea");
+
         // (b) NINGUNA VIGILA POR SU CUENTA: el muelle y el notch entran al grupo y dejan de hacerlo.
         foreach (var archivo in new[] { "Muelle.cs", "PanelDeAcciones.cs" })
         {
@@ -14376,7 +14446,21 @@ internal static class Contrato
         }
         var siempre = FuenteDelRepo("windows-client/src/Ui/SiempreDelante.cs", "378");
         if (siempre != null)
+        {
             Debe(siempre.Contains("VigilanteEnOrden", StringComparison.Ordinal), "Ui/SiempreDelante.cs se apoya en VigilanteEnOrden: un solo reloj para el grupo");
+            // Añadida en la fase 7, antes que su código. «UN SOLO RELOJ» SE CUENTA: si el Vigilar de antes sigue al lado
+            // del grupo, cualquiera vuelve a llamarlo y hay dos relojes subiendo capas cada uno a su aire.
+            Debe(Apariciones(siempre, "new DispatcherTimer") == 1,
+                $"un solo reloj: Ui/SiempreDelante.cs crea exactamente 1 DispatcherTimer, y crea {Apariciones(siempre, "new DispatcherTimer")}");
+        }
+        // Y NINGUNA, NO SOLO ESTAS DOS (patrón nº5: se cuentan todos los sitios, no los que se conocían): ningún
+        // fuente del cliente llama a .Vigilar().
+        var cliente = FuentesBajo("windows-client/src", "378");
+        if (cliente != null)
+        {
+            var conVigilar = cliente.Where(x => x.Texto.Contains(".Vigilar()", StringComparison.Ordinal)).Select(x => x.Archivo).ToList();
+            Debe(conVigilar.Count == 0, $"ninguna ventana del cliente vigila por su cuenta: .Vigilar() en [{string.Join(", ", conVigilar)}]");
+        }
     }
 
     /// <summary>Promesa 379.</summary>
