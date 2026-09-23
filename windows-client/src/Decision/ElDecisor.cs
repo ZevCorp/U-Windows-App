@@ -63,6 +63,22 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public int Caracteres { get; init; }
 
+    /// <summary>
+    /// Cuántas claves viajaron en el choice: las puertas que viajan, sin repetir, más «ninguna» (387). 0 si no se le
+    /// preguntó a nadie. SEÑAL, NO COMPUERTA: ninguna decisión cambia por este número, ni por los dos de abajo.
+    /// </summary>
+    public int N { get; init; }
+
+    /// <summary>
+    /// La suma de las min(5, N) mayores probabilidades, en crudo (387). <c>NaN</c> = sin medir: no se le preguntó a Jev,
+    /// no contestó, o su distribución no cuadró —la masa de una distribución inválida no es una masa, igual que su
+    /// segunda mejor no es una segunda mejor (388)—. NaN y no 0, porque 0 sería un dato (patrón nº9).
+    /// </summary>
+    public double Masa5 { get; init; } = double.NaN;
+
+    /// <summary>Lo que <c>usage.input_tokens</c> trajo (387). <c>null</c> = «sin medir»: un 0 sería un dato.</summary>
+    public int? InputTokens { get; init; }
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -77,16 +93,44 @@ public sealed class DecisionDeUnPaso
     internal static DecisionDeUnPaso No(string porque, double confianza = 0) =>
         new DecisionDeUnPaso(false, "", confianza, porque);
 
+    // LAS TRES COPIAS LLEVAN TODAS LAS PROPIEDADES (patrón nº5): una que se olvidara N/Masa5/InputTokens los devolvería a
+    // «sin medir» en silencio, y la línea «decisor:» diría que no se midió lo que sí se midió.
     internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro, string queNoCuadro = "") =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro,
-              Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres };
+              Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
+              N = N, Masa5 = Masa5, InputTokens = InputTokens };
 
     /// <summary>La misma decisión, con lo que viajó para tomarla (350).</summary>
     internal DecisionDeUnPaso ConLoQueViajo(int viajaron, int filasSinTexto, int caracteres) =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
-              Viajaron = viajaron, FilasSinTexto = filasSinTexto, Caracteres = caracteres };
+              Viajaron = viajaron, FilasSinTexto = filasSinTexto, Caracteres = caracteres,
+              N = N, Masa5 = Masa5, InputTokens = InputTokens };
+
+    /// <summary>La misma decisión, con la señal de la respuesta (387). Nada de lo que decide cambia.</summary>
+    internal DecisionDeUnPaso ConLaSenal(int n, double masa5, int? inputTokens) =>
+        new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
+            { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
+              Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
+              N = n, Masa5 = masa5, InputTokens = inputTokens };
+
+    /// <summary>
+    /// LA SEÑAL EN UNA FRASE (387): «N=6 · masa5 0.98 · 1.2× lo plano · tokens 312». La escriben la línea «decisor:» y la
+    /// cuenta de map_decidir, y es UNA composición para las dos: dos frases para lo mismo acaban discrepando (aprendizaje
+    /// nº16). «Lo plano» es la masa que tendrían las min(5, N) mejores si Jev no distinguiera nada, k/N: medido en el
+    /// vídeo de Jev, 17–29× cuando acierta y 7× en el paso que no termina — seis puntos, SIN CALIBRAR. Por eso se
+    /// registra y no decide.
+    /// </summary>
+    public string Senal()
+    {
+        var ic = CultureInfo.InvariantCulture;
+        string masa = N > 0 && double.IsFinite(Masa5)
+            ? $"masa5 {Masa5.ToString("0.00", ic)} · {(Masa5 / (Math.Min(5, N) / (double)N)).ToString("0.0", ic)}× lo plano"
+            : "masa5 sin medir";
+        string tokens = InputTokens is int t ? $"tokens {t.ToString(ic)}" : "tokens sin medir";
+        return $"N={N} · {masa} · {tokens}";
+    }
 }
 
 /// <summary>
@@ -395,6 +439,11 @@ public static class ElDecisor
         queViaja.Add(PeticionASystemOne.IdNinguna);
         int viajaron = 0;
         foreach (var k in ofrecidaDe.Keys) if (!string.IsNullOrWhiteSpace(k)) viajaron++;
+        // N = LAS CLAVES QUE VAN EN EL CHOICE (387), contadas por el mismo camino con que CuerpoDeEleccion las escribe: sin
+        // blancos y sin repetir. Es el denominador de «lo plano»; contar la lista con repetidas lo inflaría.
+        var claves = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var k in queViaja) if (!string.IsNullOrWhiteSpace(k)) claves.Add(k);
+        int n = claves.Count;
 
         string cuerpo = "";
         string respuesta;
@@ -419,20 +468,29 @@ public static class ElDecisor
                 porque += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
             return Contada(DecisionDeUnPaso.No(porque + ". Decide Luna."));
         }
-        return Contada(Juzgar(respuesta, puertas.Count, ofrecidaDe, queViaja, umbral));
+        var juzgada = Juzgar(respuesta, puertas.Count, ofrecidaDe, queViaja, umbral, out double masa5, out int? tokens);
+        return Contada(juzgada, masa5, tokens);
 
         // LO QUE VIAJÓ VA EN CADA DECISIÓN QUE SALE DESPUÉS DE ENTREGAR EL CUERPO (350), también en las que no accionan:
-        // la línea «decisor:» lo cuenta, y lo que no queda contado no se puede auditar.
-        DecisionDeUnPaso Contada(DecisionDeUnPaso d) => d.ConLoQueViajo(viajaron, filasSinTexto, cuerpo.Length);
+        // la línea «decisor:» lo cuenta, y lo que no queda contado no se puede auditar. Y CON LA SEÑAL (387): N, la masa de
+        // los 5 mejores y los tokens, por el mismo camino y en cada rama; sin respuesta que leer, «sin medir».
+        DecisionDeUnPaso Contada(DecisionDeUnPaso d, double masa = double.NaN, int? inputTokens = null) =>
+            d.ConLoQueViajo(viajaron, filasSinTexto, cuerpo.Length).ConLaSenal(n, masa, inputTokens);
     }
 
     /// <summary>
     /// Lee la respuesta de Jev y aplica las compuertas, todas cerradas. Las claves de la respuesta son los ids que
     /// VIAJARON; <paramref name="ofrecidaDe"/> los devuelve a la puerta ofrecida, que es la que la mano sabe pulsar (350).
     /// </summary>
+    /// <param name="masa5">La masa de las 5 mejores de la distribución validada; <c>NaN</c> si no se pudo leer entera (387).</param>
+    /// <param name="tokens">Lo que <c>usage.input_tokens</c> trajo; <c>null</c> si no vino (387). Se lee ANTES de cualquier
+    /// compuerta, así que va también en las decisiones que no accionan.</param>
     private static DecisionDeUnPaso Juzgar(
-        string respuesta, int ofrecidas, IReadOnlyDictionary<string, string> ofrecidaDe, IReadOnlyList<string> queViaja, double umbral)
+        string respuesta, int ofrecidas, IReadOnlyDictionary<string, string> ofrecidaDe, IReadOnlyList<string> queViaja, double umbral,
+        out double masa5, out int? tokens)
     {
+        masa5 = double.NaN;
+        tokens = null;
         if (string.IsNullOrWhiteSpace(respuesta))
             return DecisionDeUnPaso.No("TypeSafe contestó vacío. Decide Luna.");
 
@@ -444,6 +502,7 @@ public static class ElDecisor
         try
         {
             using var doc = JsonDocument.Parse(respuesta);
+            tokens = InputTokensDe(doc.RootElement);
             if (!doc.RootElement.TryGetProperty("answers", out var answers))
                 return DecisionDeUnPaso.No("la respuesta de TypeSafe no trae «answers». Decide Luna.");
             if (!answers.TryGetProperty(PeticionASystemOne.IdDeLaPuerta, out var a))
@@ -458,6 +517,9 @@ public static class ElDecisor
             var leida = RespuestaDeJev.Validar(a, queViaja);
             elegida = leida.Elegida;
             confianza = leida.Confianza;
+            // LA MASA SALE DE LA DISTRIBUCIÓN VALIDADA (387): si no cuadró, sus alternativas vienen vacías y la masa queda sin
+            // medir. SEÑAL, NO COMPUERTA: ninguna línea de abajo la mira.
+            masa5 = Masa5De(leida.Alternativas);
             // LAS ALTERNATIVAS VUELVEN A LAS PUERTAS OFRECIDAS (350): la segunda mejor se busca por el selector de la
             // ofrecida (288), y «2) fila (GuiGridFila)» no está en esa lista. «Ninguna» no es una puerta y se queda como vino.
             var alt = new List<(string Puerta, double Probabilidad)>(leida.Alternativas.Count);
@@ -540,6 +602,29 @@ public static class ElDecisor
         return DecisionDeUnPaso.Si(puerta!, confianza,
             $"Jev eligió «{elegida}» con confianza {confianza.ToString("0.00", CultureInfo.InvariantCulture)}.")
             .Con(alternativas, cumplido, peligro);
+    }
+
+    /// <summary>
+    /// LA ÚNICA LECTURA DE <c>usage</c> (387). La API lo devuelve en cada respuesta —875, 1.913 y 4.635 tokens de entrada
+    /// con 20, 60 y 160 puertas (anatomía del clic, 2026-09-18)— y hasta el 2026-09-22 nadie lo leía. <c>null</c> es «sin
+    /// medir»: no vino <c>usage</c>, no es un objeto, o <c>input_tokens</c> no es un entero. Un 0 sería un dato (patrón nº9).
+    /// </summary>
+    private static int? InputTokensDe(JsonElement raiz) =>
+        raiz.ValueKind == JsonValueKind.Object
+        && raiz.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object
+        && u.TryGetProperty("input_tokens", out var t) && t.ValueKind == JsonValueKind.Number
+        && t.TryGetInt32(out int v) ? v : null;
+
+    /// <summary>
+    /// La suma de las min(5, N) mayores probabilidades, en crudo (387). <paramref name="ordenadas"/> viene de mayor a menor
+    /// (<see cref="RespuestaDeJev.Validar"/>); vacía —la distribución no cuadró— es <c>NaN</c>, «sin medir».
+    /// </summary>
+    private static double Masa5De(IReadOnlyList<(string Puerta, double Probabilidad)> ordenadas)
+    {
+        if (ordenadas.Count == 0) return double.NaN;
+        double masa = 0;
+        for (int i = 0; i < Math.Min(5, ordenadas.Count); i++) masa += ordenadas[i].Probabilidad;
+        return masa;
     }
 
     /// <summary>

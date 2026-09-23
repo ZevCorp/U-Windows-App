@@ -297,9 +297,13 @@ public sealed class SurfaceMapTools
         // datos del terreno, y los datos son estas líneas. Y CON LO QUE VIAJÓ (350): cuántos ids de cuántos, cuántos
         // sin texto y cuántos caracteres —«viajan 0 de N» cuando no se le preguntó a nadie—; la elegida, por su nombre
         // para contar. Hasta el 2026-09-22 esta línea escribía el id entero: una fila de NWP1, con su texto, al disco.
+        // Y CON LA SEÑAL (387): N, la masa de los 5 mejores «× lo plano» y los tokens —«sin medir» si no los hay—. UNA
+        // composición, la de la decisión, para la línea y para cada rama de la cuenta de abajo: dos frases para lo mismo
+        // acaban discrepando (aprendizaje nº16). SEÑAL, NO COMPUERTA: nada de este método la mira para decidir.
         int sinTexto = d.FilasSinTexto;
+        string senal = d.Senal();
         LogBus.Log("decisor", $"«{aqui}» · {etiquetas.Count} puerta(s) · viajan {d.Viajaron} de {etiquetas.Count} · "
-            + $"{sinTexto} {(sinTexto == 1 ? "fila" : "filas")} sin texto · {d.Caracteres} caracteres · {reloj.ElapsedMilliseconds} ms → "
+            + $"{sinTexto} {(sinTexto == 1 ? "fila" : "filas")} sin texto · {d.Caracteres} caracteres · {senal} · {reloj.ElapsedMilliseconds} ms → "
             + (d.Actuar ? $"ACCIONA «{Nombre(d.Puerta)}»" : "no acciona")
             + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
 
@@ -307,7 +311,7 @@ public sealed class SurfaceMapTools
         // también bastaba la palabra «cumplido» en el porqué: «…y el objetivo no parece cumplido…», con Cumplido=0,1, paraba
         // el tramo por «ya está». El porqué es prosa para leer; lo que Jev contestó a la pregunta es el número.
         if (!d.Actuar)
-            return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
+            return Sin($"no se acciona: {d.Porque} [{senal}]", d.Porque, d.Confianza,
                 cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo);
 
         // LO IRREVERSIBLE NO SE PULSA POR DECISIÓN (promesa 390, spec 046), y se mira AQUÍ, al construir las
@@ -339,7 +343,7 @@ public sealed class SurfaceMapTools
             string conf = d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
             LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) conf={conf}: {vetoElegida}");
             return Sin($"no se acciona: Jev eligió «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) con confianza {conf}, y {vetoElegida} "
-                     + "Lo irreversible no se pulsa por decisión.",
+                     + $"Lo irreversible no se pulsa por decisión. [{senal}]",
                 $"Jev eligió «{vetada.Nombre}» ({NumeroDe(d.Puerta)}) y está vetada: {vetoElegida}", d.Confianza);
         }
 
@@ -371,7 +375,7 @@ public sealed class SurfaceMapTools
         {
             var (id, prob) = candidatos[k];
             if (!selectorDe.TryGetValue(id, out var puerta))
-                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna.",
+                return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna. [{senal}]",
                     $"contestó «{id}», que no se ofreció", d.Confianza);
             string numero = id.Substring(0, id.IndexOf(')'));
             var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
@@ -387,16 +391,18 @@ public sealed class SurfaceMapTools
             // homónimos (eso es otra clase de respuesta: falta elegir cuál de las iguales, no otra puerta).
             bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0)
                          && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
+            // LA SEÑAL VA UNA VEZ, pegada a la elegida por Jev —la primera candidata—, sea cual sea la rama (387).
+            string conSenal = k == 0 ? $" [{senal}]" : "";
             if (noEstaba && k + 1 < candidatos.Count)
             {
-                relato.Append($"«{puerta.Nombre}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
+                relato.Append($"«{puerta.Nombre}» ({numero}){conSenal} no estaba: {cuenta}; probé la segunda: ");
                 continue;
             }
             if (noEstaba)
-                relato.Append($"«{puerta.Nombre}» ({numero}) no estaba: {cuenta}")
+                relato.Append($"«{puerta.Nombre}» ({numero}){conSenal} no estaba: {cuenta}")
                       .Append(vetoSegunda.Length > 0 ? $"; {vetoSegunda}" : "");
             else
-                relato.Append($"elegida «{puerta.Nombre}» ({numero}) {medida}: {cuenta}");
+                relato.Append($"elegida «{puerta.Nombre}» ({numero}) {medida}{conSenal}: {cuenta}");
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
             // EL TRAMO RECIBE EL NOMBRE PARA CONTAR en el campo Etiqueta (350): lo escribe en «paso k:», en la cuenta y

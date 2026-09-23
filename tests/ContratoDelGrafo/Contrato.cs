@@ -14072,26 +14072,53 @@ internal static class Contrato
         }
 
         // LA LÍNEA «decisor:» LLEVA LOS TRES, Y NINGUNA COMPUERTA LOS MIRA: con masa5 0,23 y conf 0,99 se acciona igual.
-        (SurfaceMapTools mapa, List<string> pulsos) Mapa(int? tokens)
+        (SurfaceMapTools mapa, List<string> pulsos) Mapa(int? tokens, bool actua = true)
         {
             var m = MapaParaDecidir(pPuertas, ("A", "Button"), ("B", "Button"))!.Value;
             var pulsos = new List<string>();
             m.mapa.RecorrerPorElNucleo = pasos => { pulsos.Add(pasos[0].Exit); return new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true, "hice los 1 paso(s) y ahora estás en «uia://sap/NV2000».", true); };
-            pDecisor.SetValue(m.mapa, Decide((_, _, _) => Con046(
-                DecisionCon(Decision("Si", "1) A (Button)", 0.99, "Jev eligió «1) A (Button)» con confianza 0.99."), cumplido: 0.1, peligro: 0.1),
+            var base046 = actua
+                ? Decision("Si", "1) A (Button)", 0.99, "Jev eligió «1) A (Button)» con confianza 0.99.")
+                : Decision("No", "Jev eligió «1) A (Button)» con confianza 0.40, por debajo del mínimo exigido (0.70): no se acciona a medias. Decide Luna.", 0.4);
+            pDecisor.SetValue(m.mapa, Decide((_, _, _) => Con046(DecisionCon(base046, cumplido: 0.1, peligro: 0.1),
                 ("N", 3), ("Masa5", 0.23), ("InputTokens", tokens))));
             return (m.mapa, pulsos);
         }
+        // EL TRAMO DE LA SEÑAL, de «masa5» a «tokens …»: la línea y la cuenta tienen que decir EXACTAMENTE lo mismo, porque
+        // salen de una sola composición (aprendizaje nº16: dos frases para lo mismo acaban discrepando). Añadido en la fase 9,
+        // visto rojo antes de sus líneas: el enunciado ya decía «en la cuenta», y el juez solo miraba la línea.
+        static string? Tramo387(string? s, string fin)
+        {
+            if (s == null) return null;
+            int a = s.IndexOf("masa5", StringComparison.Ordinal), b = s.IndexOf(fin, StringComparison.Ordinal);
+            return a < 0 || b < a ? null : s.Substring(a, b + fin.Length - a);
+        }
         var (conTokens, pulsos1) = Mapa(312);
-        var lineas = LineasDelLog(() => conTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
+        string r1 = "";
+        var lineas = LineasDelLog(() => r1 = conTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
         string? linea = lineas.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
         Debe(linea != null && linea.Contains("masa5", StringComparison.OrdinalIgnoreCase) && linea.Contains("×", StringComparison.Ordinal) && linea.Contains("tokens 312", StringComparison.Ordinal),
             $"la línea «decisor:» lleva masa5, «×» lo plano y los tokens («{Recorte(linea ?? "(no hay)")}»)");
         Debe(pulsos1.Count == 1, $"y con masa5 0,23 y conf 0,99 se acciona igual: la masa es señal, no compuerta (pulsos={pulsos1.Count})");
+        string? enLinea = Tramo387(linea, "tokens 312"), enCuenta = Tramo387(r1, "tokens 312");
+        Debe(enCuenta != null && enCuenta == enLinea,
+            $"y la cuenta de map_decidir lleva los tres, con las mismas palabras que la línea (línea «{enLinea ?? "(no los lleva)"}» · cuenta «{enCuenta ?? Recorte(r1)}»)");
+
+        // TAMBIÉN CUANDO NO SE ACCIONA: la línea y la cuenta los llevan igual, y no se pulsa nada.
+        var (noActua, pulsos3) = Mapa(312, actua: false);
+        string r3 = "";
+        var lineas3 = LineasDelLog(() => r3 = noActua.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
+        string? linea3 = lineas3.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
+        string? enLinea3 = Tramo387(linea3, "tokens 312"), enCuenta3 = Tramo387(r3, "tokens 312");
+        Debe(pulsos3.Count == 0 && enLinea3 != null && enCuenta3 == enLinea3,
+            $"sin accionar, la línea y la cuenta llevan la señal igual (pulsos={pulsos3.Count} · línea «{enLinea3 ?? Recorte(linea3 ?? "(no hay)")}» · cuenta «{enCuenta3 ?? Recorte(r3)}»)");
+
         var (sinTokens, _) = Mapa(null);
-        var lineas2 = LineasDelLog(() => sinTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
+        string r2 = "";
+        var lineas2 = LineasDelLog(() => r2 = sinTokens.Call("map_decidir", new Dictionary<string, string> { ["objetivo"] = "abrir A" }));
         string? linea2 = lineas2.FirstOrDefault(l => l.Contains("decisor:", StringComparison.Ordinal));
         Debe(linea2 != null && linea2.Contains("tokens sin medir", StringComparison.Ordinal), $"y sin usage dice «tokens sin medir», no un número («{Recorte(linea2 ?? "(no hay)")}»)");
+        Debe(r2.Contains("tokens sin medir", StringComparison.Ordinal), $"y la cuenta también («{Recorte(r2)}»)");
     }
 
     private static void Debe(bool condicion, string promesa)

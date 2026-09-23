@@ -217,6 +217,16 @@ La respuesta trae, bajo el mismo id, la opción elegida, la probabilidad de cada
 }
 ```
 
+Desde el 2026-09-22 (promesa 387, spec 046) la decisión se queda con tres números **que no deciden nada**:
+`N` (las claves que viajaron en el choice, «ninguna» incluida), `Masa5` (la suma de las cinco mayores
+probabilidades, sin medir si la distribución no cuadró) e `InputTokens` (lo que trajo
+`usage.input_tokens`; sin `usage`, «sin medir», nunca 0). Salen con una sola frase en la línea
+`decisor:` y en la cuenta de `map_decidir` —«N=6 · masa5 0.98 · 1.2× lo plano · tokens 312»—, también
+cuando no se acciona. «Lo plano» es k/N: lo que sumarían las k = min(5, N) mejores si Jev no
+distinguiera nada. Es señal y no compuerta porque no hay con qué calibrarla: seis puntos de un vídeo
+ajeno (17–29× cuando acierta, 7× en el paso que no termina). Con cien pasos del terreno se mira.
+`absent` no se pregunta: marcó 0,60 con la opción correcta a la vista.
+
 Precio: $0,042 por millón de tokens de entrada; la salida no se cobra. Límites hoy: 250.000 tokens/s
 y 1.200 peticiones/minuto — y **su propia documentación avisa de que se mueven sin aviso** mientras
 sirven la demanda del lanzamiento. Por eso los reintentos distinguen lo que mejora insistiendo de lo
