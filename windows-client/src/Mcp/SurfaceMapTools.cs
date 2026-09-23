@@ -303,9 +303,12 @@ public sealed class SurfaceMapTools
             + (d.Actuar ? $"ACCIONA «{Nombre(d.Puerta)}»" : "no acciona")
             + $" conf={d.Confianza.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} · {d.Porque}");
 
+        // «JEV CREE QUE YA ESTÁ» LO DECIDE EL NÚMERO, NO EL TEXTO DEL PORQUÉ (promesa 386, spec 046). Hasta el 2026-09-22
+        // también bastaba la palabra «cumplido» en el porqué: «…y el objetivo no parece cumplido…», con Cumplido=0,1, paraba
+        // el tramo por «ya está». El porqué es prosa para leer; lo que Jev contestó a la pregunta es el número.
         if (!d.Actuar)
             return Sin($"no se acciona: {d.Porque}", d.Porque, d.Confianza,
-                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo || d.Porque.Contains("cumplido", StringComparison.OrdinalIgnoreCase));
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo);
 
         // LO IRREVERSIBLE NO SE PULSA POR DECISIÓN (promesa 390, spec 046), y se mira AQUÍ, al construir las
         // candidatas y antes de cualquier Take: es el único sitio por el que pulsan map_decidir y el tramo. Hasta el

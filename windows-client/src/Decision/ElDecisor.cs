@@ -514,11 +514,14 @@ public static class ElDecisor
                 $"Jev contestó «{elegida}», que no está entre las {ofrecidas} puertas de esta pantalla: "
               + "no se acciona. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
-        // YA ESTÁ: si Jev dice que el objetivo ya se cumplió en esta pantalla, accionar es pasarse (289).
+        // YA ESTÁ, SEGÚN JEV: si cree que el objetivo ya se cumplió en esta pantalla, accionar es pasarse (289). Pero el
+        // número sirve para DEJAR DE ACCIONAR, nunca para declarar éxito (386, spec 046): lo que Jev cree se dice como
+        // creencia, y que el objetivo esté cumplido lo dice la llegada. Hasta el 2026-09-22 el texto era «Jev dice que el
+        // objetivo ya está cumplido», y el tramo lo convertía en «el objetivo ya está cumplido:».
         if (cumplido >= CumplidoMinimo)
             return DecisionDeUnPaso.No(
-                $"Jev dice que el objetivo ya está cumplido en esta pantalla ({cumplido.ToString("0.00", CultureInfo.InvariantCulture)}): "
-              + "no se acciona nada más. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
+                $"Jev cree que el objetivo ya está cumplido en esta pantalla ({cumplido.ToString("0.00", CultureInfo.InvariantCulture)}): "
+              + "no acciono más. Que lo esté lo dice la llegada, no el modelo. Decide Luna.", confianza).Con(alternativas, cumplido, peligro);
 
         // LO IRREVERSIBLE NO SE ACCIONA POR UN DECISOR: se para con menos evidencia de la que se pide para actuar.
         if (peligro >= PeligroMaximo)

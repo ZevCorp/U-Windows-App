@@ -135,7 +135,9 @@ pantalla. El catálogo de Luna queda byte a byte como hoy.
 - **Una llamada, tres preguntas**: qué puerta (`choice`), ¿el objetivo ya está cumplido en esta
   pantalla? (`noul cumplido`) y ¿accionar la elegida es irreversible? (`noul peligro`). Medido: las
   tres vuelven juntas en ~330 ms con 20, 60 o 160 puertas. Con `cumplido` ≥ 0,70 no se acciona y se
-  dice que ya está; con `peligro` ≥ 0,50 no se acciona y se dice por qué.
+  dice que **Jev cree** que ya está —el número sirve para dejar de accionar, no para declarar éxito:
+  que lo esté lo dice la llegada (spec 046, promesa 386)—; con `peligro` ≥ 0,50 no se acciona y se
+  dice por qué.
 - **La segunda mejor sin otra llamada**: si la elegida no está viva al pulsar, se prueba la siguiente
   por probabilidad si llega a 0,25, como mucho una vez más. Un homónimo no dispara la segunda.
 
@@ -145,7 +147,9 @@ Con el decisor encendido, Luna tiene tres herramientas más:
 
 - **`map_tramo(objetivo, tope)`** contesta **al instante** «en marcha» y el bucle corre por detrás:
   en cada paso el decisor elige entre las puertas de ahora y pulsa por selector (con la segunda mejor
-  si la primera no está), hasta que **para solo**: el objetivo ya está cumplido, se agota el tope
+  si la primera no está), hasta que **para solo**: Jev cree que ya está («paré: Jev cree que ya
+  está: …», con el porqué detrás y lo que hay delante; lo decide el número `cumplido`, no una palabra
+  del porqué, y el tramo no declara el objetivo cumplido), se agota el tope
   (15 por defecto), el decisor no se atreve (duda o peligro), la mano no pudo, se pide el freno, o
   **la misma puerta tres veces sin que cambie la pantalla** (el detector de bucle). Cada paso va al
   notch y al log (`tramo:`). Al parar, la cuenta —qué pulsó, dónde está, por qué paró, qué hay

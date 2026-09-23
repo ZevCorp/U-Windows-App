@@ -12543,10 +12543,11 @@ internal static class Contrato
         // 1. El objetivo ya está cumplido: el decisor lo dice y no se pulsa nada.
         // CON EL DATO, no solo con la palabra (spec 046, fase 0): hasta el 2026-09-22 este caso pasaba SOLO porque el
         // porqué contenía «cumplido» —y esa palabra sale igual por las dos ramas del tramo—, así que no distinguía
-        // «cumplido» de «no se atrevió». Con Cumplido=0,9 el número elige la rama; la aserción cambia en la fase 8.
+        // «cumplido» de «no se atrevió». Con Cumplido=0,9 el número elige la rama, y desde la fase 8 la aserción juzga LA
+        // RAMA («Jev cree que ya está», 386) y no la palabra: la palabra viene del porqué del fixture y sale por las dos.
         var cumplido = MapaParaTramo(_ => DecisionCon(Decision("No", "Jev dice que el objetivo ya está cumplido en esta pantalla (0.90): no se acciona nada más. Decide Luna.", 0.9), cumplido: 0.9))!;
         string c1 = Corre(cumplido);
-        Debe(cumplido.Pulsados.Count == 0 && c1.Contains("cumplido", StringComparison.OrdinalIgnoreCase), $"cumplido: 0 pulsos y la cuenta lo dice («{Recorte(c1)}»)");
+        Debe(cumplido.Pulsados.Count == 0 && c1.Contains("Jev cree que ya está", StringComparison.Ordinal), $"cumplido: 0 pulsos y la cuenta lo dice («{Recorte(c1)}»)");
 
         // 2. El tope: el decisor siempre tiene una puerta distinta; se para en el tope.
         var tope = MapaParaTramo(n => Decision("Si", ids[(n - 1) % 3], 0.9, "x"))!;
