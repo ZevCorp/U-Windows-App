@@ -453,6 +453,11 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     _graphConfig.BaseUrl, _graphConfig.ApiKey, m => LogBus.Log("claves", m));
                 _ = Credenciales.ClavesDelBackend.Viva.TraerSiFaltaAlgunaAsync();
 
+                // LAS FOTOS DE ESTUDIOS CADUCAN SOLAS (spec 046, promesa 350): al abrir Ü y cada 10
+                // minutos, con el panel abierto o cerrado. Sin esto, unas fotos cargadas y olvidadas
+                // seguirían en disco hasta que alguien volviera a pulsar «Subir».
+                Cardio.VigiaCardio.Arrancar();
+
                 var cfgDecisor = Decision.ConfiguracionDelDecisor.DelSistema();
                 LogBus.Log("decisor", cfgDecisor.Porque);
                 _interruptorDelDecisor = new Decision.InterruptorDelDecisor(mcp.Map, ReenviarCatalogoALaVozAsync, m => LogBus.Log("decisor", m));
@@ -1972,7 +1977,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         // puesta a mano sobre una placa que declara el XAML— así que se pide la misma cuenta.
         BarShell.Margin = Estudio.HolguraDe(Estudio.Sombra3);
 
-        foreach (var b in new[] { LearnBtn, WorkBtn })
+        foreach (var b in new[] { LearnBtn, WorkBtn, SubirBtn })
         {
             b.Template = Estudio.Pastilla(b.Height / 2);
             b.Background = Estudio.Superficie;
@@ -2275,6 +2280,22 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 LogBus.Log("consulta", "la nota clínica se quita de en medio");
                 break;
         }
+    }
+
+    /// <summary>
+    /// SUBIR: fotos de estudios de cardiología → resumen y preguntas (spec 046).
+    /// </summary>
+    /// <remarks>
+    /// El panel es su propia ventana, pegada a la izquierda del óvalo: aquí no cabe. Si todavía no hay
+    /// fotos, el explorador se abre en el MISMO clic —lo que se vino a hacer es subir, no abrir un panel
+    /// que pide subir—; si ya las hay, solo se abre el panel, con lo que había.
+    /// </remarks>
+    private void OnSubirEstudios(object sender, RoutedEventArgs e)
+    {
+        PlayTick();
+        var panel = EstudiosWindow.Unica;
+        panel.MostrarJuntoA(BarPanel);
+        if (!panel.TieneFotos) panel.ElegirFotos();
     }
 
     /// <summary>Alterna el muelle. Conserva el nombre porque lo llaman los atajos de siempre.</summary>

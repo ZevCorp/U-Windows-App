@@ -1,6 +1,6 @@
 # Fotos de estudios de cardiología → resumen y preguntas, desde el óvalo
 
-Estado: **en curso** · Nace de la petición del 2026-09-23 («botón "Subir" en el óvalo de Ü») ·
+Estado: **implementada, pendiente de corrida a mano en Windows** · Nace de la petición del 2026-09-23 («botón "Subir" en el óvalo de Ü») ·
 Rama: `claude/u-cardio-upload-panel-8jza7i`
 
 ## Qué se pidió, en una línea
