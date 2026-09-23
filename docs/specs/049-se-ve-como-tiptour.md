@@ -718,6 +718,31 @@ anotan. Lo que cambió en cada promesa está aplicado arriba; aquí queda por qu
   contra el borde derecho). (e) El reloj se crea en el hilo de la primera `EntraAlGrupo`, que es el de la interfaz
   (los constructores del muelle y del notch); una ventana de otro hilo haría lanzar su «visible», y eso ya se dice en
   el log y no para a las demás (comprobación 4).
+- **2026-09-23 (fase 8, paso 8a: solo la ventana del overlay).** `Ui/Jev/OverlayDeJev.cs` nace y pone en verde las
+  partes (b) que leen solo su fuente: **375 ✔ y 380 ✔**; la **379 sigue ✘ únicamente** por «falta el fuente
+  `VistaDeJev.cs`», que no es de este paso (M: su línea de `OverlayDeJev.cs` desaparece). «CONTRATO ROTO: 6» (antes
+  9) y **las marcas ✔/✘ de las 313 idénticas a las de la fase 7 salvo 375 y 380** (M, `diff`). De método: el «N
+  promesa(s) incumplida(s)» cuenta **comprobaciones** `✘` y pendientes, no promesas (M: base 9 = ocho líneas `✘` —la
+  379 llevaba dos— más el `PENDIENTE` de la 376). **Hallazgos:** (1) **las ventanas que cubren solo la primaria son 3,
+  no 2** (M, `grep PrimaryScreenWidth`): `AuraDeAprendizaje.cs:123-124`, `HighlightOverlay.cs:52-53` e
+  `InspectorOverlay.cs:88-89`; `LaBarraDeTareas.cs:35` usa el rect de la primaria para un cálculo, no para una
+  ventana. Ninguna se toca aquí. (2) **Las (b) por subcadena se satisfacen con un comentario**: con el nombre de la
+  máscara en un `cref` y en la comprobación posterior, quitar la línea que la aplica habría dejado la 379 igual (D,
+  contando apariciones: 4). Se reescribió para que cada nombre juzgado aparezca **una vez, en la línea que actúa**
+  (`EstilosDeVentana.ExtendidosDelOverlay`, `.Caducar()`, `ReglaDeDpi.RectTrasCambio(`: 1 cada uno, M); `SetWinEventHook`
+  y `SetWindowDisplayAffinity` siguen apareciendo también en su `DllImport`, así que quitar solo la llamada no se ve.
+  **Sin juez, y dicho:** el `WM_WINDOWPOSCHANGING` que reescribe posición y tamaño con el rect aplicado (WPF no pasa el
+  sugerido a `OnDpiChanged` ni dice si lo aplica antes o después: D, sin dos monitores de DPI distinto); la animación
+  del pulso, que solo corre con cajas; el punto de «leída» y la etiqueta, que decide la ventana (hallazgo de la fase
+  3); y `WINEVENT_SKIPOWNPROCESS`: volver de Ü a la misma app de trabajo sí caduca las cajas (D). Todo eso es del
+  nivel 4. **Sabotaje por diff, uno por promesa** (archivo LF, 26.563 bytes; `sed -b`; cada uno restaurado con `cmp`
+  idéntico): (375) `Pintar(Cajas.Caducar())` → `Pintar(Cajas)`, 26.553 bytes → «ROTO: 7», solo la 375 pasa a ✘ con
+  «engancha EVENT_SYSTEM_FOREGROUND … y desde ahí llama .Caducar()»; (379) la máscara `EstilosDeVentana.ExtendidosDelOverlay`
+  → `0x00080000` escrita a mano, 26.536 bytes → «ROTO: 7» y vuelve la línea «OverlayDeJev.cs aplica
+  EstilosDeVentana.ExtendidosDelOverlay…» bajo la 379, con las 313 marcas iguales porque la 379 ya estaba ✘ por la
+  vista; (380) `Aplicar(ReglaDeDpi.RectTrasCambio(_rcMonitor, ahora), …)` → `Aplicar(ahora, …)`, 26.524 bytes →
+  «ROTO: 7», solo la 380 pasa a ✘ con «sobreescribe OnDpiChanged y desde ahí llama ReglaDeDpi.RectTrasCambio(».
+  Restaurado todo, «ROTO: 6» con marcas y motivos idénticos a la corrida verde (M).
 
 ## Cierre
 
