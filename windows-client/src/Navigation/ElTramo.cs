@@ -36,9 +36,19 @@ public sealed class ElTramo
     public const int RepeticionesQueParan = 3;
 
     /// <summary>Lo que pasó en un paso del tramo. Lo produce el mapa; el tramo solo lo lee.</summary>
+    /// <remarks>
+    /// <paramref name="QueCambio"/> (spec 047, promesa 353): cuál de los cuatro veredictos dio pulsar. Es lo que lee el
+    /// detector de bucle, no <paramref name="Cambio"/>, que solo mira el sitio. Quien no lo dice —los once parámetros de
+    /// siempre— hereda de <paramref name="Cambio"/>: cambió = de sitio; no cambió = nada. Así un paso que se construyó
+    /// antes de que hubiera huella dice lo mismo que decía.
+    /// </remarks>
     public readonly record struct Paso(
         bool Actuo, bool Termino, bool Cambio, string Selector, string Etiqueta, string Numero, double Confianza, string Cuenta, string Porque, bool Cumplido,
-        string Tiempos = "");
+        string Tiempos = "", HuellaDeLoQueSeVe.QueCambio QueCambio = HuellaDeLoQueSeVe.QueCambio.Nada)
+    {
+        public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; } =
+            Cambio && QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada ? HuellaDeLoQueSeVe.QueCambio.DeSitio : QueCambio;
+    }
 
     /// <summary>Las manos del tramo, todas inyectables.</summary>
     public sealed record Manos(
@@ -167,8 +177,11 @@ public sealed class ElTramo
 
                 if (!p.Termino) { motivo = $"la mano no pudo: {p.Cuenta}"; break; }
 
-                // EL DETECTOR DE BUCLE: la misma puerta, y la pantalla que no cambia. Tres seguidas paran.
-                bool repite = p.Selector == _ultimoSelector && !p.Cambio;
+                // EL DETECTOR DE BUCLE: la misma puerta, y NADA que cambiara. Tres seguidas paran. Hasta el 22-09 contaba
+                // «!Cambio», que solo mira el sitio: una puerta que abre un menú —cambió dentro— tres veces seguidas paraba
+                // por «bucle», y un desplegable que se abre para elegir no es un bucle (353). «Dentro» y «delante» no son
+                // llegada (44), pero tampoco son «nada».
+                bool repite = p.Selector == _ultimoSelector && p.QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada;
                 repetidas = repite ? repetidas + 1 : 1;
                 _ultimoSelector = p.Selector;
                 if (repetidas >= RepeticionesQueParan)
@@ -201,7 +214,7 @@ public sealed class ElTramo
     {
         string conf = p.Confianza.ToString("0.00", CultureInfo.InvariantCulture);
         string linea = hecho
-            ? $"paso {k}: «{p.Etiqueta}» ({p.Numero}) conf {conf} · {(p.Termino ? (p.Cambio ? "cambió" : "no cambió") : "no pudo")}"
+            ? $"paso {k}: «{p.Etiqueta}» ({p.Numero}) conf {conf} · {(p.Termino ? QueCambioEnPalabras(p.QueCambio) : "no pudo")}"
             : $"paso {k}: sin acción · {p.Porque}";
         // LOS TIEMPOS POR FASE VAN AL LOG Y NO AL NOTCH: son para medir la fase 4 del plan (esperar es
         // suscribirse), y en el notch serían ruido.
@@ -209,6 +222,18 @@ public sealed class ElTramo
         try { _manos.Progreso(linea); } catch { }
         lock (_candado) _pasos.Append(hecho ? $"«{p.Etiqueta}» ({p.Numero}) {(p.Termino ? "✓" : "✗")}, " : $"sin acción en el {k}, ");
     }
+
+    /// <summary>
+    /// Qué cambió en el paso, con las palabras de la 353. Hasta el 22-09 era «cambió / no cambió» por el sitio, y un menú
+    /// que se abría se contaba «no cambió»: la línea decía lo mismo de una puerta muerta que de una que sí hizo algo.
+    /// </summary>
+    private static string QueCambioEnPalabras(HuellaDeLoQueSeVe.QueCambio que) => que switch
+    {
+        HuellaDeLoQueSeVe.QueCambio.DeSitio => "cambió de sitio",
+        HuellaDeLoQueSeVe.QueCambio.Dentro => "cambió dentro",
+        HuellaDeLoQueSeVe.QueCambio.Delante => "cambió delante",
+        _ => "no cambió",
+    };
 
     private static string Seguro(Func<string> f) { try { return f() ?? ""; } catch { return ""; } }
     private static bool Seguro(Func<bool> f) { try { return f(); } catch { return false; } }

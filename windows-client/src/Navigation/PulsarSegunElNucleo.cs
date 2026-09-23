@@ -83,6 +83,15 @@ public sealed class PulsarSegunElNucleo
         /// El SITIO lo decide la ubicación de trabajo —la misma con la que se decide aprender—; lo demás, la huella.
         /// </summary>
         public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; }
+
+        /// <summary>Qué parte lo vio (353): un «Dentro» lo ve la ventana de trabajo o una ventana nueva de su proceso, y la cuenta dice cuál.</summary>
+        public HuellaDeLoQueSeVe.Parte Parte { get; init; }
+
+        /// <summary>
+        /// A los cuántos ms de soltar la mano se llegó al veredicto (353): el cambio de sitio, la pantalla asentada o el
+        /// techo, de la última espera que se hizo. −1 = no hubo espera: la mano no pudo.
+        /// </summary>
+        public long MsHastaElVeredicto { get; init; } = -1;
     }
 
     /// <summary>
@@ -235,25 +244,41 @@ public sealed class PulsarSegunElNucleo
         // LA REGLA DE LA 351 MANDA salvo en los casos de la regla 4 de la spec; entonces la huella mira en sombra y se
         // espera como hoy, y el porqué queda dicho en la línea de la 355.
         string comoHoy = PorQueSeEsperaComoHoy(desde, selector, esCampo, antes, causaAntes);
+        // A LOS CUÁNTOS MS SE DECIDIÓ (353), contados desde que la mano soltó: el veredicto lo da la ÚLTIMA espera que se
+        // hizo —la del clic, o la del ensayo del doble o la de la repetición, si hubo—, y se da en el instante en que esa
+        // espera vuelve (asentada, cambio de sitio o techo: las tres salen en el sondeo que las ve). Se mide con este
+        // Stopwatch y NO con el Compas: el Compas cuenta con Environment.TickCount64, que avanza a saltos de ~15,6 ms, y
+        // el 22-09 un veredicto «a los 141 ms» salió de una pulsación que midió 137 en total (sabotaje (b) de la fase 4).
+        // Dos relojes en una misma cuenta es comparar identidades de distinta forma (aprendizaje nº16).
+        var desdeLaMano = System.Diagnostics.Stopwatch.StartNew();
+        long msVeredicto;
         var relojEspera = System.Diagnostics.Stopwatch.StartNew();
         string hasta = EsperarACambiar(desde, presupuesto, espera, decide: comoHoy.Length == 0);
         relojEspera.Stop();
+        msVeredicto = desdeLaMano.ElapsedMilliseconds;
         Anota($"⏱ pulsar «{etiqueta}»: la mano {relojMano.ElapsedMilliseconds} ms · esperar el cambio {relojEspera.ElapsedMilliseconds} ms ({_sondeos} sondeo(s) de «dónde») · {(hasta.Length > 0 && hasta != desde ? "cambió" : "no cambió")}");
         Anota(LaMedidaDeLaEspera(etiqueta, desde, hasta, presupuesto, antes, causaAntes, msAntes, espera, comoHoy));
-        var queCambio = QueCambioAlPulsar(desde, hasta, antes, espera);
+        var queCambio = LoQueCambioAlPulsar(desde, hasta, antes, espera);
+        // LOS CUATRO VEREDICTOS VIAJAN EN CADA SALIDA (353): las cinco de después de la mano pasan por aquí.
+        Resultado Con(Resultado r, HuellaDeLoQueSeVe.Diferencia d) =>
+            r with { QueCambio = d.QueCambio, Parte = d.Parte, MsHastaElVeredicto = msVeredicto };
         // LA VENTANA DE TRABAJO SE CERRÓ (promesa 233): «dónde» volvió al foco de la persona, y eso
         // no es haber ido allí. Se cuenta tal cual y no se aprende ninguna arista.
         string aviso = AvisoDeLaVentana?.Invoke() ?? "";
         if (aviso.Length > 0)
-            return new(true, hasta != desde, desde, hasta, false,
-                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}».") { QueCambio = queCambio };
+            return Con(new(true, hasta != desde, desde, hasta, false,
+                $"pulsé «{etiqueta}» y {aviso}. Ahora estás en «{hasta}»."), queCambio);
         string gestoUsado = gesto;
 
         // UN CAMPO DE TEXTO NO NAVEGA (promesa 334): ni se consulta el terreno ni se repite el clic —las dos son para
-        // puertas—, y se dice lo que es para que lo siguiente sea escribir.
+        // puertas—, y se dice lo que es para que lo siguiente sea escribir. Si al pulsarlo se abrió algo —el desplegable
+        // de un ComboBox—, se dice también: no es «la pantalla no cambió» (353).
         if (esCampo && (hasta.Length == 0 || hasta == desde))
-            return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type.") { QueCambio = queCambio };
+            return Con(new(true, false, desde, desde, false,
+                queCambio.QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada
+                    ? $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco (la pantalla no cambió, que es lo normal). Para escribir en él, map_type."
+                    : $"pulsé «{etiqueta}»: es un campo de texto y ya tiene el foco, y {SinCambiarDeSitio(queCambio)}.{NiLlegadaNiTramo(queCambio)} Para escribir en él, map_type."),
+                queCambio);
 
         // UNA PUERTA QUE LLEVA AQUÍ NO SE ENSAYA NI SE REPITE (promesa 296). Va DESPUÉS de la primera espera a
         // propósito: si la pantalla SÍ cambió —un «Siguiente» que vive en todas las páginas— manda lo que pasó,
@@ -266,8 +291,9 @@ public sealed class PulsarSegunElNucleo
         if (llevaAqui)
         {
             Anota($"«{etiqueta}» no movió nada y el terreno sabe que lleva justo a donde ya estamos: ni lo ensayo ni lo repito");
-            return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}» y la pantalla no cambió: ya estás en «{desde}», que es a donde lleva.") { QueCambio = queCambio };
+            return Con(new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}» y {SinCambiarDeSitio(queCambio)}: ya estás en «{desde}», que es a donde lleva.{NiLlegadaNiTramo(queCambio)}"),
+                queCambio);
         }
 
         // EL ENSAYO, y solo cuando toca: nada cambió, el gesto de esta arista aún no se conoce, y
@@ -278,6 +304,7 @@ public sealed class PulsarSegunElNucleo
             && _mano(selector, etiqueta, "doubleclick") == null)
         {
             string tras = EsperarACambiar(desde);
+            msVeredicto = desdeLaMano.ElapsedMilliseconds;
             if (tras.Length > 0 && tras != desde)
             {
                 hasta = tras;
@@ -302,24 +329,51 @@ public sealed class PulsarSegunElNucleo
                 if (_mano(selector, etiqueta, gesto) == null)
                 {
                     string tras = EsperarACambiar(desde);
+                    msVeredicto = desdeLaMano.ElapsedMilliseconds;
                     if (tras.Length > 0 && tras != desde) { hasta = tras; gestoUsado = gesto; }
                 }
             }
             finally { _yaRepeti = false; }
         }
 
+        // «NO CAMBIÓ DE SITIO» NO ES «NO CAMBIÓ NADA» (353): un menú que se abre o una ventana que pasa al frente se
+        // dicen con esas palabras, y tampoco son llegada ni acuñan arista (44).
         if (hasta.Length == 0 || hasta == desde)
-            return new(true, false, desde, desde, false,
-                $"pulsé «{etiqueta}» y la pantalla no cambió.") { QueCambio = queCambio };
+            return Con(new(true, false, desde, desde, false,
+                $"pulsé «{etiqueta}» y {SinCambiarDeSitio(queCambio)}.{NiLlegadaNiTramo(queCambio)}"), queCambio);
 
         // EL TERRENO MANDA SOBRE EL MAPA: se aprende a dónde llevó DE VERDAD — y CON QUÉ GESTO,
-        // que es la mitad del saber que antes se tiraba (promesa 21).
+        // que es la mitad del saber que antes se tiraba (promesa 21). Es el ÚNICO veredicto que acuña arista (44).
         bool aprendido = _grafo.Cruzar(desde, selector, hasta, gestoUsado);
 
-        return new(true, true, desde, hasta, aprendido,
+        return Con(new(true, true, desde, hasta, aprendido,
             $"pulsé «{etiqueta}» y ahora estás en «{hasta}»."
-            + (aprendido ? " Queda aprendido." : "")) { QueCambio = HuellaDeLoQueSeVe.QueCambio.DeSitio };
+            + (aprendido ? " Queda aprendido." : "")),
+            new HuellaDeLoQueSeVe.Diferencia(HuellaDeLoQueSeVe.QueCambio.DeSitio, HuellaDeLoQueSeVe.Parte.Sitio));
     }
+
+    /// <summary>
+    /// LO QUE PASÓ SIN CAMBIAR DE SITIO, con las palabras de la 353: «dentro» (y cuál de las dos partes lo vio),
+    /// «delante», o que la pantalla no cambió. Hasta el 22-09 las tres se decían «la pantalla no cambió»: el 21-09 el
+    /// selector de perfiles de Chrome se abrió y «Minimizar» cambió la ventana de delante, y la cuenta dijo lo mismo que
+    /// de una puerta muerta. Sin título de ventana a propósito: la cuenta llega al modelo, y un título puede llevar datos.
+    /// </summary>
+    private static string SinCambiarDeSitio(HuellaDeLoQueSeVe.Diferencia d) => d.QueCambio switch
+    {
+        HuellaDeLoQueSeVe.QueCambio.Dentro when d.Parte == HuellaDeLoQueSeVe.Parte.Ventanas
+            => "no cambió de sitio, pero cambió dentro (se abrió o se cerró otra ventana del mismo programa)",
+        HuellaDeLoQueSeVe.QueCambio.Dentro
+            => "no cambió de sitio, pero cambió dentro (apareció o desapareció algo en la ventana de trabajo, como un menú o un desplegable)",
+        HuellaDeLoQueSeVe.QueCambio.Delante
+            => "no cambió de sitio, pero cambió delante (otra ventana pasó al frente)",
+        _ => "la pantalla no cambió",
+    };
+
+    /// <summary>Lo que un «dentro» o un «delante» NO es, dicho en la cuenta (353, 44). Vacío si nada cambió.</summary>
+    private static string NiLlegadaNiTramo(HuellaDeLoQueSeVe.Diferencia d) =>
+        d.QueCambio is HuellaDeLoQueSeVe.QueCambio.Dentro or HuellaDeLoQueSeVe.QueCambio.Delante
+            ? " No es una llegada: no aprendo ningún tramo."
+            : "";
 
     /// <summary>
     /// POR QUÉ LA REGLA DE LA 351 NO DECIDE en esta pulsación, en palabras que distinguen cada causa (patrón nº2); vacío =
@@ -340,16 +394,17 @@ public sealed class PulsarSegunElNucleo
     }
 
     /// <summary>
-    /// Qué cambió al pulsar. El SITIO lo decide la ubicación de trabajo —la misma con la que <c>Pulsa</c> decide aprender:
-    /// se compara por un solo camino (aprendizaje nº16)—; lo demás, la huella de antes contra la última que se tomó.
+    /// Qué cambió al pulsar, y qué parte lo vio. El SITIO lo decide la ubicación de trabajo —la misma con la que
+    /// <c>Pulsa</c> decide aprender: se compara por un solo camino (aprendizaje nº16)—; lo demás, la huella de antes contra
+    /// la última que se tomó.
     /// </summary>
-    private static HuellaDeLoQueSeVe.QueCambio QueCambioAlPulsar(string desde, string hasta, HuellaDeLoQueSeVe? antes, EsperaAsentada? espera)
+    private static HuellaDeLoQueSeVe.Diferencia LoQueCambioAlPulsar(string desde, string hasta, HuellaDeLoQueSeVe? antes, EsperaAsentada? espera)
     {
-        if (hasta.Length > 0 && hasta != desde) return HuellaDeLoQueSeVe.QueCambio.DeSitio;
-        if (antes == null || espera?.Ultima is not HuellaDeLoQueSeVe ultima) return HuellaDeLoQueSeVe.QueCambio.Nada;
+        if (hasta.Length > 0 && hasta != desde) return new(HuellaDeLoQueSeVe.QueCambio.DeSitio, HuellaDeLoQueSeVe.Parte.Sitio);
+        if (antes == null || espera?.Ultima is not HuellaDeLoQueSeVe ultima) return new(HuellaDeLoQueSeVe.QueCambio.Nada, HuellaDeLoQueSeVe.Parte.Nada);
         // La ubicación no cambió: el sitio de la huella no manda aquí, y se compara lo demás con el sitio de antes.
         var sinSitio = HuellaDeLoQueSeVe.De(antes.Sitio, ultima.Delante, ultima.Dentro, ultima.Ventanas);
-        return HuellaDeLoQueSeVe.Comparar(antes, sinSitio).QueCambio;
+        return HuellaDeLoQueSeVe.Comparar(antes, sinSitio);
     }
 
     /// <summary>

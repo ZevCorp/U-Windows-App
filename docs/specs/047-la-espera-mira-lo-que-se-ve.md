@@ -655,6 +655,55 @@ dé el presupuesto de redirección.
     `Prueba(` de `Contrato.cs`): **4** → **3**. El que se va es el de la 334, el único que lo decía de la duración de
     la espera tras pulsar; los otros tres hablan de otra cosa (232: lanzar una app; 296: contar un cambio que sí
     ocurrió; 331: buscar por nombre exacto) y no se tocan.
+- **2026-09-22, fase 4 (el veredicto en cuatro; la 353 en verde por los dos caminos).**
+  - **Qué cambió**, en los cuatro archivos de la tabla y en nada más:
+    - `PulsarSegunElNucleo.Resultado` gana `Parte` y `MsHastaElVeredicto` (`init`; −1 = no hubo espera porque la mano
+      no pudo). Las **5** salidas de `Pulsa` después de la mano pasan por un único `Con(...)` que pone los tres datos
+      (la de antes, «no pude pulsar», se queda con los valores por defecto). Las **3** que decían «la pantalla no
+      cambió» —el campo, la puerta que lleva aquí y la de siempre— dicen ahora «no cambió de sitio, pero cambió dentro
+      (…)» o «… cambió delante (…)», y añaden «No es una llegada: no aprendo ningún tramo.». Con «nada» dicen
+      exactamente lo que decían, y por eso la 44, la 202, la 296, la 334 y la 354 no se enteran. La cuenta no lleva el
+      título de la ventana de delante, a propósito: llega al modelo, y un título puede llevar datos.
+    - `RecorrerSegunElNucleo.Resultado` gana `QueCambio`, que por defecto sale de `Cambio` (cambió = de sitio; no =
+      nada). De sus **19** construcciones solo **1** lleva un pulsar detrás (la final, con `ultimoPulso`), y esa copia
+      el `QueCambio` del pulsar. Las otras 18 tienen `Cambio = false` y dicen «nada».
+    - `SurfaceMapTools`: `Mano` gana `QueCambio` (`init`). `Anotar` lo copia del `Resultado`, y es **1** de las **10**
+      construcciones de `Mano`: la única por la que pasa `Take`. **`:343`** construye el `Paso` con `mano?.QueCambio`, y
+      es **1** de las **2** construcciones de `ElTramo.Paso`. La otra (`Sin`, `:252`) no actúa y nunca llega al
+      detector. El hunk sigue siendo una sola línea, la `:343`, compartida con A (`:340-343`) y C (`:341-343`), en el
+      orden acordado arriba.
+    - `ElTramo.Paso` pasa a tener **12** parámetros. El 12.º, `QueCambio`, por defecto hereda de `Cambio` mediante un
+      inicializador de la propiedad posicional. El detector cuenta `QueCambio == Nada`, y la línea de cada paso dice
+      «cambió de sitio / cambió dentro / cambió delante / no cambió». En `ElTramo` quedan **2 de 2** lecturas de
+      `Cambio` pasadas a `QueCambio`.
+  - **`PorQueDejoDeEsperar` no entra en esta fase.** La tabla de «Cómo se ve en el código» lo pone en el `Resultado`,
+    pero ninguna aserción de la 353 lo juzga. Lo que sí juzga la 359 (fase 8) son las cuatro causas en la cuenta. Entra
+    con ella, para no añadir un campo que ninguna promesa mira.
+  - **Hallazgo: dos relojes en una misma cuenta** (M, aprendizaje nº16). La primera versión medía `MsHastaElVeredicto`
+    con el `Compas`, que cuenta con `Environment.TickCount64` y avanza a saltos de ~15,6 ms. En la corrida del sabotaje
+    (b), una pulsación de **137 ms** en total dijo que se decidió «a los **141**». La aserción «dice a los cuántos
+    milisegundos» cayó por el reloj, no por el sabotaje: la línea `:343` no está en el camino de `Pulsa`. Ahora se mide
+    con un `Stopwatch` que arranca al soltar la mano, en el instante en que vuelve la espera que decide. Asentada,
+    cambio de sitio y techo salen en el sondeo que los ve, así que ese instante es el del veredicto. **Queda sin
+    arreglar, y se dice**: la línea de la 355 («dejó de esperar a los N ms») y `EsperaAsentada` siguen midiendo con
+    el `Compas`. Puede haber hasta ~16 ms de diferencia con `MsHastaElVeredicto`. Cambiar el reloj por defecto del
+    `Compas` toca la 245 y todas sus esperas: no es de esta fase.
+  - **Contrato** (M, con `TEMP` propio): antes, `CONTRATO ROTO: 10` (302 ✔ / 5 ✘). Después, **`CONTRATO ROTO: 6`**
+    (303 ✔ / 4 ✘: 356, 357, 358 y 359, de fases posteriores). Solo cambia un veredicto, `✘ 353.` → `✔ 353.`, y las
+    aserciones de las cuatro rojas son las mismas que antes. 44, 83, 202, 204, 207, 245, 248, 292, 296, 299, 334,
+    351, 352, 354 y 355 siguen en ✔. Voz: `VOZ ÍNTEGRA` (46 ✔, 0 ✘). Compila con 0 errores, sin warnings nuevos en
+    los archivos tocados.
+  - **Sabotajes de la 353, los dos de la spec, verificados por diff** (1+/1− cada uno, ancla con una sola
+    coincidencia, copia y restauración con md5 idéntico y diff vacío, fecha tocada):
+    - (a) El detector vuelve a contar `!p.Cambio` (`ElTramo.cs`). Resultado: **`CONTRATO ROTO: 8`**, y solo cae la 353.
+      Cae el caso (i), «una puerta que abre un menú cuatro veces NO es un bucle: 3 pasos». Cae también el caso (ii),
+      porque el camino del operador acaba en el mismo detector. La spec decía «cae el caso (i)», y lo medido añade el
+      (ii). La 292 sigue en ✔.
+    - (b) `:343` vuelve a construir el `Paso` sin `mano?.QueCambio`. La primera corrida dio `CONTRATO ROTO: 8`: cayó el
+      caso (ii) y además la aserción del reloj, que es el hallazgo de arriba. Arreglado el reloj, se repitió:
+      **`CONTRATO ROTO: 7`**, y cae **solo el caso (ii)**, «por el mapa (…) tampoco para por bucle: 3 pulsados». Es lo
+      que predijo la spec. Sin esa línea, la 353 saldría verde solo con manos falsas (aprendizaje nº11).
+    - Restaurados los dos → `CONTRATO ROTO: 6`, veredicto a veredicto igual que la primera corrida en verde.
 
 ## Revisiones
 
@@ -683,6 +732,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Antes de la fase 2: los dos «aún no» restados a `long.MinValue` (2 de 4 sitios), juzgados por la 355 (2026-09-22)
 - [ ] Fase 2 **escrita** (351 verde, y la 354 con ella; dos sabotajes por diff; 2026-09-22) — **no entra** hasta el nivel 4 de la fase 0: `PrimeraHuellaMs`/`RespiroMs` siguen siendo metas
 - [x] Fase 3: la 334 reescrita sin reciclar el número, con el cuerpo byte a byte; la 354 verde y su sabotaje propio verificado por diff (cae su primer caso, y con él la 351 y la 355) (2026-09-22)
+- [x] Fase 4: la 353 verde por los dos caminos (manos falsas y `MapaParaTramo`); 44 y 292 intactas; los dos sabotajes de la spec verificados por diff (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

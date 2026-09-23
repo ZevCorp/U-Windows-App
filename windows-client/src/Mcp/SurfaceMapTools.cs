@@ -340,7 +340,7 @@ public sealed class SurfaceMapTools
                 relato.Append($"elegida «{puerta.Etiqueta}» ({numero}) {medida}: {cuenta}");
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
-            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos);
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Etiqueta, numero, prob, relato.ToString(), d.Porque, false, tiempos, mano?.QueCambio ?? Navigation.HuellaDeLoQueSeVe.QueCambio.Nada);
         }
         return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }
@@ -2618,6 +2618,12 @@ public sealed class SurfaceMapTools
 
         /// <summary>El selector que el ejecutor pulsó de verdad, si pulsó algo.</summary>
         public string? Pulsado { get; init; }
+
+        /// <summary>
+        /// Cuál de los cuatro veredictos dio pulsar (spec 047, promesa 353). <see cref="Logro"/> sigue siendo lo que lee
+        /// el tope de la voz (204); esto es lo que lee el detector de bucle del tramo, que es el camino del operador.
+        /// </summary>
+        public Navigation.HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; }
     }
 
     [ThreadStatic] private static Mano? _ultimaMano;
@@ -2639,7 +2645,7 @@ public sealed class SurfaceMapTools
     {
         // La lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo
         // frenaba el «pruebo este otro botón» que pide el audio (crítico de la rama, 2026-09-11).
-        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos, Pulsado = r.Pulsado };
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos, Pulsado = r.Pulsado, QueCambio = r.QueCambio };
         return r.Cuenta;
     }
 

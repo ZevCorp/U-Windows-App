@@ -68,6 +68,14 @@ public sealed class RecorrerSegunElNucleo
         /// <summary>El selector que se pulsó de verdad en la tanda, si se pulsó algo: el tope cuenta los
         /// fallos por el botón tocado, no por cómo se pidió (promesa 204).</summary>
         public string? Pulsado { get; init; }
+
+        /// <summary>
+        /// Cuál de los cuatro veredictos dio el ÚLTIMO pulsar (spec 047, promesa 353): de sitio, dentro, delante o nada.
+        /// Viaja como dato hasta el detector de bucle del tramo, por <c>Mano</c>, por el mismo camino que
+        /// <see cref="Cambio"/>. Quien no lo dice hereda de <see cref="Cambio"/>: cambió = de sitio; no = nada.
+        /// </summary>
+        public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; } =
+            Cambio ? HuellaDeLoQueSeVe.QueCambio.DeSitio : HuellaDeLoQueSeVe.QueCambio.Nada;
     }
 
     private readonly Nucleo.Grafo _grafo;
@@ -288,7 +296,7 @@ public sealed class RecorrerSegunElNucleo
         if (ultimoPulso is { } u)
             return new(pasos.Count, pasos.Count, fin, true,
                 $"hice los {pasos.Count} paso(s): {u.Cuenta}",
-                u.CambioLaPantalla);
+                u.CambioLaPantalla) { QueCambio = u.QueCambio };
         return new(pasos.Count, pasos.Count, fin, true,
             $"hice los {pasos.Count} paso(s): quedaste en «{fin}».");
     }
