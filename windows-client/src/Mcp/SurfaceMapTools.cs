@@ -155,29 +155,110 @@ public sealed class SurfaceMapTools
         return salida;
     }
 
+    // ── Las candidatas, con caja, por identidad (spec 048, promesa 365) ────────────────────────────
+    //
+    // MEDIDO (spec 048): lo que iba al decisor era la tupla (Selector, Etiqueta, Tipo), sin caja —la rama que
+    // pinta (spec 049) no tenía qué pintar— y sin identidad, así que un mismo elemento leído dos veces salía dos
+    // veces. La caja y la identidad van en una lista PARALELA de la que la tupla se deriva en el mismo orden: la
+    // tupla que ven Puertas, PuertasVivas y los ayudantes de 284-292 no cambia.
+
+    /// <summary>
+    /// UNA CANDIDATA: una puerta de ahora con lo que la tupla no lleva —su caja y su identidad— y de dónde vino.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="Caja"/>: la de UIA es la que el lector LEYÓ (<c>Bounds</c>); la del terreno, la del dynpro y
+    /// la inyectada es <see cref="System.Windows.Rect.Empty"/> y la línea «candidatas:» lo cuenta: nunca una caja
+    /// estimada (patrón nº8). <paramref name="Identidad"/>: en UIA, el <c>RuntimeId</c> que la petición trajo, y
+    /// VACÍA SIGNIFICA «NO VINO» (298); en el terreno y el dynpro, su selector, que es como el núcleo conoce la
+    /// puerta (<c>DesdeAqui</c> la guarda por selector). <paramref name="Origen"/>: «uia», «terreno», «dynpro» o
+    /// «inyectada» (la lista fija del contrato).
+    /// </remarks>
+    public sealed record Candidata(string Selector, string Etiqueta, string Tipo, System.Windows.Rect Caja, string Identidad, string Origen);
+
+    /// <summary>
+    /// LAS CANDIDATAS DE LA ÚLTIMA LISTA DE PUERTAS (map_what_i_see o map_decidir), en el orden en que se
+    /// ofrecieron: el id «N) Etiqueta (Tipo)» que recibe el decisor es la N-ésima de aquí (285). Vacía si no se
+    /// sabía dónde se estaba: una lista vieja con cara de actual sería una caja que miente (patrón nº8).
+    /// </summary>
+    public IReadOnlyList<Candidata> UltimasCandidatas { get; private set; } = Array.Empty<Candidata>();
+
+    /// <summary>
+    /// ¿Geometría LEÍDA? El mismo criterio con el que el lector descarta un elemento sin caja
+    /// (<c>UiaReader</c>: vacía, o de menos de 1 px de ancho o de alto). Una candidata de UIA que no lo cumple no
+    /// está viva a la vista: no se ofrece, y se cuenta.
+    /// </summary>
+    private static bool TieneCajaLeida(System.Windows.Rect r) => !r.IsEmpty && r.Width >= 1 && r.Height >= 1;
+
+    /// <summary>
+    /// LA LÍNEA «candidatas:» (promesa 365): cuántas se ofrecieron de cuántas se vieron, cuántas con caja y sin
+    /// ella, cuántas sin identidad y cuánto costó. Lo que va detrás de los ms distingue POR QUÉ salió cada una que
+    /// no se ofreció (patrón nº2): «de 8» a secas no diría si fue identidad, la 183 o el tope.
+    /// </summary>
+    private static string LineaDeCandidatas(IReadOnlyList<Candidata> ofrecidas, int vistas, long ms, string detalle)
+    {
+        int conCaja = ofrecidas.Count(c => TieneCajaLeida(c.Caja));
+        int sinIdentidad = ofrecidas.Count(c => c.Identidad.Length == 0);
+        return $"candidatas: {ofrecidas.Count} de {vistas} ({conCaja} con caja · {ofrecidas.Count - conCaja} sin caja · "
+             + $"{sinIdentidad} sin identidad) en {ms} ms · {detalle}";
+    }
+
     /// <summary>
     /// LAS PUERTAS DE AHORA, en orden de lectura: lo que ve UIA, las puertas vivas del terreno y los
     /// campos del dynpro, fundidos sin duplicar. UNA SOLA LISTA para <c>map_what_i_see</c> y para
     /// <c>map_decidir</c> (promesa 285): dos caminos para enumerar el mismo terreno se desincronizan
     /// en silencio, y el decisor acabaría eligiendo entre puertas que la voz no lista, o al revés.
+    /// Desde la 365 esa lista son las <see cref="Candidata"/>s, y la tupla se deriva de ellas.
     /// </summary>
-    /// <returns>Dónde, las puertas que se cuentan (con su tope) y cuántas hay en total.</returns>
-    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total) PuertasDeAhora()
+    /// <returns>Dónde, las puertas que se cuentan (con su tope), cuántas hay en total y las mismas puertas como
+    /// candidatas, con caja e identidad y en el mismo orden.</returns>
+    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total, IReadOnlyList<Candidata> Candidatas) PuertasDeAhora()
     {
         var loc = _where();
         string aqui = loc?.Id ?? "";
-        if (aqui.Length == 0) return ("", Array.Empty<(string, string, string)>(), 0);
-        if (Puertas != null) { var inyectadas = Puertas(aqui); return (aqui, inyectadas, inyectadas.Count); }
+        if (aqui.Length == 0)
+        {
+            UltimasCandidatas = Array.Empty<Candidata>();
+            LogBus.Log("lectura", "candidatas: ninguna (no sé en qué pantalla estoy: no se leyó nada)");
+            return ("", Array.Empty<(string, string, string)>(), 0, Array.Empty<Candidata>());
+        }
+        var crono = System.Diagnostics.Stopwatch.StartNew();
+        if (Puertas != null)
+        {
+            var inyectadas = Puertas(aqui);
+            var comoCandidatas = inyectadas
+                .Select(p => new Candidata(p.Selector, p.Etiqueta, p.Tipo, System.Windows.Rect.Empty,
+                    string.IsNullOrWhiteSpace(p.Selector) ? "" : p.Selector, "inyectada"))
+                .ToList();
+            crono.Stop();
+            UltimasCandidatas = comoCandidatas;
+            LogBus.Log("lectura", LineaDeCandidatas(comoCandidatas, inyectadas.Count, crono.ElapsedMilliseconds, "inyectadas: sin lectura"));
+            return (aqui, inyectadas, inyectadas.Count, comoCandidatas);
+        }
 
         // UNA LECTURA POR CICLO (promesa 362): se pide la observación compartida y solo se lee si no sirve.
         // La criba de las candidatas —con nombre, ni text ni image— se aplica sobre los CRUDOS, aquí: la
         // observación no criba, porque la compuerta aplica otra (la del latido) sobre los mismos crudos.
-        var vista = VistaReciente(aqui).Vista;
-        var vivos = vista.Elementos
+        var (vista, reutilizada) = VistaReciente(aqui);
+        var cribados = vista.Elementos
             .Where(e => e.Etiqueta.Length > 0
                      && !e.Tipo.Equals("text", StringComparison.OrdinalIgnoreCase)
                      && !e.Tipo.Equals("image", StringComparison.OrdinalIgnoreCase))
             .ToList();
+        // VIVAS Y SIN DUPLICAR POR IDENTIDAD (promesa 365). Dentro de UIA NUNCA se funde por texto: dos
+        // «Detalles» con distinto selector son dos puertas (287). Se funde por el RuntimeId que la lectura trajo,
+        // y una identidad VACÍA NUNCA FUNDE: vacía es «no vino» —el lector nodo a nodo no la trae nunca, 43
+        // veces el 21-09/22-09—, y fundir dos «no vino» borraría una puerta que existe.
+        static string IdentidadDe(Uia.ElementoVisto e) => string.IsNullOrWhiteSpace(e.Identidad) ? "" : e.Identidad;
+        int sinCajaDeUia = 0, repetidas = 0;
+        var identidades = new HashSet<string>(StringComparer.Ordinal);
+        var vivos = new List<Uia.ElementoVisto>(cribados.Count);
+        foreach (var e in cribados)
+        {
+            if (!TieneCajaLeida(e.Caja)) { sinCajaDeUia++; continue; }
+            string id = IdentidadDe(e);
+            if (id.Length > 0 && !identidades.Add(id)) { repetidas++; continue; }
+            vivos.Add(e);
+        }
         // LAS PUERTAS DEL TERRENO, no solo lo que ve UIA (promesa 183). UIA ve el Pane opaco de SAP:
         // botones y campos, pero NUNCA las filas de una rejilla ni las de un árbol. El piloto planeaba
         // a ciegas sobre la lista de pacientes porque «GIRALDO» no salía aquí, aunque map_take SÍ sabía
@@ -188,15 +269,30 @@ public sealed class SurfaceMapTools
         var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
         var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
         var delTerreno = FundirPuertas(vivos.Select(v => v.Etiqueta), candidatos);
+        // DE DÓNDE VIENE cada una del terreno, por la MISMA clave con la que ConLaEtiquetaQueSeLee las junta
+        // (SapSelector.Normalize): comparar por otro camino daría «dynpro» a una del terreno en silencio (nº16).
+        var delGrafo = new HashSet<string>(terreno.Select(p => U.Graph.Surfaces.SapSelector.Normalize(p.Selector)), StringComparer.OrdinalIgnoreCase);
         // EL TOPE ERA 40 PUERTAS DE SAP y el triage tiene 39 campos más 21 botones (2026-09-08): los
         // signos vitales quedaban fuera de la lista y el piloto no podía nombrarlos. Un formulario
         // entero cabe en 160; lo que pase de ahí se dice.
         // CON SU SELECTOR (promesa 287): es lo que la mano resuelve antes que el nombre, y lo que hace que
         // dos «Detalles» no choquen. El selector no viaja a Jev: Jev decide por lo que una persona lee.
-        var lista = vivos.Take(60).Select(v => (Selector: v.Selector, Etiqueta: v.Etiqueta, Tipo: v.Tipo))
-            .Concat(delTerreno.Take(160).Select(p => (Selector: p.Selector, Etiqueta: p.Etiqueta, Tipo: p.Tipo)))
+        var candidatas = vivos.Take(60)
+            .Select(v => new Candidata(v.Selector, v.Etiqueta, v.Tipo, v.Caja, IdentidadDe(v), "uia"))
+            .Concat(delTerreno.Take(160).Select(p => new Candidata(p.Selector, p.Etiqueta, p.Tipo, System.Windows.Rect.Empty,
+                string.IsNullOrWhiteSpace(p.Selector) ? "" : p.Selector,
+                delGrafo.Contains(U.Graph.Surfaces.SapSelector.Normalize(p.Selector)) ? "terreno" : "dynpro")))
             .ToList();
-        return (aqui, lista, vivos.Count + delTerreno.Count);
+        // LA TUPLA SE DERIVA de las candidatas, en su orden: una lista, no dos (285).
+        var lista = candidatas.Select(c => (Selector: c.Selector, Etiqueta: c.Etiqueta, Tipo: c.Tipo)).ToList();
+        crono.Stop();
+        UltimasCandidatas = candidatas;
+        int total = vivos.Count + delTerreno.Count;
+        LogBus.Log("lectura", LineaDeCandidatas(candidatas, cribados.Count + candidatos.Count, crono.ElapsedMilliseconds,
+            $"lectura v{vista.Version} {(reutilizada ? "reutilizada" : $"nueva ({vista.MsDeLectura} ms)")} · fuera: "
+            + $"{repetidas} repetida(s) por identidad, {sinCajaDeUia} de UIA sin caja leída, "
+            + $"{candidatos.Count - delTerreno.Count} del terreno fundida(s) por etiqueta (183), {total - candidatas.Count} por el tope"));
+        return (aqui, lista, total, candidatas);
     }
 
     // ── La observación compartida (spec 048, promesa 362) ─────────────────────────────────────────
@@ -428,7 +524,7 @@ public sealed class SurfaceMapTools
 
     private string LoQueVeo()
     {
-        var (aqui, puertas, total) = PuertasDeAhora();
+        var (aqui, puertas, total, _) = PuertasDeAhora();
         if (aqui.Length == 0) return "no sé en qué pantalla estoy";
         // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
         // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
@@ -486,7 +582,7 @@ public sealed class SurfaceMapTools
         // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
         // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
         var relojLeer = System.Diagnostics.Stopwatch.StartNew();
-        var (aqui, puertas, total) = PuertasDeAhora();
+        var (aqui, puertas, total, _) = PuertasDeAhora();
         relojLeer.Stop();
         // LA CUENTA DE LECTURAS SE TOMA AQUÍ (promesa 362), antes de pulsar: Take invalida la observación al
         // volver y pone el contador a cero, así que leerlo después contaría siempre «0 · 0».
@@ -562,8 +658,10 @@ public sealed class SurfaceMapTools
 
             // «NO ESTÁ» ES LO ÚNICO QUE DISPARA LA SEGUNDA: la mano no terminó, lo intentó, y no fue una lista de
             // homónimos (eso es otra clase de respuesta: falta elegir cuál de las iguales, no otra puerta).
-            bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0)
-                         && !cuenta.Contains("puertas vivas para", StringComparison.Ordinal);
+            // SIN MIRAR LA PROSA (spec 048, aprendizaje nº2): aquí había además un Contains("puertas vivas para") sobre
+            // la cuenta. Era redundante: esa frase sale de UN sitio (RecorrerSegunElNucleo, la lista de homónimos),
+            // que en la misma expresión pone Ambiguo = true, y Anotar lo convierte en Intento = false. El dato manda.
+            bool noEstaba = _ultimaMano is { Termino: false, Intento: true } m && (m.Candidatos == null || m.Candidatos.Count == 0);
             if (noEstaba && k + 1 < candidatos.Count)
             {
                 relato.Append($"«{puerta.Etiqueta}» ({numero}) no estaba: {cuenta}; probé la segunda: ");
