@@ -28,7 +28,7 @@ public sealed class HuellaEnVivo
     private readonly Func<IntPtr> _ventanaDeTrabajo;
 
     /// <summary>Cada cuánto, como mucho, se paga lo de dentro y el sitio fresco.</summary>
-    public int RespiroMs { get; set; } = 250;
+    public int RespiroMs { get; set; } = EsperaAsentada.RespiroMetaMs;
 
     private string _sitio = "";
     // NULO = AÚN NO SE LEYÓ. Con long.MinValue, «ahora - _tSitio» desbordaba a negativo (sonda del 22-09) y la PRIMERA

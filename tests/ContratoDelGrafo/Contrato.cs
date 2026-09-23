@@ -13862,6 +13862,20 @@ internal static class Contrato
         var inquieta = Corre(n => Huella047("s", "w", new[] { "b" + n }), Techo047);
         Debe(inquieta.Ms >= Techo047 - 100 && inquieta.PorQue == "TechoSeMovia", $"una huella que no para llega al techo y lo dice: {inquieta.Ms} ms ({inquieta.PorQue})");
 
+        // 4. LA VUELTA TRAS UN ENTER DESHECHO GASTA DEL MISMO RELOJ. Ningún caso juzgaba esta cláusula; se añade en la fase
+        // 7, en rojo antes de su código. Leído el 22-09: Llego ya medía con la hora de pared (DateTime.UtcNow) y NO contaba
+        // vueltas, contra lo que decía la tabla de la spec. Lo que no hacía era gastar del compás: dormía sus 200 ms también
+        // cuando el plazo ya se había agotado, la vuelta de cortesía que Compas.Respira no da. Con un «dónde» de 500 ms que
+        // nunca llega y techo 1.200, la cuenta a mano da 500 + 200 + 500 + 200 = 1.400 así, y ~1.200 con el compás.
+        var llego = typeof(SurfaceMapTools).GetMethod("Llego", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(string), typeof(int) }, null);
+        if (llego == null) { Pendiente("SurfaceMapTools.Llego(esperada, msMax)", "358", "047"); return; }
+        var mapaLento = new SurfaceMapTools(() => { Thread.Sleep(500); return null; });
+        var cronoLlego = System.Diagnostics.Stopwatch.StartNew();
+        bool volvio = (bool)llego.Invoke(mapaLento, new object[] { "uia://explorer.exe/Descargas", Techo047 })!;
+        long msLlego = cronoLlego.ElapsedMilliseconds;
+        Debe(!volvio && msLlego < Techo047 + 150,
+            $"comprobar la vuelta tras un Enter deshecho gasta del mismo reloj: con un «dónde» de 500 ms que nunca llega se rinde al agotar el techo, sin dormir una vuelta de más: {msLlego} ms (techo {Techo047}; con la vuelta de cortesía, ≥ {Techo047 + 200}); volvió={volvio}");
+
         // Y QUE LAS HERRAMIENTAS DEL MAPA LO USEN: se lee el código (mismo camino que la 341 de la voz).
         string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
         string archivo = Path.Combine(repo, "windows-client", "src", "Mcp", "SurfaceMapTools.cs");

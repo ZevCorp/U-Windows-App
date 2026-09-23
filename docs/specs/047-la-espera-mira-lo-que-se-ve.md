@@ -73,7 +73,7 @@ leídas hoy del log (M):
 | `windows-client/src/Navigation/VentanaDeTrabajo.cs` | **0** | 0 | nada |
 | `Navigation/PulsarSegunElNucleo.cs` | **0** | **2**: `EsperaMaximaMs = 1800` (3 sitios: `:162`, `:201`, `:225`) y `EsperaDeCampoMs = 300`; más la cadencia `Respira(120)` | el 1.800 pasa a ser un **techo calculado** (359) y las tres esperas salen por **condición** (351, 357); la cadencia se queda: es el sondeo, y el compás lo acota |
 | `Navigation/RecorrerSegunElNucleo.cs` | 0 | `EsperaMaximaMs` (1800; 4000 en la app) en `LlegoDondeTocaba` y en la compuerta | `LlegoDondeTocaba` sale por condición (356); la compuerta no se toca (299) |
-| `Mcp/SurfaceMapTools.cs` | **6**: `:2200` (150), `:2340` (120), `:2729` (50), `:2873` (90), `:2906` (80), `:2923` (200) | los tres bucles `EsperarPantallaLista`/`EsperarCambio`/`Llego` cuentan **vueltas**, no reloj | los tres de `:2865-2926` (358); los otros tres son de otras herramientas y quedan anotados |
+| `Mcp/SurfaceMapTools.cs` | **6**: `:2200` (150), `:2340` (120), `:2729` (50), `:2873` (90), `:2906` (80), `:2923` (200) | los tres bucles `EsperarPantallaLista`/`EsperarCambio`/`Llego` cuentan **vueltas**, no reloj (**corregido en la fase 7**: dos de tres. `Llego` ya medía con `DateTime.UtcNow`; lo que no hacía era gastar del compás: dormía una vuelta de más con el plazo agotado) | los tres de `:2865-2926` (358); de los otros tres, dos son de otras herramientas y uno (`:2729`) es de `map_type` mismo, y quedan anotados («Lo que queda fuera») |
 | `Navigation/PasoDelNucleo.cs:231` | 1 (600) | 3 esperas por ubicación (`:117-135`, `:164-172`, `:192-194`) | **fuera por alcance**: es el camino de «ir» (`map_go_to`: `ServidorDelNucleo.cs:55`, `FaceWindow.xaml.cs:742-756`), no el de `map_take`. No es de la rama de Jose («Revisiones», 6): queda como **pendiente con dueño** |
 | `Navigation/AbrirSegunElNucleo.cs:290` | 1 (120) | 1 | fuera (misma clase, fuera del ciclo) |
 | `Navigation/SurfaceNavigator.cs:85`, `MapaVivo.cs:506` | 1 + 1 | — | fuera (no son la espera tras pulsar) |
@@ -382,7 +382,11 @@ pequeños (techo 1.200, respiro 100, primera 100) para que el contrato corra en 
   contiene `EsperarCambio(` ni `CuantosAccionables(` —los tres `FindAll(Descendants)` sobre el primer plano
   se sustituyen por la huella barata de la ventana de trabajo— y `EsperarPantallaLista` nombra
   `EsperaAsentada` (mismo camino que la 341 de la voz; sin `U_REPO`, «no pude juzgarla»). **Sabotaje:** el bucle de `EsperaAsentada` vuelve a `for (i <
-  techo / cadencia)`: cae el primer caso.
+  techo / cadencia)`: cae el primer caso. **Añadido en la fase 7** (el porqué, en «Hallazgos»): una aserción, en rojo
+  antes de su código, para la cláusula «comprobar la vuelta tras un Enter deshecho gasta del mismo reloj», que ningún
+  caso juzgaba. `SurfaceMapTools.Llego` por reflexión, con un `_where` de 500 ms que nunca llega y techo 1.200: se rinde
+  en `< Techo + 150` (con la vuelta de cortesía, ≥ 1.400). Su sabotaje: `Llego` vuelve a dormir la vuelta aunque el plazo
+  se haya agotado.
 - **359** — `Capacidad("U.WindowsClient.Navigation.TechoDeLaEspera")`: cinco `Registra(300, true)` →
   `Techo(1800) == 1800`; cinco `Registra(900, true)` → 2.700; cinco `Registra(5000, false)` no mueven la
   mediana. Y las cuatro causas en la cuenta de `Pulsa` al agotar el techo: huella cambiante → «no paró de
@@ -448,7 +452,12 @@ dé el presupuesto de redirección.
   WinEvent—: otra rama, con su promesa.
 - **Esperar con WinEvents** en vez de sondear (mejora 12): fase 2 del informe, después de medir la 351.
 - Los otros tres `Sleep` de `SurfaceMapTools` (`:2200`, `:2340`, `:2729`): herramientas distintas de la
-  espera tras pulsar. Anotados.
+  espera tras pulsar. Anotados. **Precisado en la fase 7** (M, leído; tras las fases 4-6 están en `:2200`, `:2340` y
+  `:2735`): `:2200` es `file_open`, un `Sleep(150)` fijo tras navegar el Explorador, sin bucle. `:2340` es `Desbloquear`,
+  20 vueltas de 120 ms más `DialogoDelante()`: la misma clase (cuenta vueltas), en otra herramienta. Y `:2735` **no es de
+  otra herramienta**: es `map_type` mismo, 30 vueltas de 50 ms esperando a que aparezca un campo con el foco. Es la misma
+  clase pero otra espera («¿hay dónde escribir?», no «¿está lista la pantalla?»). Los dos bucles quedan para una rama con
+  su promesa.
 - **Que la huella vea el contenido** (un valor que cambia sin cambiar los selectores): la 360 y el
   pendiente nº6 de `CLAUDE.md` tienen la misma ceguera. Se dice; no se arregla aquí.
 - **La UI** (el panel de Jev lee `Paso.QueCambio`, `Parte` y `MsHastaElVeredicto`: rama D) y **`Decision/*`**
@@ -857,6 +866,74 @@ dé el presupuesto de redirección.
   - **Sin nivel 4**: esta rama no ejecuta `U.exe`. En la app el presupuesto es el techo (4.000 ms) y nada se recorta.
     Lo que cambia allí es que la llegada toma una huella por vuelta, deja su línea, y contesta hasta ~400 ms antes
     cuando el sitio releído fresco ya es el esperado (D: la memoria de `_donde` dura 400 ms).
+- **2026-09-22, fase 7 (las herramientas del mapa gastan del reloj y miran la huella; la 358 en verde).**
+  - **Qué cambió en `SurfaceMapTools.cs`** (el bloque de `:2865-2926`, que tras las fases 4-6 empezaba en `:2864`, y el
+    tramo de `Type` que lo llama):
+    - **`EsperarPantallaLista(ventana, sitioDeAntes, msMax)`** decide con `EsperaAsentada.Espera` y un `Compas`: la misma
+      huella, la misma regla y las mismas metas que la espera de después de pulsar.
+      - La huella es una `HuellaEnVivo` sobre la ventana que recibió el Enter: la de trabajo o, si no hay, la de delante,
+        que es adonde fue la tecla.
+      - El sitio sale de `_where`, el mismo con el que `Type` decide si el Enter se deshace (nº16). Sin sitio de antes no
+        hay cambio de sitio que juzgar, y decide solo la huella (patrón nº9).
+      - Si no se puede mirar, espera el techo entero —el lado seguro, lo que hacía el recuento cuando su catch devolvía 0—
+        y la línea dice por qué.
+      - Deja una línea: `⏱ tras el Enter, dejó de mirar a los N ms de 900: <por qué> · K sondeo(s) de huella`.
+    - **`CuantosAccionables` se borra**: tres `FindAll` sobre el primer plano por vuelta, y un `catch` que devolvía 0 sin
+      decir por qué (patrón nº3).
+    - **`EsperarCambio` se borra**: 0 llamadores (M, `grep` en `windows-client/src`). Patrón nº6: no se arregla.
+    - **`Llego` gasta del `Compas`**: `do { … } while (compas.Respira(200))`.
+    - **Rastro nuevo** (patrón nº10): si tras el «Atrás» no se volvió, una línea «✋ no se llegó a …» que distingue sus
+      dos causas, no pude pulsar «Atrás» o lo pulsé y la ubicación no volvió (nº2). **No lo juzga ninguna aserción.**
+  - **Lo mínimo que exigió el código fuera de `SurfaceMapTools`, dicho**: las dos metas pasan a un solo sitio,
+    `EsperaAsentada.RespiroMetaMs` (250) y `PrimeraMetaMs` (400). `PulsarSegunElNucleo.RespiroMs`/`PrimeraHuellaMs` y
+    `HuellaEnVivo.RespiroMs` toman de ahí su valor por defecto. Son los mismos números, así que en `Pulsa` no cambia nada.
+    Sin esto, la regla del mapa habría llevado la tercera copia del 250, y el día que el nivel 4 fije los números, la
+    copia olvidada juzgaría «asentada» con otra regla (nº16).
+  - **Hallazgo: `Llego` no contaba vueltas** (M, leído). La tabla de «Dónde están hoy las esperas fijas» lo decía de los
+    tres bucles, y era cierto de dos. `Llego` ya medía con `DateTime.UtcNow`: reloj de pared, pero otro reloj que el de
+    las demás esperas, y dormía sus 200 ms también con el plazo agotado. Por eso la cláusula «comprobar la vuelta tras un
+    Enter deshecho gasta del mismo reloj» no la juzgaba ningún caso, y la 358 salía verde sin tocar `Llego`. Se añade una
+    aserción, **en rojo antes de su código**: con un «dónde» de 500 ms que nunca llega y techo 1.200, el código de antes
+    tardó **1.437 ms** (la cuenta a mano da 500 + 200 + 500 + 200 = 1.400), y la exigencia es `< 1.350`.
+  - **Hallazgo: el sitio del mapa es el del primer plano** (M, leído). `_where` es `SurfaceLocator.DondeEstoy`, que
+    calcula en el acto sobre `GetForegroundWindow`. Con la ventana de trabajo detrás, el sitio es el de la persona, y la
+    huella mira la de trabajo. Ya pasaba antes: el `antes`/`ahora` de `Type` salen de ahí. No se arregla aquí:
+    `SurfaceMapTools` no tiene el sitio de la ventana de trabajo, y dárselo es una línea más en `FaceWindow`.
+  - **Visto y no tocado**: tras el «Atrás», `ahora = antes` aunque no se haya vuelto. Desde esta fase el log lo dice; la
+    respuesta al modelo, no. Cambiarlo cambia lo que `map_type` contesta, y eso necesita su propia promesa.
+  - **Sitios** (patrón nº5; M, `grep`):
+    - Los **3** de `:2865-2926`: **1** pasa a la huella (`EsperarPantallaLista`), **1** se borra (`EsperarCambio`) y
+      **1** se queda por ubicación a propósito y pasa al compás. Es `Llego`, cuya pregunta es «¿volví a la de antes?»: la
+      ubicación, como «llegar a la esperada» en la 356. Además se borra el ayudante `CuantosAccionables`.
+    - De los 11 sitios que calculan «cambió» por ubicación o recuento quedan **5**; tras la fase 6 eran 7. Son **4 fuera
+      por alcance** (los 3 de `PasoDelNucleo` y `Abrir`) y **1 por diseño** (`Llego`).
+    - `Thread.Sleep` en `SurfaceMapTools`: **6 → 3**. Quedan `:2200`, `:2340` y `:2735` (arriba, «Lo que queda fuera»).
+    - Copias de las metas: el 250, **2 → 1** definición; el 400 de la primera huella, **1 → 1** (movida). El 400 de
+      `EsperaDeAsentarMs` es el de la compuerta (299) y no se toca.
+    - Llamadores de `EsperaAsentada.Espera`: **0 → 1**. Hasta hoy, la 358 juzgaba un bucle que nadie usaba.
+  - **Contrato** (M, con `TEMP` propio):
+    - **Antes**, con la aserción nueva y sin código: `CONTRATO ROTO: 5` (305 ✔ / 2 ✘: 358 y 359). La 358 tenía 4
+      aserciones rojas: las tres del código leído y la de `Llego`, a los 1.437 ms. Los 307 veredictos, iguales a la
+      fase 6.
+    - **Después**: **`CONTRATO ROTO: 1`** (306 ✔ / 1 ✘: la 359, `PENDIENTE`, de la fase 8). Solo cambia `✘ 358.` →
+      `✔ 358.`.
+    - Siguen en ✔: 44, 83, 103, 226, 245, 248, 292, 296, 299, 334 y 351-357.
+    - Compila con 0 errores y los mismos 36 warnings. El único de `SurfaceMapTools` (`:1499`, CA2021) es de antes y no
+      está en el bloque tocado.
+  - **Sabotajes, verificados por diff** (1+/1− contra la copia, ancla con el fin de línea de su archivo —`EsperaAsentada.cs`
+    es LF y `SurfaceMapTools.cs` CRLF, medido— y una sola coincidencia, 0 errores al compilar):
+    - (a) **El de la spec**: el bucle de `Espera` vuelve a contar vueltas, `techo / cadencia` sondeos con la cadencia
+      entera dormida en cada una. Resultado: **`CONTRATO ROTO: 2`**, y cae solo la 358 por su primer caso: «con un sondeo
+      lento la espera termina en el techo más un sondeo, no en techo × vueltas: 5.224 ms».
+    - (b) **El de la aserción nueva**: `Llego` vuelve a dormir la vuelta de 200 ms aunque el plazo se haya agotado
+      (`Task.Delay(200).Wait(-1) && !compas.SeAcabo`). Resultado: **`CONTRATO ROTO: 2`**, y cae solo esa aserción:
+      1.433 ms.
+    - Restaurados los dos: `cmp` byte a byte contra cada copia (md5 `495B12CB…` y `455A23FA…`), fecha tocada y
+      recompilado. Después, `CONTRATO ROTO: 1` veredicto a veredicto, y las aserciones rojas iguales sin los ms.
+  - **Sin nivel 4**: esta rama no ejecuta `U.exe`. El caso del nivel 4 ya está escrito arriba («un `map_type` con Enter en
+    el Explorador (358)»). Lo que cambia en la app: tras el Enter se deja de mirar cuando la pantalla se asienta, nunca
+    antes de los 400 ms de la primera huella (D: respiro 250, sondeo cada 120), o en cuanto cambia de sitio, en vez de
+    recontar botones del primer plano durante diez vueltas de coste sin medir.
 
 ## Revisiones
 
@@ -888,6 +965,7 @@ hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 - [x] Fase 4: la 353 verde por los dos caminos (manos falsas y `MapaParaTramo`); 44 y 292 intactas; los dos sabotajes de la spec verificados por diff (2026-09-22)
 - [x] Fase 5: la 357 verde; 83, 248 y 296 intactas; las 3 esperas de `Pulsa` con una sola huella y una sola regla (de los 11 sitios quedan 8); el sabotaje de la spec y uno más, verificados por diff (2026-09-22)
 - [x] Fase 6: la 356 verde; 103 intacta; la llegada no recorta nada mientras el presupuesto sea el techo; los dos sabotajes de la spec y uno de la línea (d), verificados por diff; `FaceWindow` sin tocar (2026-09-22)
+- [x] Fase 7: la 358 verde; `EsperarPantallaLista` con la huella y el compás, `Llego` con el compás, `EsperarCambio` y `CuantosAccionables` borrados (3 sitios, 1 borrado; de los 11 quedan 5); el sabotaje de la spec y uno de la aserción nueva, verificados por diff (2026-09-22)
 - [ ] Fase 0 **medida** en tres pantallas con nombre, con las cuentas (a)–(e) en «Hallazgos» y **0** líneas «nadie miraba» — la corre el dueño: esta rama no ejecuta `U.exe`
 - [ ] El dueño decidió sobre las ≤2 líneas de `FaceWindow` (o salieron a una rama de UI propia, y el PR lo dice)
 - [ ] Hablado con Jose sobre `InventarioAsentado` (044/335) antes del PR; el hunk `:343` acordado con A y C

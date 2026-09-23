@@ -24,6 +24,19 @@ namespace U.WindowsClient.Navigation;
 /// </remarks>
 public sealed class EsperaAsentada
 {
+    /// <summary>
+    /// LAS DOS METAS DE LA REGLA, en un solo sitio: cuánto tienen que separarse dos huellas iguales (250, jkudish) y antes
+    /// de cuándo no se declara nada (400, el de la compuerta, 299). METAS, NO DATOS: las fija el nivel 4 de la fase 0.
+    /// </summary>
+    /// <remarks>
+    /// Viven aquí desde la fase 7 (358), cuando las herramientas del mapa pasaron a usar la misma regla. Antes el 250 estaba
+    /// escrito en 2 sitios (Pulsa y la huella en vivo) y el 400 en 1; una tercera copia en el mapa habría hecho que el día
+    /// que la medida los cambie, el sitio olvidado juzgara «asentada» con otra regla (aprendizaje nº16).
+    /// </remarks>
+    public const int RespiroMetaMs = 250;
+    /// <summary>Antes de esto no se declara nada: una página que aún no empezó a pintarse parece asentada. Meta; ver <see cref="RespiroMetaMs"/>.</summary>
+    public const int PrimeraMetaMs = 400;
+
     /// <summary>Por qué dejó de esperar. Las «Techo…» son las causas que la cuenta tiene que distinguir (patrón nº2).</summary>
     public enum PorQue { Asentada, CambioDeSitio, TechoSeMovia, TechoNadieMiraba, TechoSabeQueLleva, TechoNoSePudoMirar }
 

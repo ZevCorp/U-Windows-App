@@ -149,7 +149,7 @@ public sealed class PulsarSegunElNucleo
     public Action<string>? Diario { get; set; }
 
     /// <summary>Cuánto tienen que separarse dos huellas iguales para dar la pantalla por asentada. META, no dato: 250 = jkudish; lo fija el nivel 4 de la fase 0.</summary>
-    public int RespiroMs { get; set; } = 250;
+    public int RespiroMs { get; set; } = EsperaAsentada.RespiroMetaMs;
 
     /// <summary>Antes de esto no se declara nada: una página que aún no empezó a pintarse parece asentada (el 400 de la compuerta, 299).</summary>
     /// <remarks>
@@ -158,7 +158,7 @@ public sealed class PulsarSegunElNucleo
     /// asentada antes de cambiar de sitio —la relectura fresca solo la salva si el sitio ya cambió—. Es exactamente la
     /// cuenta (b) del nivel 4 de la fase 0, y de ella sale este número.
     /// </remarks>
-    public int PrimeraHuellaMs { get; set; } = 400;
+    public int PrimeraHuellaMs { get; set; } = EsperaAsentada.PrimeraMetaMs;
 
     private void Anota(string linea)
     {
