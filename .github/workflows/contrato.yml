@@ -56,21 +56,27 @@ jobs:
           # PENDIENTES: ...)" y el recuento se pasa por uno, dejando el numero de incumplidas en
           # negativo. Un recuento que puede mentir es el aprendizaje n.10 (2026-08-13).
           $pend  = @(Select-String -Path $log -SimpleMatch 'PENDIENTE:').Count
+          # "SIN JUZGAR:" es la tercera marca (spec 049, fase 0): promesas que el juez no llego a
+          # probar -sin U_REPO, sin WPF en el runner- y que antes salian verdes o rojas sin mirar nada.
+          $sinJuzgar = @(Select-String -Path $log -SimpleMatch 'SIN JUZGAR:').Count
+          # 99 con "CONTRATO SIN VEREDICTO COMPLETO" en el log es el JUEZ diciendo que hubo promesas
+          # sin juzgar y ninguna roja; 99 sin esa linea es que el juez ni llego a hablar.
+          $sinVeredictoCompleto = ($codigo -eq 99) -and [bool](Select-String -Path $log -SimpleMatch 'CONTRATO SIN VEREDICTO COMPLETO')
           # Con el arnes caido el codigo no es un recuento de promesas: el verde se cuenta desde 0
           # en vez de dar un negativo que parezca un dato. Y con 99 ("no emitio veredicto") no hay
           # NINGUN numero que dar: la tabla dice "?" en vez de inventarse 99 incumplidas.
           $sinVeredicto = ($codigo -eq 99)
-          $verdes = if ($sinVeredicto) { '?' } else { [Math]::Max(0, $total - $codigo) }
-          $incumplidas = if ($sinVeredicto) { 'NO SE PUDO JUZGAR' } else { [Math]::Max(0, $codigo - $pend) }
+          $verdes = if ($sinVeredictoCompleto) { $total - $sinJuzgar } elseif ($sinVeredicto) { '?' } else { [Math]::Max(0, $total - $codigo) }
+          $incumplidas = if ($sinVeredictoCompleto) { 0 } elseif ($sinVeredicto) { 'NO SE PUDO JUZGAR' } else { [Math]::Max(0, $codigo - $pend) }
 
           # El resumen del run dice el veredicto sin que nadie abra los logs, y distingue sus causas
-          # (una promesa sin codigo todavia no es lo mismo que una regresion).
+          # (una promesa sin codigo todavia no es lo mismo que una regresion, ni que una sin juzgar).
           $resumen = @(
             '## Contrato del grafo'
             ''
-            "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) |"
-            "|---|---|---|---|"
-            "| $total | $verdes | $incumplidas | $pend |"
+            "| Promesas | Verdes | Incumplidas | Pendientes (sin codigo aun) | Sin juzgar (el juez no llego) |"
+            "|---|---|---|---|---|"
+            "| $total | $verdes | $incumplidas | $pend | $sinJuzgar |"
             ''
             '```'
             (Get-Content $log -Raw)
@@ -78,6 +84,10 @@ jobs:
           )
           $resumen -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
+          if ($sinVeredictoCompleto) {
+            Write-Host "::error::SIN VEREDICTO COMPLETO: 0 rojas, pero $sinJuzgar promesa(s) SIN JUZGAR. No es verde: busca 'SIN JUZGAR:' en el log del summary."
+            exit 1
+          }
           if ($codigo -eq 99) {
             Write-Host "::error::NO SE PUDO JUZGAR: el contrato no emitio veredicto. No es un rojo ni un verde: no se sabe nada de las promesas. Mira el log del summary."
             exit 1
