@@ -15814,15 +15814,20 @@ internal static class Contrato
         mInvalida.Invoke(null, new object[] { "el juez empieza limpio" });
         try
         {
-            SurfaceMapTools Mapa(Func<IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> decide, Action<IReadOnlyList<string>>? alOfrecer = null)
+            SurfaceMapTools Mapa(Func<IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso> decide, Action<IReadOnlyList<string>>? alOfrecer = null, bool conGuardar = false)
             {
                 var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "sap", "");
                 var mapa = new SurfaceMapTools(() => loc);
                 var caja = new System.Windows.Rect(3, 3, 50, 14);
-                pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true,
+                // «Guardar» SOLO CUANDO SE PIDE (390 contra 368, al juntar A y C): el caso de 3 sigue siendo el de 3.
+                var vistos = new List<object>
+                {
                     ElementoVisto(tEl, "uia:name=Buscar;ct=Edit", "Buscar", "Edit", caja, "1.1"),
                     ElementoVisto(tEl, "uia:name=Crear Triage Administrativo;ct=Button", "Crear Triage Administrativo", "Button", caja, "1.2"),
-                    ElementoVisto(tEl, "uia:name=Salir;ct=Button", "Salir", "Button", caja, "1.3"))));
+                    ElementoVisto(tEl, "uia:name=Salir;ct=Button", "Salir", "Button", caja, "1.3"),
+                };
+                if (conGuardar) vistos.Add(ElementoVisto(tEl, "uia:name=Guardar;ct=Button", "Guardar", "Button", caja, "1.4"));
+                pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true, vistos.ToArray())));
                 mapa.RecorrerPorElNucleo = pasos => new RecorrerSegunElNucleo.Resultado(1, 1, "uia://sap/NV2000", true,
                     "hice los 1 paso(s): pulsé «Crear Triage Administrativo» y ahora estás en «uia://sap/NV2000».", true);
                 pDecisor.SetValue(mapa, Decide((_, _, puertas) => { alOfrecer?.Invoke(puertas); return decide(puertas); }));
@@ -15857,6 +15862,24 @@ internal static class Contrato
             evento.AddEventHandler(mapaNo, Oye(evento.EventHandlerType!, x => eNo = x));
             mapaNo.Call("map_decidir", args);
             Debe(eNo != null && PropDe(eNo, "Paso") is ElTramo.Paso { Actuo: false }, "con un decisor que dice No, el evento también sale y su paso no actuó");
+
+            // LA DECISIÓN QUE SE PUBLICA ES LA YA VETADA (390 contra 368, al juntar A y C, 2026-09-24). La 046 le deja escrito a C
+            // que el evento publica la decisión DESPUÉS del veto, «o publicará Actuar=true sobre algo que no se pulsó», y D pinta
+            // «vetada» cuando Veto no está vacío. Tras el merge el evento se anotaba antes del veto: con «Guardar» a 0,99 salía
+            // Actuar=true, Puerta «4) Guardar (Button)» y Veto vacío, con el paso sin actuar — una caja que miente (patrón nº8)
+            // justo sobre lo irreversible, y ni este juez ni el de la 390 lo veían: los dos solo miraban decisiones sin vetar
+            // o no se suscribían. Lo que Jev contestó sigue ahí (ConVeto conserva confianza, alternativas y nouls).
+            object? eV = null;
+            var mapaV = Mapa(_ => Decision("Si", "4) Guardar (Button)", 0.99, "Jev eligió «4) Guardar (Button)» con confianza 0.99."), conGuardar: true);
+            evento.AddEventHandler(mapaV, Oye(evento.EventHandlerType!, x => eV = x));
+            mapaV.Call("map_decidir", args);
+            var dV = eV == null ? null : PropDe(eV, "Decision");
+            Debe(eV != null && dV != null && PropDe(dV, "Actuar") is false && PropDe(dV, "Veto") is string vetoV && vetoV.Length > 0
+                    && PropDe(eV, "Paso") is ElTramo.Paso { Actuo: false },
+                $"con la elegida vetada (390) el evento publica la decisión YA vetada: Actuar=false y su Veto, como manda la 046 a C "
+                + $"(Actuar={(dV == null ? "—" : PropDe(dV, "Actuar"))}, Puerta=«{(dV == null ? "—" : PropDe(dV, "Puerta"))}», Veto=«{(dV == null ? "—" : PropDe(dV, "Veto"))}»)");
+            Debe(dV != null && Convert.ToDouble(PropDe(dV, "Confianza")) == 0.99,
+                $"y lo que Jev contestó sigue en ella: la confianza 0.99 ({(dV == null ? "—" : PropDe(dV, "Confianza"))})");
 
             // SIN SUSCRIPTOR: la cuenta es byte a byte la de hoy.
             var mapaSolo = Mapa(_ => Decision("Si", "2) Crear Triage Administrativo (Button)", 0.93, "Jev eligió «2) Crear Triage Administrativo (Button)» con confianza 0.93."));

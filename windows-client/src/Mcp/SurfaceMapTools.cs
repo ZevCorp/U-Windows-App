@@ -666,7 +666,8 @@ public sealed class SurfaceMapTools
     /// id N-ésima de <paramref name="Ofrecidas"/> —«N) Etiqueta (Tipo)», exactamente lo que recibió el decisor— es
     /// la candidata N-ésima, con su caja LEÍDA o <see cref="System.Windows.Rect.Empty"/> si no la hay (terreno,
     /// dynpro: nunca una estimada, patrón nº8). Vacías si no se llegó a leer.
-    /// <paramref name="Decision"/> ES LA DEL DECISOR SIN TOCAR, también cuando dice que no; nula si no la hubo
+    /// <paramref name="Decision"/> ES LA DEL DECISOR, YA CON EL VETO (390): si la elegida era irreversible sale con
+    /// Actuar=false, Puerta vacía y Veto; lo que Jev contestó, intacto (ConVeto). También cuando dice que no; nula si no la hubo
     /// (decisor apagado, pantalla sin nombre, nada accionable, o el decisor lanzó: el porqué está en
     /// <paramref name="Paso"/>). A CUÁL FUE LA MANO no es la decisión —puede ser la segunda mejor—: es
     /// <c>Paso.Numero</c>, sacado de la id con <c>id.Substring(0, id.IndexOf(')'))</c> como la mano, y
@@ -825,7 +826,7 @@ public sealed class SurfaceMapTools
             return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})", tiempos: TiemposSinPulsar());
         }
         reloj.Stop();
-        if (anotado != null) { anotado.Decision = d; anotado.MsDecidir = reloj.ElapsedMilliseconds; }
+        if (anotado != null) anotado.MsDecidir = reloj.ElapsedMilliseconds;
 
         // LO IRREVERSIBLE NO SE PULSA POR DECISIÓN (promesa 390, spec 046), y se mira AQUÍ, al construir las
         // candidatas y antes de cualquier Take: es el único sitio por el que pulsan map_decidir y el tramo. Hasta el
@@ -862,6 +863,10 @@ public sealed class SurfaceMapTools
         string vetoElegida = d.Actuar ? Vetada(elegidaId) : "";
         if (vetoElegida.Length > 0)
             d = d.ConVeto(vetoElegida, $"Jev eligió «{Nombre(elegidaId)}» ({NumeroDe(elegidaId)}) y está vetada: {vetoElegida}");
+        // EL EVENTO SE ANOTA DESPUÉS DEL VETO (390; contrato de la 046 para C y D, al juntar A y C, 2026-09-24): el evento no
+        // puede decir Actuar=true sobre algo que no se pulsó; D pinta «vetada» por Veto. Tras el merge se anotaba arriba, junto
+        // al reloj, y con «Guardar» a 0,99 AlDecidir publicaba Actuar=true, la Puerta y Veto vacío con el paso sin actuar.
+        if (anotado != null) anotado.Decision = d;
 
         // SE REGISTRA CADA DECISIÓN CON SU CONFIANZA, también las descartadas: el umbral se ajusta con
         // datos del terreno, y los datos son estas líneas. Y CON LO QUE VIAJÓ (350): cuántos ids de cuántos, cuántos
