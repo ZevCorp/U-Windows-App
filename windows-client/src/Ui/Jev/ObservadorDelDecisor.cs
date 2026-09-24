@@ -82,8 +82,12 @@ public static class ObservadorDelDecisor
     /// emparejan a ojo.
     ///
     /// SIN DECISIÓN (decisor apagado, pantalla sin nombre, nada accionable, el decisor lanzó) el ciclo sale igual, sin
-    /// decisión y sin pulsada: un paso no ejecutado deja rastro (patrón nº10), y la línea de progreso que viene detrás
-    /// dice por qué. Así el número de paso de la vista es el del tramo.
+    /// decisión y sin pulsada: un paso no ejecutado deja rastro (patrón nº10). Así el número de paso de la vista es el del
+    /// tramo. Y lleva el porqué del paso: con <c>map_decidir</c> no viene ninguna línea detrás que lo diga.
+    ///
+    /// «NO SE PULSÓ» SE SABE AQUÍ, Y SOLO AQUÍ (<see cref="CicloDeJev.NoSePulso"/>, revisión de la fusión, 2026-09-24): el
+    /// evento sale con el paso terminado, así que un paso sin «actuó y terminó» es uno en que la mano no pulsó nada. Sin esto
+    /// el panel leía la pulsada en <c>null</c> como «todavía no se sabe» y decía «Pulsando» con la elegida resaltada.
     /// </remarks>
     public static CicloDeJev CicloDe(SurfaceMapTools.PasoDecidido paso)
     {
@@ -98,15 +102,20 @@ public static class ObservadorDelDecisor
         string? pulsada = paso.Paso.Actuo && paso.Paso.Termino && !string.IsNullOrWhiteSpace(paso.Paso.Numero)
             ? paso.Paso.Numero
             : null;
+        bool noSePulso = !(paso.Paso.Actuo && paso.Paso.Termino);
+        string porQue = noSePulso ? (paso.Paso.Porque ?? "").Trim() : "";
 
         if (paso.Decision != null)
-            return CicloDe(paso.Objetivo, ofrecidas, paso.Decision, paso.Ms.Decidir, cajas) with { Pulsada = pulsada };
+            return CicloDe(paso.Objetivo, ofrecidas, paso.Decision, paso.Ms.Decidir, cajas)
+                with { Pulsada = pulsada, NoSePulso = noSePulso, PorQueNoSePulso = porQue };
         return new CicloDeJev
         {
             Objetivo = paso.Objetivo ?? "",
             Candidatas = Candidatas(ofrecidas, cajas),
             MsDecidir = paso.Ms.Decidir,
             Fase = FaseDelCiclo.Decidido,
+            NoSePulso = noSePulso,
+            PorQueNoSePulso = porQue,
         };
     }
 

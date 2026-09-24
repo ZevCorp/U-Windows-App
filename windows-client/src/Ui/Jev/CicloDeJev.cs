@@ -133,9 +133,37 @@ public sealed record CicloDeJev
 
     /// <summary>
     /// El número del id de lo que la mano pulsó —<c>Paso.Numero</c> del evento, solo si la mano terminó—, o <c>null</c> si
-    /// no se sabe o no se pulsó nada.
+    /// no se sabe. Que se sabe que NO se pulsó nada lo dice <see cref="NoSePulso"/>, no este <c>null</c>.
     /// </summary>
     public string? Pulsada { get; init; }
+
+    /// <summary>
+    /// EL PASO YA TERMINÓ Y LA MANO NO PULSÓ NADA. Solo lo pone el evento de la 048
+    /// (<see cref="ObservadorDelDecisor.CicloDe(Mcp.SurfaceMapTools.PasoDecidido)"/>), que sale con el paso acabado.
+    /// </summary>
+    /// <remarks>
+    /// DOS CAUSAS EN UN MISMO VALOR, Y SE SEPARAN (aprendizaje nº2; revisión de la fusión de A, B, C y D, 2026-09-24).
+    /// <see cref="Pulsada"/> en <c>null</c> decía a la vez «todavía no se sabe» y «no se pulsó». Con el puente daba igual: el
+    /// decidido salía al decidir, antes de pulsar. Con el evento, un decidido sin pulsada es de un paso terminado, y el
+    /// panel seguía diciendo «Pulsando «Crear Triage…» (2)» con la elegida resaltada sobre algo que la mano no pulsó —la
+    /// elegida no estaba y no hubo segunda, homónimos, el tope—: la misma clase que la vetada, en un segundo sitio
+    /// (aprendizaje nº7). Fuera del evento —la traducción pura, un ciclo a mano— es <c>false</c>, y sin pulsada sigue
+    /// siendo «no se sabe». <see cref="ConLaLinea"/> lo conserva, porque va con <c>with</c>.
+    /// </remarks>
+    public bool NoSePulso { get; init; }
+
+    /// <summary>
+    /// El porqué del paso que no pulsó (<c>Paso.Porque</c>), tal cual; vacío si pulsó o si el ciclo no viene del evento. El
+    /// panel lo dice cuando no hubo decisión —decisor apagado, pantalla sin nombre, nada accionable, el decisor lanzó—: con
+    /// <c>map_decidir</c> no llega ninguna línea detrás que lo cuente, y el ticker quedaba en blanco (patrón nº10).
+    /// </summary>
+    public string PorQueNoSePulso { get; init; } = "";
+
+    /// <summary>
+    /// La línea viene de un paso decidido: <see cref="ConLaLinea"/> con un decidido detrás. Es lo que la hace «de un paso»
+    /// para el overlay (<see cref="CajasDelOverlay.DelCiclo"/>), también cuando el paso no tuvo decisión ni candidatas.
+    /// </summary>
+    public bool DeUnPaso { get; init; }
 
     /// <summary>La caja de lo que la mano dice haber pulsado, en físicos (<c>UiaSurface.Pulso</c>), o <c>null</c>.</summary>
     public System.Windows.Rect? CajaPulsada { get; init; }
@@ -172,6 +200,6 @@ public sealed record CicloDeJev
     {
         ArgumentNullException.ThrowIfNull(linea);
         var desde = decidido ?? new CicloDeJev { Objetivo = objetivo ?? "" };
-        return desde with { Fase = FaseDelCiclo.Linea, Linea = linea };
+        return desde with { Fase = FaseDelCiclo.Linea, Linea = linea, DeUnPaso = decidido != null };
     }
 }

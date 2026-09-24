@@ -46,8 +46,9 @@ public sealed record BarraDeJev(string Id, string Etiqueta, double Probabilidad,
 /// LO RESALTADO ES LO PULSADO. La elegida es la que devolvió el decisor; la pulsada es la que la mano pulsó, que
 /// puede ser la segunda mejor (<c>SurfaceMapTools.cs:304-309</c>). Una barra que resaltara la elegida mientras la
 /// mano pulsa otra sería la caja que miente con distribución y todo (aprendizaje nº4). Así que: pulsada conocida
-/// → la suya, por el NÚMERO del id; si no, la elegida por su id, marcada como elegida; con el tramo parado o sin
-/// actuar, ninguna. Nunca por la etiqueta: dos «Buscar» existen.
+/// → la suya, por el NÚMERO del id; si no, la elegida por su id, marcada como elegida; con el tramo parado, sin
+/// actuar o sabiendo que la mano no pulsó (<see cref="CicloDeJev.NoSePulso"/>), ninguna. Nunca por la etiqueta: dos
+/// «Buscar» existen.
 ///
 /// SIN DISTRIBUCIÓN NO HAY GRÁFICO. Con Luna, con la regla local o con la probabilidad de la elegida a secas no
 /// hay nada que repartir en barras, y unos medidores y una cabecera sin barras enseñarían que Jev decidió algo
@@ -126,9 +127,16 @@ public static class EstadoDeLaDecision
         if (ciclo.Fase == FaseDelCiclo.Mirando) return (TextosDeJev.Mirando, PuntoSigue);
         if (ciclo.Fase == FaseDelCiclo.Eligiendo) return (TextosDeJev.Eligiendo(ciclo.Paso, candidatas.Count), PuntoSigue);
 
-        if (decision == null) return ("", PuntoSigue);
+        // SIN DECISIÓN, EL PORQUÉ DEL PASO si se sabe (patrón nº10, revisión de la fusión, 2026-09-24): con map_decidir no llega
+        // ninguna línea detrás, y un ticker en blanco no decía por qué no se hizo nada.
+        if (decision == null)
+            return ciclo.NoSePulso && !string.IsNullOrWhiteSpace(ciclo.PorQueNoSePulso) ? (ciclo.PorQueNoSePulso.Trim(), PuntoPara) : ("", PuntoSigue);
+        // ACTUAR NO ES HABER PULSADO (revisión de la fusión, 2026-09-24): el ciclo del evento sale con el paso terminado, y si
+        // la mano no pulsó, «Pulsando» es el «acciona» sobre algo que no se accionó —la misma clase que la vetada—.
         if (decision.Actuar)
-            return (TextosDeJev.Pulsando(EtiquetaDe(decision.Puerta, candidatas), elegida), PuntoSigue);
+            return ciclo.NoSePulso
+                ? (TextosDeJev.NoPudePulsar(EtiquetaDe(decision.Puerta, candidatas), elegida), PuntoPara)
+                : (TextosDeJev.Pulsando(EtiquetaDe(decision.Puerta, candidatas), elegida), PuntoSigue);
 
         // VETADA, ANTES QUE NINGUNA COMPUERTA DE JEV (374, al juntar A, C y D, 2026-09-24): Jev sí quería —la vetada llega con
         // su confianza y su distribución intactas (ConVeto)—, y lo que la frena es la lista de lo irreversible (390). Por las
@@ -171,7 +179,8 @@ public static class EstadoDeLaDecision
             // EL NÚMERO SOLO CUANDO HACE FALTA para distinguir: dos de las cinco con la misma etiqueta.
             bool compartida = etiquetas.Count(e => string.Equals(e, etiqueta, StringComparison.Ordinal)) > 1;
             bool porPulsada = !parado && pulsada != null && string.Equals(numero, pulsada, StringComparison.Ordinal);
-            bool porElegida = !parado && pulsada == null && decision.Actuar && string.Equals(id, decision.Puerta, StringComparison.Ordinal);
+            // LA ELEGIDA SOLO MIENTRAS NO SE SEPA QUÉ SE PULSÓ (372): con NoSePulso ya se sabe, y es ninguna.
+            bool porElegida = !parado && pulsada == null && !ciclo.NoSePulso && decision.Actuar && string.Equals(id, decision.Puerta, StringComparison.Ordinal);
             barras.Add(new BarraDeJev(
                 id,
                 compartida && numero != null ? $"{numero}) {etiqueta}" : etiqueta,

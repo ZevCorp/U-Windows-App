@@ -32,6 +32,13 @@ public static class TextosDeJev
     public const string FormatoPulsando = "Pulsando «{0}» ({1})";
 
     /// <summary>
+    /// Jev actuó y la mano no llegó a pulsar: {0} la etiqueta de la elegida, {1} su número. «No pude» y no «no estaba»: «no
+    /// terminó» tiene tres causas —no estaba y no hubo segunda, homónimos, el tope— y la línea del tramo dice cuál
+    /// (aprendizaje nº2). Solo se dice cuando se SABE que no se pulsó (<see cref="CicloDeJev.NoSePulso"/>).
+    /// </summary>
+    public const string FormatoNoPudePulsar = "No pude pulsar «{0}» ({1})";
+
+    /// <summary>
     /// La mano pulsó la segunda mejor porque la elegida no estaba: {0} su etiqueta, {1} su número. Es lo único
     /// que hace <c>UnPasoDecidido</c> cuando la primera «no está», y el panel lo dice como lo que es.
     /// </summary>
@@ -74,6 +81,9 @@ public static class TextosDeJev
 
     /// <summary>«Pulsando «{etiqueta}» ({n})».</summary>
     public static string Pulsando(string etiqueta, string? numero) => string.Format(Invariante, FormatoPulsando, etiqueta, numero);
+
+    /// <summary>«No pude pulsar «{etiqueta}» ({n})».</summary>
+    public static string NoPudePulsar(string etiqueta, string? numero) => string.Format(Invariante, FormatoNoPudePulsar, etiqueta, numero);
 
     /// <summary>«la 1.ª no estaba: pulsé la 2.ª «{etiqueta}» ({n})».</summary>
     public static string SegundaMejor(string etiqueta, string numero) => string.Format(Invariante, FormatoSegundaMejor, etiqueta, numero);

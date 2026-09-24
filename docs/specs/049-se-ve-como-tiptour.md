@@ -629,7 +629,12 @@ iguales aquí y en `Contrato.cs`; **ningún número nuevo, ninguno reciclado**.
 
 **Medido (M):** rojo antes del código: `CONTRATO ROTO: 6 promesa(s) incumplida(s).` — 337 ✔, rojas exactamente la 374
 (PENDIENTE `CicloDeJev.NoSePulso`) y la 382 (cinco aserciones: la línea sin nada, «Pulsando» con 0,82, la barra
-resaltada con distribución, la de su línea, y el ticker en blanco sin decisión).
+resaltada con distribución, la de su línea, y el ticker en blanco sin decisión). Verde con el código: `CONTRATO INTACTO`
+— 339 ✔. Tres sabotajes de una línea, uno por corrida, verificados por diff contra copia (CRLF incluido) y restaurados
+con `cmp`: `noSePulso = false` en `CicloDe(PasoDecidido)` → roja solo la 382 (4 aserciones: «Pulsando» con 0,82, las dos
+barras resaltadas y el ticker en blanco); quitar `!ciclo.NoSePulso` de la barra por elegida → rojas la 374 y la 382, y
+solo por sus barras (el ticker ya dice «No pude pulsar»); `DelCiclo` con el criterio de antes (decisión o candidatas) →
+roja solo la 382 (la línea sin nada da `null`).
 
 **Fuera de D, para el dueño de la 046 (A):** tras una elegida vetada, la parada de `ElTramo.Bucle` dice «el decisor no se
 atrevió: Jev eligió «Guardar» (4) y está vetada: …». Lleva «vetada», y la 374 obliga al panel a enseñarla tal cual,

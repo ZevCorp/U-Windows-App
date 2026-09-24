@@ -100,21 +100,26 @@ public sealed class CajasDelOverlay
 
     /// <summary>
     /// Las cajas que pinta un ciclo, o <c>null</c> si el ciclo no toca el overlay. El decidido las pinta siempre —también
-    /// vacías: un paso sin nada accionable deja el overlay vacío—; una línea, solo si lleva un paso (su decisión o sus
-    /// candidatas), y entonces las mismas que su decidido; «Mirando», «Eligiendo» y una línea suelta, ninguna.
+    /// vacías: un paso sin nada accionable deja el overlay vacío—; una línea, solo si viene de un paso
+    /// (<see cref="CicloDeJev.DeUnPaso"/>), y entonces las mismas que su decidido, también ninguna; «Mirando», «Eligiendo» y
+    /// una línea sin paso detrás, ninguna.
     /// </summary>
     /// <remarks>
     /// LA LÍNEA PINTA PORQUE LLEGA PEGADA AL EVENTO (382, al juntar C y D, 2026-09-24). El evento de la 048 sale cuando el
     /// paso terminó, y el tramo escribe su línea en el acto: el conector pinta solo el último ciclo encolado, y casi siempre
     /// es la línea. Con el puente, el decidido salía al decidir y la línea cientos de ms después, y bastaba con que pintara
-    /// el decidido. Límite dicho: un decidido sin decisión ni candidatas cuya línea llega pegada deja el overlay como
-    /// estaba, porque su línea no lleva nada que diga que es de un paso.
+    /// el decidido.
+    ///
+    /// LO QUE HACE A UNA LÍNEA «DE UN PASO» ES VENIR DE UN DECIDIDO, no llevar decisión o candidatas (revisión de la fusión,
+    /// 2026-09-24). Con ese criterio, un paso sin nada accionable —ni decisión ni candidatas— tenía una línea que no se
+    /// reconocía como suya: llegaba pegada, se pintaba solo ella, y el overlay se quedaba con las cajas del paso anterior,
+    /// la caja que miente (patrón nº8). El comentario lo daba por «límite dicho»; era uno de los cuatro estados que la
+    /// vista tiene que pintar bien.
     /// </remarks>
     public static CajasDelOverlay? DelCiclo(CicloDeJev ciclo)
     {
         ArgumentNullException.ThrowIfNull(ciclo);
-        bool llevaUnPaso = ciclo.Fase == FaseDelCiclo.Decidido
-            || (ciclo.Fase == FaseDelCiclo.Linea && (ciclo.Decision != null || (ciclo.Candidatas?.Count ?? 0) > 0));
+        bool llevaUnPaso = ciclo.Fase == FaseDelCiclo.Decidido || (ciclo.Fase == FaseDelCiclo.Linea && ciclo.DeUnPaso);
         return llevaUnPaso ? De(ciclo.Candidatas, ciclo.Pulsada) : null;
     }
 
