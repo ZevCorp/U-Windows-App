@@ -58,7 +58,9 @@ public sealed class PoliticaDeReintento
             {
                 // Que el intento reviente cuenta como que no salió: por dentro esto son fallos de
                 // red, y una excepción de red no es distinta de un `false` para quien reintenta.
-                LogBus.Log("reintento", $"intento {Intentos} lanzó {e.GetType().Name}: {e.Message}");
+                // Al panel el tipo; el mensaje, en el log local (spec 051, P15).
+                LogBus.Publico("reintento", $"intento {Intentos} lanzó {e.GetType().Name}");
+                LogBus.Log("reintento", $"el motivo del intento {Intentos}: {e.Message}");
                 salio = false;
             }
 
@@ -72,7 +74,7 @@ public sealed class PoliticaDeReintento
             if (i < DemorasMs.Count) await _esperar(DemorasMs[i], ct);
         }
 
-        LogBus.Log("reintento", $"se agotaron los {Intentos} intentos");
+        LogBus.Publico("reintento", $"se agotaron los {Intentos} intentos");
         return false;
     }
 }

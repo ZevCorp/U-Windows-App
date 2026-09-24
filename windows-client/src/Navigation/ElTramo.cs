@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Navigation;
 
@@ -93,6 +94,12 @@ public sealed class ElTramo
 
     /// <summary>Si el bucle está corriendo ahora.</summary>
     public bool EnMarcha { get { lock (_candado) return _trabajo != null && !_trabajo.IsCompleted; } }
+
+    /// <summary>
+    /// El objetivo del tramo en marcha o del último, recortado. Para que quien anota una cuenta del tramo la tape
+    /// antes: el objetivo lo escribe el modelo de voz con lo que dijo la persona (spec 051, O2 y O3).
+    /// </summary>
+    public string Objetivo { get { lock (_candado) return _objetivo; } }
 
     /// <summary>La cuenta: en marcha, dice por dónde va; terminado, dice qué hizo y por qué paró.</summary>
     public string Estado
@@ -230,7 +237,9 @@ public sealed class ElTramo
                       + (_pasos.Length > 0 ? "pasos: " + _pasos.ToString().TrimEnd(' ', ',') + "\n" : "")
                       + (inventario.Length > 0 ? "\n" + inventario : "");
         lock (_candado) _estado = cuenta;
-        _manos.Log($"← {cuenta.Split('\n')[0]}");
+        // La primera línea de la cuenta empieza por «tramo «{objetivo}»»: al log, con el objetivo por su forma
+        // (spec 051, hallazgo de la fase 4). La voz la recibe entera por AvisarALaVoz, que no es el log.
+        _manos.Log($"← {SinValor.Tapar(cuenta.Split('\n')[0], _objetivo)}");
         try { _manos.Progreso($"tramo: {hechos} paso(s) · {motivo}"); } catch { }
         // LA VOZ SE ENTERA SIN PREGUNTAR (295), y una sola vez: la llamada de map_tramo ya se contestó, así que
         // el único canal que queda abierto es un mensaje nuevo.

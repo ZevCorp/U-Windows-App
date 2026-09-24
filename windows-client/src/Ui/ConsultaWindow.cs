@@ -1716,7 +1716,11 @@ public sealed partial class ConsultaWindow : Window
             string cuenta = await PuenteDeAprendizajes.Mostrar!(anunciada.Archivo,
                 new Progress<string>(Estado), CancellationToken.None);
             Estado(cuenta);
-            LogBus.Log("aprendizajes", $"← {cuenta}");
+            // El veredicto, por su longitud (spec 051, N11). Por la rama «comprobar» lleva el relato del juez y
+            // lo último que narró el piloto (FaceWindow, ComprobarConElPilotoAsync), que trabaja con la nota
+            // delante; y las dos ramas ya anotan su veredicto sin valores en su propia línea («comprobar: piloto
+            // terminó…», «aprendizajes: ← …» de mostrar). En pantalla sigue entero: es de quien está delante.
+            LogBus.Log("aprendizajes", $"← {SinValor.Forma(cuenta)}");
         }
         catch (Exception e)
         {
@@ -2087,7 +2091,9 @@ public sealed partial class ConsultaWindow : Window
             LogBus.Log("consulta", $"✓ enviado: {string.Join(", ", claves)}");
             string cuenta = await PuenteASap.Enviar!(encargo, new Progress<string>(Pinta), CancellationToken.None);
             Pinta(cuenta);
-            LogBus.Log("consulta", $"cuenta del envío: {cuenta}");
+            // La cuenta la escribe el piloto, que trabaja con la nota delante: por su forma (spec 051, N7). Se
+            // sigue pintando entera en la sección, que es donde la lee el médico.
+            LogBus.Log("consulta", $"cuenta del envío: {SinValor.Forma(cuenta)}");
         }
         catch (Exception e)
         {

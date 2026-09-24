@@ -1,3 +1,4 @@
+using U.Graph;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Backend;
 using U.WindowsClient.Capture;
@@ -87,13 +88,19 @@ public sealed class AgentLoop
         // LO QUE SE NARRA ES QUE EMPEZAMOS, NO EL ENCARGO ENTERO. Desde que narrar se OYE
         // (promesa 142), soltar aquí el objetivo tal cual hacía que Ü leyera en voz alta los 4442
         // caracteres del encargo de comprobar, superficies y URLs incluidas — 2026-09-03 21:35:12,
-        // insufrible. El objetivo entero sigue yendo al log, que es donde sirve.
+        // insufrible.
         _voice.Narrate(goal.Length > 90 ? "¡Vamos!" : $"¡Vamos! {goal}");
-        LogBus.Log("agent", $"▶ objetivo: «{Short(goal, 160)}»" +
+        // Y AL LOG, POR SU FORMA (spec 051, O1). Hasta el 2026-09-24 este comentario decía «el objetivo entero
+        // sigue yendo al log, que es donde sirve», y con el dictado de respaldo el objetivo ES la frase dicha
+        // (FaceWindow.xaml.cs:2607): el log la guardaba, y salía del equipo por el espejo. El encargo del puente
+        // lo construye el código con piezas que ya están en el log; el de la voz vive en la conversación.
+        LogBus.Log("agent", $"▶ objetivo: {SinValor.Forma(goal)}" +
             (requireOrigin.Length > 0 ? $" · compuerta: solo actúa en «{requireOrigin}»" : " · SIN compuerta de superficie"));
         // Telemetría "Windows Live": esta corrida consciente entera se correlaciona por runId.
+        // El objetivo sube por su FORMA: con el dictado de respaldo el objetivo ES la frase dicha
+        // (FaceWindow.xaml.cs:2607), y aquí salía entero hacia el panel (spec 051, S2).
         string runId = TelemetryBus.NewRunId();
-        TelemetryBus.Emit("conscious_run_start", runId: runId, label: goal);
+        TelemetryBus.Emit("conscious_run_start", runId: runId, label: SinValor.Forma(goal));
         string? session = null;
         string[] results = Array.Empty<string>();
         string? inform = null; // respuesta pendiente a una pregunta del asistente (ask_user)
@@ -130,7 +137,10 @@ public sealed class AgentLoop
             {
                 _voice.Speak("No pude contactar con el cerebro. Revisa la conexión.");
                 LogBus.Log("agent", $"✗ el cerebro no respondió: {e.Message}");
-                TelemetryBus.Emit("conscious_run_end", phase: "error", runId: runId, label: e.Message);
+                // Al panel, el TIPO del error y no su mensaje: el de BackendClient lleva el cuerpo entero
+                // de la respuesta (BackendClient.cs:117). El mensaje queda en la línea de arriba, en local
+                // (spec 051, S3).
+                TelemetryBus.Emit("conscious_run_end", phase: "error", runId: runId, label: e.GetType().Name);
                 return $"error de backend: {e.Message}";
             }
 
@@ -177,8 +187,10 @@ public sealed class AgentLoop
             _voice.Speak(summary);
         }
         _voice.Narrate("¡Listo! 🎉");
-        LogBus.Log("agent", $"■ fin · {actions} acción(es) · {Short(summary, 160)}");
-        TelemetryBus.Emit("conscious_run_end", runId: runId, label: summary);
+        // Lo que Ü contestó, por su forma también aquí (spec 051, N8): repite lo pedido y lo leído de la pantalla.
+        LogBus.Log("agent", $"■ fin · {actions} acción(es) · {SinValor.Forma(summary)}");
+        // Lo que Ü contestó sube por su forma: repite lo pedido y lo leído de la pantalla (spec 051, S4).
+        TelemetryBus.Emit("conscious_run_end", runId: runId, label: SinValor.Forma(summary));
         return string.IsNullOrWhiteSpace(summary) ? "Hecho" : summary;
     }
 
@@ -253,8 +265,10 @@ public sealed class AgentLoop
                 string why = $"acción «{a.Kind}» NO ejecutada: el primer plano es "
                     + $"«{(here.Length > 0 ? here : "desconocido")}» y esta tarea es de «{requireOrigin}». "
                     + "Trae esa aplicación al frente antes de volver a intentarlo.";
+                // Lo que iba a teclear, por su longitud (spec 051, E20): es la hermana de E10 en este mismo
+                // método, y la revisión del 2026-09-24 la encontró sin tapar —la clase tenía dos sitios aquí, no uno—.
                 LogBus.Log("agent", $"✋ {why}"
-                    + (a.Kind == "type" ? $" · texto descartado='{Short(a.Text, 40)}'" : ""));
+                    + (a.Kind == "type" ? $" · texto descartado {SinValor.Forma(a.Text)}" : ""));
                 return why;
             }
         }
@@ -292,19 +306,31 @@ public sealed class AgentLoop
             _ => $"acción desconocida: {a.Kind}",
         };
 
-        LogBus.Log("agent", $"{Describe(a)} en '{where}' → {Short(result, 120)}");
+        // Para una acción mcp, result es la respuesta del mapa, que cita lo escrito («escribí «…»»,
+        // SurfaceMapTools.RelatoDeEscribir): se tapa ANTES de recortar, o un valor partido por el corte
+        // saldría a medias y entero (promesa 397).
+        LogBus.Log("agent", $"{Describe(a)} en '{where}' → {Short(SinValor.Tapar(result, LoQueEscribe(a)), 120)}");
         return result;
     }
 
+    /// <summary>Lo que una acción trae para escribir: el texto de un type y los valores de una llamada mcp.</summary>
+    private static string?[] LoQueEscribe(AgentAction a) =>
+        SurfaceMapTools.ValoresEscritos(a.Args).Append(a.Text).ToArray();
+
     /// <summary>
-    /// Una acción en una línea legible. El TEXTO de un `type` se registra recortado: es exactamente el
-    /// dato que faltaba para reconstruir el incidente del 2026-07-26 (qué se escribió y dónde). Queda
-    /// solo en el log LOCAL (%LOCALAPPDATA%\U\logs), nunca sale hacia Graph.
+    /// Una acción en una línea legible. El texto de un `type` va por su LONGITUD, no por su valor.
     /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-09-24 este comentario decía que el texto recortado «queda solo en el log LOCAL, nunca
+    /// sale hacia Graph». Era falso desde el 2026-08-16: el espejo (EspejoDelLog) subía cada línea del log
+    /// al backend, y esta con ella. Un guardia que se cree puesto (aprendizaje nº18), y en forma de
+    /// comentario. El incidente del 2026-07-26 necesitaba «qué y dónde»; queda «dónde y cuánto», y lo
+    /// escrito sigue donde vive: en la pantalla que se escribió (spec 051, decisión 2).
+    /// </remarks>
     private static string Describe(AgentAction a) => a.Kind switch
     {
         "tap" => $"tap ({a.X},{a.Y})",
-        "type" => $"type ({a.X},{a.Y}) «{Short(a.Text, 40)}»",
+        "type" => $"type ({a.X},{a.Y}) {SinValor.Forma(a.Text)}",
         "key" => $"key «{a.Key}»",
         "scroll" => $"scroll {(a.Down ? "abajo" : "arriba")}",
         "swipe" => $"swipe ({a.X1},{a.Y1})→({a.X2},{a.Y2})",

@@ -1,5 +1,6 @@
 using Mapeador;
 using U.WindowsClient.Diagnostics;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Navigation;
 
@@ -31,8 +32,14 @@ public sealed class MapaVivo : IDisposable
     /// una línea DESPUÉS de construir el proyector, y el proyector ya había intentado sus índices: con Neo4j
     /// caído gastaba ahí su único aviso sin que nadie lo oyera, y «Neo4j no responde» salió 0 veces en 17 logs.
     /// </summary>
+    /// <remarks>
+    /// CON EL TIPO NOMBRADO, y no con un <c>new(…)</c> sin tipo (spec 051, al juntar la 048 con la 051 el 2026-09-24):
+    /// el juez de la 399 sigue cada lambda que acaba en el log hasta el parámetro que la recibe, y un <c>new(…)</c>
+    /// no le dice a qué constructor va —la 399 lo daba por «embudo sin seguir»—. El proyector vive en <c>nucleo/</c>,
+    /// fuera del ámbito de la 051, igual que cuando la cuenta se le asignaba por su propiedad.
+    /// </remarks>
     private readonly Nucleo.ProyectorNeo4j _proyector =
-        new(url: null, cuenta: m => LogBus.Log("mapa-vivo", m), reloj: null);
+        new Nucleo.ProyectorNeo4j(url: null, cuenta: m => LogBus.Log("mapa-vivo", m), reloj: null);
     private readonly Func<string> _donde;
     private readonly Func<IReadOnlyList<(string Selector, string Etiqueta, string Tipo)>> _loQueVeo;
     private System.Threading.Timer? _reloj;
@@ -518,10 +525,15 @@ public sealed class MapaVivo : IDisposable
                     await System.Threading.Tasks.Task.Delay(500);
                     var jpeg = Voice.CapturaDePantalla.Capturar();
                     if (jpeg == null) return;
-                    string que = Actions.Freno.Tarea.Length > 0 ? Actions.Freno.Tarea : "pasando por aquí";
+                    string tarea = Actions.Freno.Tarea;
+                    string que = tarea.Length > 0 ? tarea : "pasando por aquí";
                     var ficha = album.Guardar(jpeg, ahora, que);
+                    // La tarea, por su forma (spec 051, clase O, hallazgo de la fase 5): la de un tramo es «tramo:
+                    // {objetivo}», y el objetivo lo escribe el modelo de voz con lo que dijo la persona. El álbum la
+                    // guarda entera en disco, que es donde se usa para recordar; el log no la necesita.
                     if (ficha != null)
-                        LogBus.Log("album", $"mirada de «{ahora}» guardada al llegar ({jpeg.Length} bytes) · mientras: {que}");
+                        LogBus.Log("album", $"mirada de «{ahora}» guardada al llegar ({jpeg.Length} bytes) · mientras: "
+                            + (tarea.Length > 0 ? $"una tarea {SinValor.Forma(tarea)}" : que));
                 }
                 catch (Exception e) { LogBus.Log("album", $"no pude guardar la mirada al llegar: {e.Message}"); }
             });

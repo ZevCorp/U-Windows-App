@@ -1,3 +1,5 @@
+using U.Graph;
+
 namespace U.WindowsClient.Navigation;
 
 /// <summary>
@@ -229,13 +231,17 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
+                // LO ESCRITO, POR SU LONGITUD, AQUÍ Y NO EN CADA SALIDA (spec 051, revisión del 2026-09-24):
+                // esta cuenta tenía cinco —la respuesta al modelo, la «←» del batch, el rastro que sirve
+                // /batches, el «plan · PARÓ» de la comprobación y la «←» de mostrar— y solo una tapada. El
+                // modelo no pierde nada: la cuenta contesta a los pasos que él mandó, y nombra el campo.
                 string partida = LaDePartida(paso);
                 bool escrito;
                 try { escrito = _escribir(paso.Exit, paso.Texto); }
                 finally { LaManoVolvio($"escribir en «{(paso.Exit.Length > 0 ? U.WindowsClient.Decision.PoliticaDeLoQueViaja.SelectorParaContar(paso.Exit) : "el campo con el foco")}»"); }
                 if (!escrito)
                     return Parcial(i, pasos.Count,
-                        $"no pude escribir «{paso.Texto}»"
+                        $"no pude escribir {SinValor.Forma(paso.Texto)}"
                         + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»." : "."), conVivos: true);
 
                 // ESCRIBIR NO NAVEGA; la tecla que va detrás, sí. Por eso el Enter viaja pegado al
@@ -421,11 +427,13 @@ public sealed class RecorrerSegunElNucleo
         desvio = "";
         if (paso.Llegada.Length == 0) return true;
 
-        string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
+        // Lo escrito por su longitud, como arriba (spec 051): esta cuenta sale por las mismas cinco puertas.
+        string que = paso.Texto.Length > 0 ? $"escribí {SinValor.Forma(paso.Texto)}" : $"pulsé «{paso.Tecla}»";
         // EN EL DIARIO, SIN EL TEXTO (revisión del 23-09): el diario de la app es el log («compuerta») y EspejoDelLog sube cada
         // línea al backend. La línea de la llegada sale en CADA paso de escritura con llegada —en SAP y también cuando sale bien—,
         // y el texto de una skill de IS-H es el documento del paciente. Antes de esta rama solo quedaba en el log si fallaba.
-        // La respuesta al modelo (`desvio`) sí lo lleva: es el texto que el propio modelo pidió escribir.
+        // La respuesta al modelo (`desvio`) tampoco lo lleva desde la 051 (revisión del 24-09): sale por las mismas cinco puertas
+        // que la cuenta de arriba —el rastro de /batches, el «plan · PARÓ», la «←» de mostrar—, y el modelo no pierde nada.
         string queParaElDiario = paso.Texto.Length > 0
             ? $"escribir {paso.Texto.Length} carácter(es)" + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»" : "") + (paso.Tecla.Length > 0 ? $" y pulsar «{paso.Tecla}»" : "")
             : $"pulsar «{paso.Tecla}»";

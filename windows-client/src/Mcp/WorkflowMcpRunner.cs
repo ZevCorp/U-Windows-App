@@ -33,10 +33,12 @@ public sealed class WorkflowMcpRunner
 
     public async Task<string> RunAsync(string workflowId, string context, CancellationToken ct)
     {
-        LogBus.Log("workflow", $"MCP invoca workflow_id='{workflowId}' context='{context}'");
+        // El contexto son los valores con que el cerebro rellena el workflow: van por su forma, aquí y
+        // en el panel (spec 051, E11/P24).
+        LogBus.Publico("workflow", $"MCP invoca workflow_id='{workflowId}' context={SinValor.Forma(context)}");
         // Telemetría "Windows Live": corrida de workflow (subconsciente). runId correlaciona sus pasos.
         string runId = TelemetryBus.NewRunId();
-        TelemetryBus.Emit("workflow_start", workflowId: workflowId, runId: runId, label: context);
+        TelemetryBus.Emit("workflow_start", workflowId: workflowId, runId: runId, label: SinValor.Forma(context));
         if (string.IsNullOrWhiteSpace(workflowId))
             return "la llamada al workflow no trajo workflow_id";
         if (!_graphConfig.IsConfigured)
@@ -52,8 +54,10 @@ public sealed class WorkflowMcpRunner
         player.StepDone += (_, outcome) =>
         {
             _voice.Narrate(outcome.Ok ? $"✓ {outcome.Label}" : $"✗ {outcome.Label}: {outcome.Error}");
+            // Al panel, el NÚMERO y el TIPO del paso, nunca su etiqueta: la de un select es la opción
+            // elegida y la de una fila de ALV, lo que dice la fila (spec 051, S9).
             TelemetryBus.Emit("workflow_step", workflowId: workflowId, runId: runId,
-                phase: outcome.Ok ? "ok" : "error", label: outcome.Label);
+                phase: outcome.Ok ? "ok" : "error", label: $"paso {outcome.StepOrder} · {outcome.ActionType}");
         };
 
         var variables = string.IsNullOrWhiteSpace(context)
@@ -65,16 +69,27 @@ public sealed class WorkflowMcpRunner
         RunResult result = await player.RunAsync(workflowId, variables, strictSurface: true, ct);
         // El total va sobre el PLAN (result.Total), no sobre los veredictos registrados: eso último es
         // lo que dejaba pasar «2/2» en una corrida que no ejecutó la mitad. Y los omitidos se nombran.
-        LogBus.Log("workflow", $"resultado: ok={result.Ok} · {result.Tally} · alineado={result.AlignedConsciously}{(result.Ok ? "" : " · error=" + result.Error)}");
+        // Al panel sube DÓNDE se paró —número y tipo del paso—, no el error: el de un paso que escribe
+        // repite lo puesto («puse «…» y el campo dice «…»») y el de un select nombra la opción. El
+        // error sigue en el log local, en su propia línea (spec 051, P25).
+        var fallo = result.Steps.LastOrDefault(s => !s.Omitted && !s.Ok);
+        LogBus.Publico("workflow", $"resultado: ok={result.Ok} · {result.Tally} · alineado={result.AlignedConsciously}"
+            + (result.Ok ? "" : fallo == null ? " · sin paso fallido: se paró antes o fuera de los pasos"
+                : $" · se paró en el paso {fallo?.StepOrder} ({fallo?.ActionType})"));
+        if (!result.Ok) LogBus.Log("workflow", $"el motivo: {result.Error}");
+        // Al panel, lo mismo que la línea pública de arriba y SIN result.Error (spec 051, S10). La
+        // expresión la congela el censo de la 395 tal cual: si falló sin paso fallido (se paró antes
+        // de los pasos) el label sale con el paso vacío, «se paró en el paso  ()», y lo que lo
+        // distingue es la línea «resultado:» de arriba, que el espejo también sube entera.
         TelemetryBus.Emit("workflow_end", workflowId: workflowId, runId: runId,
             phase: result.Ok ? "ok" : "error",
-            label: result.Ok ? $"completado ({result.Tally})" : result.Error,
+            label: result.Ok ? $"completado ({result.Tally})" : $"se paró en el paso {fallo?.StepOrder} ({fallo?.ActionType})",
             detail: new { completed = result.Completed, omitted = result.Omitted, steps = result.Total, aligned = result.AlignedConsciously });
         if (result.Ok && result.AlignedConsciously)
         {
             // APRENDIZAJE: me tuve que alinear conscientemente. Enseñárselo al workflow para que la
             // próxima vez arranque solo desde el principio (loop consciente→subconsciente).
-            LogBus.Log("workflow", $"aprendiendo alineación → prepend en {workflowId}");
+            LogBus.Publico("workflow", $"aprendiendo alineación → prepend en {workflowId}");
             _ = graph.PrependAlignmentStepAsync(workflowId, ct);
         }
         // Lo que lee el CEREBRO. Si aquí se le dice «completado» de una corrida que omitió pasos, el

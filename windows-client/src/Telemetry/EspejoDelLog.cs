@@ -3,7 +3,18 @@ using U.WindowsClient.Diagnostics;
 namespace U.WindowsClient.Telemetry;
 
 /// <summary>
-/// Manda al backend cada línea del log, para poder mirar desde otra máquina qué está haciendo esta.
+/// Refleja el log en el backend, para poder mirar desde otra máquina qué está haciendo esta: la línea
+/// MARCADA (<see cref="LogBus.Publico"/>) sube entera; cualquier otra sube solo como CADENCIA —su
+/// etiqueta, su hora y su longitud—, y la de <c>telemetry</c> no sube.
+///
+/// POR QUÉ YA NO SUBE CADA LÍNEA (spec 051, 2026-09-24). Hasta hoy subía el texto entero de toda línea,
+/// y el log lleva lo que Ü escribe en SAP: <c>RellenadorSap</c> anotaba ««Talla» = «38,5» (pedido
+/// «38.5»)». La historia clínica salía de la máquina del médico por un canal de diagnóstico que nadie
+/// había mirado con esos ojos. Arreglar los sitios que anotan valores no basta: el espejo subía POR
+/// DEFECTO, y el sitio que alguien escriba mañana saldría igual. Ahora sale entero solo lo que alguien
+/// decidió marcar, y lo marcado está congelado en el contrato (promesa 394). El fallo posible pasa a
+/// ser «el panel no ve X» —visible, y se arregla marcando la línea— en vez de «la historia clínica
+/// sale» —invisible—.
 ///
 /// POR QUÉ EXISTE. El panel de Windows del Provider Studio —lista de equipos, eventos en vivo por
 /// SSE, grafo por usuario— ya estaba entero, y el cliente ya emitía: arranques y finales de corrida,
@@ -17,7 +28,8 @@ namespace U.WindowsClient.Telemetry;
 /// SE ENGANCHA AL LOG Y NO A CADA SITIO QUE INFORMA. La alternativa era ir sembrando <c>Emit</c> por
 /// el código, y entonces lo que se ve en remoto y lo que se ve en el archivo se van separando en
 /// cuanto alguien añade un log y olvida el otro. Enganchándose a <see cref="LogBus"/> hay una sola
-/// fuente: lo que está en el archivo del equipo es exactamente lo que llega aquí.
+/// fuente: cada línea del archivo del equipo llega aquí —entera si está marcada, como pulso si no—,
+/// y el panel no se queda ciego a un subsistema porque nadie se acordó de él: lo ve hablar.
 /// </summary>
 public static class EspejoDelLog
 {
@@ -40,10 +52,10 @@ public static class EspejoDelLog
         lock (_candado)
         {
             if (_encendido) return;   // suscribirse dos veces duplicaría cada línea
-            LogBus.Anotado += Reflejar;
+            LogBus.AnotadoConMarca += Reflejar;
             _encendido = true;
         }
-        LogBus.Log("espejo", "el log de este equipo se está reflejando en el panel");
+        LogBus.Publico("espejo", "el log de este equipo se está reflejando en el panel");
     }
 
     public static void Apagar()
@@ -51,22 +63,30 @@ public static class EspejoDelLog
         lock (_candado)
         {
             if (!_encendido) return;
-            LogBus.Anotado -= Reflejar;
+            LogBus.AnotadoConMarca -= Reflejar;
             _encendido = false;
         }
     }
 
-    private static void Reflejar(string etiqueta, string texto)
+    private static void Reflejar(string etiqueta, string texto, bool publica)
     {
+        // Ni cadencia: la cadencia de una queja de subida es otro evento que fallaría igual.
         if (string.Equals(etiqueta, SuPropiaEtiqueta, StringComparison.OrdinalIgnoreCase)) return;
 
-        // `label` es lo que el panel enseña en la fila sin abrir nada, así que va el texto y no la
-        // etiqueta: «no se pudo comprobar actualizaciones» dice algo desde la lista; «update», no.
-        // El backend lo recorta a 500, y el detalle completo viaja aparte por si la línea es larga.
+        // UN SOLO Emit para las dos, a propósito: el censo de la 395 congela cada Emit del código con
+        // todos sus argumentos, y dos llamadas serían dos sitios que pueden separarse.
+        //
+        // Marcada: `label` es lo que el panel enseña en la fila sin abrir nada, así que va el texto y no
+        // la etiqueta: «no se pudo comprobar actualizaciones» dice algo desde la lista; «update», no.
+        // Sin marcar: la etiqueta y la longitud, con las claves exactas `tag` y `largo`. El volumen de
+        // eventos no cambia —el pulso en vivo del panel sigue—; cambia lo que lleva cada uno.
         TelemetryBus.Emit(
             kind: "log",
             phase: etiqueta,
-            label: texto,
-            detail: new { tag = etiqueta, text = texto });
+            label: publica ? texto : Cadencia(etiqueta, texto),
+            detail: publica ? (object)new { tag = etiqueta, text = texto } : new { tag = etiqueta, largo = texto.Length });
     }
+
+    /// <summary>Lo que sube de una línea sin marcar: <c>‹etiqueta› · línea de N car.</c></summary>
+    internal static string Cadencia(string etiqueta, string texto) => $"‹{etiqueta}› · línea de {texto.Length} car.";
 }

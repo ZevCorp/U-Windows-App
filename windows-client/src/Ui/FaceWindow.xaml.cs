@@ -735,7 +735,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 }
                 catch (Exception e)
                 {
-                    LogBus.Log("nucleo-http", $"no pude {accion} «{dato}»: {e.Message}");
+                    LogBus.Log("nucleo-http", $"no pude {accion} {SinValor.Forma(dato)}: {e.Message}");
                     return false;
                 }
             };
@@ -860,7 +860,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                             ok = sap.EscribirEnElFoco(texto, out string porFoco);
                             if (!ok) porque += (porque.Length > 0 ? "; y al foco tampoco: " : "") + porFoco;
                         }
-                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir «{texto}»: {porque}");
+                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir {SinValor.Forma(texto)}: {porque}");
                         return ok;
                     }).Escribe,
                 hayQueParar: () => Actions.Freno.Pidieron,
@@ -3193,7 +3193,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             string destino = Navigation.ElEncargoDeComprobar.Destino(skill);
             string aqui = _locator?.DondeEstoy()?.Id ?? "";
             var aterrizaje = Navigation.ElRescate.Aterrizo(destino, aqui);
-            LogBus.Log("comprobar", $"piloto: {relato}");
+            // Lo que contó el agente, por su forma (spec 051, N4): repite el encargo y lo leído de la pantalla. El
+            // veredicto, que es lo que sirve, va en la línea de abajo y lo da la compuerta.
+            LogBus.Log("comprobar", $"piloto: {SinValor.Forma(relato)}");
             LogBus.Log("comprobar", aterrizaje.Llego
                 ? $"ATERRIZÓ en «{destino}»"
                 : $"NO aterrizó: {aterrizaje.Motivo}");
@@ -3332,7 +3334,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         LogBus.Log("comprobar", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
             + $"{registro.Hechos}/{registro.Total} hechos · costo estimado ${r.CostoUsd:0.000} · "
             + (final.Comprobada ? "COMPROBADA" : "SIGUE PENDIENTE") + $" · {final.Motivo}");
-        if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {r.Ultimo}");
+        // Lo último que narró el piloto, por su forma (spec 051, N5): trabaja con la nota delante.
+        if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {SinValor.Forma(r.Ultimo)}");
         string veredicto = final.Comprobada
             ? $"Comprobada: {final.Motivo}"
             : $"Sigue pendiente: {final.Motivo}" + (r.Termino ? "" : $" · el piloto no terminó bien ({r.Ultimo})");
@@ -3354,8 +3357,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (lectura.Error.Length > 0) return lectura.Error;
         if (_mapaDeMano?.RecorrerPorElNucleo == null) return "todavía no sé recorrer un plan.";
         var pasos = lectura.Pasos;
-        LogBus.Log("comprobar", $"plan del piloto: {pasos.Count} paso(s) → "
-            + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}» en «{p.Exit}»" : $"«{p.Exit}»")));
+        // Lo que el plan escribe, por su longitud (spec 051, E21): es la clase del recorrido por lotes (E3), que la
+        // fase 4 arregló en SurfaceMapTools y no aquí.
+        LogBus.Log("comprobar", $"plan del piloto: {Piloto.PlanDeComprobacion.LineaDelPlan(pasos)}");
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         int hechos = 0;
         for (int i = 0; i < pasos.Count; i++)
@@ -4459,7 +4463,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 0, "no respondió en 5 s");
         }
         catch (GraphException) { /* ya lo anotó SendAsync, con su causa distinguida */ }
-        catch (Exception ex) { LogBus.Log("backend", $"sonda de vida falló de forma inesperada: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            // Al panel el tipo; el mensaje, en el log local (spec 051, P14).
+            LogBus.Publico("backend", $"sonda de vida falló de forma inesperada: {ex.GetType().Name}");
+            LogBus.Log("backend", $"el motivo de la sonda de vida: {ex.Message}");
+        }
     }
 
 
@@ -5607,7 +5616,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 await DevolverLaVozAsync("envio");
             }
             LogBus.Log("envio", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
-                + $"costo estimado ${r.CostoUsd:0.000} · {r.Ultimo}");
+                + $"costo estimado ${r.CostoUsd:0.000} · {SinValor.Forma(r.Ultimo)}");   // la cuenta del piloto repite la nota (spec 051, N6)
             return r.Termino
                 ? (r.Ultimo.Length > 0 ? r.Ultimo : "el piloto terminó sin contar nada.")
                 : $"el piloto no terminó bien: {r.Ultimo}";

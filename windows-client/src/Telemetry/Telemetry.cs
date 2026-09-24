@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using U.WindowsClient.Backend;
 using U.WindowsClient.Diagnostics;
@@ -45,10 +46,25 @@ public static class TelemetryBus
         catch (Exception e) { LogBus.Log("telemetry", $"init falló: {e.Message}"); }
     }
 
+    /// <summary>
+    /// Cada evento TAL COMO SALE del equipo: el <c>TelemetryEvent</c> entero, serializado con las mismas
+    /// opciones que el POST (<see cref="BackendClient.Json"/>), haya cliente o no.
+    /// </summary>
+    /// <remarks>
+    /// Existe para poder juzgar sin red qué sale de la máquina del médico (spec 051, promesas 394 y
+    /// 395). Entero y serializado, no solo <c>label</c> y <c>detail</c>: un valor metido en
+    /// <c>surfaceUrl</c> o en <c>workflowId</c> también sale, y el codificador por defecto escapa lo no
+    /// ASCII (<c>é</c> → <c>é</c>), así que un juez que mirara el objeto antes de serializarlo
+    /// no estaría mirando lo que viaja. Solo se serializa si alguien escucha.
+    /// </remarks>
+    public static event Action<string>? Emitido;
+
     public static void Emit(string kind, string phase = "", string appId = "", string surfaceUrl = "",
         string workflowId = "", string runId = "", string label = "", object? detail = null)
     {
-        _client?.Enqueue(new TelemetryEvent
+        var oyentes = Emitido;
+        if (_client == null && oyentes == null) return;
+        var evento = new TelemetryEvent
         {
             Kind = kind,
             Phase = phase,
@@ -59,7 +75,23 @@ public static class TelemetryBus
             Label = label,
             Detail = detail,
             At = DateTime.UtcNow.ToString("o")
-        });
+        };
+        if (oyentes != null) Avisar(oyentes, evento);
+        _client?.Enqueue(evento);
+    }
+
+    private static void Avisar(Action<string> oyentes, TelemetryEvent evento)
+    {
+        // La regla de oro de arriba vale también para quien escucha: un oyente que revienta no tumba al
+        // agente. Se anota con la etiqueta propia, que el espejo no sube (ni como cadencia): si no, el
+        // fallo de un oyente encolaría otro evento que lo volvería a disparar.
+        try { oyentes(JsonSerializer.Serialize(evento, BackendClient.Json)); }
+        catch (Exception e)
+        {
+            var cadena = new List<string>();
+            for (var x = e; x != null; x = x.InnerException) cadena.Add($"{x.GetType().Name}: {x.Message}");
+            LogBus.Log("telemetry", $"un oyente de Emitido lanzó con un evento «{evento.Kind}»: {string.Join(" ← ", cadena)}");
+        }
     }
 
     /// <summary>Correlaciona todos los eventos de una misma corrida (consciente o workflow).</summary>
