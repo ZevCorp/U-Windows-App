@@ -6,7 +6,9 @@ razones, con los censos como datos y un lector de fuentes que corrigió tres med
 (el ancla de E17, la quinta ruta `/agent/` y un sitio que la 399(b) encuentra fuera del censo) ·
 **fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) ·
 **fase 3 hecha** (395 verde: las salidas directas suben por forma, tipo y número) · **fase 4 hecha**
-(397 verde: lo que las manos escriben va al log por su longitud) · Spec 051 · 2026-09-23 ·
+(397 verde: lo que las manos escriben va al log por su longitud) · **fase 5 hecha** (398 y 399
+verdes: lo dicho, lo narrado y el objetivo por su forma, y el censo cerrado, 35 de 35) · **las seis
+en verde; falta la compuerta (`verificar.ps1`) y el nivel 4** · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–399**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -379,7 +381,7 @@ Una rama para la spec; cada fase un commit que pone verde su promesa sin romper 
 | **2** | **394** | `Diagnostics/LogBus.cs` (`Publico`, `AnotadoConMarca`) · `Telemetry/EspejoDelLog.cs` (cadencia y un solo `Emit`) · `Telemetry/Telemetry.cs` (`Emitido`) · `Backend/BackendClient.cs` (sus opciones JSON, en un solo sitio) · los 26 `Publico`: `App.xaml.cs`, `Update/Updater.cs`, `Ui/GuardiaDeInstancia.cs`, `Clinical/ArranqueDeConsulta.cs`, `Ui/FaceWindow.xaml.cs:4452`, `Clinical/Transcripcion/PoliticaDeReintento.cs`, `Clinical/EjecutorDeExportaciones.cs`, `Mcp/WorkflowMcpRunner.cs:36, 68, 77` | 1 (E11) + S1 + 26 líneas públicas | 394 verde; los dos sabotajes vistos rojos |
 | **3** | **395** | `Agent/AgentLoop.cs:96, 133, 181` · `Mcp/WorkflowMcpRunner.cs:39, 55, 69-72` | 6 de 10 salidas (S2, S3, S4, S8, S9, S10) | 395 verde; los dos sabotajes vistos rojos |
 | **4** | **397** | `Mcp/SurfaceMapTools.cs` (E3–E8: `LineaDeLlamada`, `LineaDeRespuesta`, `LineaDelRecorrido`, y `:2700`, `:2792`, `:2819` con `Forma`) · `Ui/FaceWindow.xaml.cs:735, 855` (E17, E9) · `Agent/AgentLoop.cs:295, 307` (E18, E10) y **su comentario falso de `:300-303`** · `Voice/ConversacionEnVivo.cs:1327` (E12, con `Tapar`) · `windows-graph/src/Surfaces/SapGuiSurface.cs:535, 1035` y `UiaSurface.cs:1542` (E13–E15: el error dice qué regla falló y la forma, no el valor) · `Ui/WorkflowLibraryWindow.xaml.cs:174` (E16) | 15 (E3–E10, E12–E18) | 397 verde; los dos sabotajes vistos rojos |
-| **5** | **398** y **399** | `Voice/ConversacionEnVivo.cs:1868, 1938, 1939, 2416` (D1–D4) · `Voice/RecordatoriosEnVivo.cs:29` (D5) · `Piloto/ElPiloto.cs:98, 101, 103` (N1–N3, con `LineaDelPiloto`) · `Ui/FaceWindow.xaml.cs:3186, 3325, 5599` (N4–N6) · `Ui/ConsultaWindow.cs:2090` (N7) · `Agent/AgentLoop.cs:92, 180` (O1, N8) · `Mcp/SurfaceMapTools.cs:1767, 1778` (O2, O3, con `Tapar`) · `Actions/Freno.cs:128` (O4) · y `Voice/MiradaSubida.cs:87`, que no es del censo pero la 399(b) lo encuentra por el embudo `anotar` (el cuerpo de un error de OpenAI: por su código y su longitud) · y `Navigation/ElTramo.cs:190`, la «←» del tramo con el objetivo entero, que no es del censo y la 399 no ve (hallazgo de la fase 4) | 17 (D1–D5, N1–N8, O1–O4) + 1 de la regla + 1 de la fase 4 | 398 y 399 verdes (399: 35 de 35); sabotajes vistos rojos; `CONTRATO INTACTO` |
+| **5** | **398** y **399** | `Voice/ConversacionEnVivo.cs:1868, 1938, 1939, 2416` (D1–D4) · `Voice/RecordatoriosEnVivo.cs:29` (D5) · `Piloto/ElPiloto.cs:98, 101, 103` (N1–N3, con `LineaDelPiloto`) · `Ui/FaceWindow.xaml.cs:3186, 3325, 5599` (N4–N6) · `Ui/ConsultaWindow.cs:2090` (N7) · `Agent/AgentLoop.cs:92, 180` (O1, N8) · `Mcp/SurfaceMapTools.cs:1767, 1778` (O2, O3, con `Tapar`) · `Actions/Freno.cs:128` (O4) · y `Voice/MiradaSubida.cs:87`, que no es del censo pero la 399(b) lo encuentra por el embudo `anotar` (el cuerpo de un error de OpenAI: por su código y su longitud) · y `Navigation/ElTramo.cs:190`, la «←» del tramo con el objetivo entero, que no es del censo y la 399 no ve (hallazgo de la fase 4) · y, hallados al contar la clase O en esta fase, la «←» del mapa para `map_tramo`, `map_alto` y `map_tramo_estado` (`SurfaceMapTools.cs`, `Call`) y la línea `album` de `Navigation/MapaVivo.cs:512` | 17 (D1–D5, N1–N8, O1–O4) + 1 de la regla + 1 de la fase 4 + 2 de la clase O | 398 y 399 verdes (399: 35 de 35); sabotajes vistos rojos; `CONTRATO INTACTO` |
 
 Total en origen: **35 sitios** (2 + 1 + 15 + 17), **7 salidas** (S1, S2, S3, S4, S8, S9, S10) y
 **26 líneas públicas** (23 que pasan de `Log` a `Publico`, 3 nuevas). El número va en cada commit de
@@ -651,6 +653,58 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   `HEAD` de esa rama la tiene en LF— **(M)**. Ningún cambio de contenido choca con las dos sentencias
   que toca esta fase (E13 en `:535`, E14 en `:1035`, numeradas sobre `043addc`). El aviso va en el informe de esta fase y en el
   PR; esta sesión no tiene Slack desde Claude Code.
+- **2026-09-24 · Fase 5: la 398 y la 399 en verde a la primera, y el contrato INTACTO.** Los 17 sitios
+  del censo **(M)**: D1–D4 en `ConversacionEnVivo.cs` (D3 por su tipo —y, si es un `response.event`, el
+  del evento que envuelve, que es el que dice qué llegó— y la longitud del mensaje), D5 en
+  `RecordatoriosEnVivo.cs`, N1–N3 en `ElPiloto.cs` (N1 y N2 en **una** sentencia,
+  `LogBus.Log("piloto", LineaDelPiloto(e.Data))`; `LineaDelPiloto` distingue «línea sin JSON» de «línea
+  JSON que no es un objeto», y el `catch` que cubría a la vez el JSON y el `avance` —y en los dos casos
+  anotaba la línea cruda— pasa a cubrir solo el `avance` y a decirlo), N4–N6 en `FaceWindow.xaml.cs`, N7
+  en `ConsultaWindow.cs`, O1 y N8 en `AgentLoop.cs` (y el comentario de O1, que juraba «el objetivo
+  entero sigue yendo al log, que es donde sirve», ahora con el porqué de lo contrario), O2 y O3 en
+  `SurfaceMapTools.cs` con `Tapar` (O2 tapa el objetivo pedido **y** el del tramo que ya corría, que es
+  el que cita «ya hay un tramo en marcha («…»)»; `ElTramo` gana `Objetivo` para eso), O4 en `Freno.cs`.
+  Más `MiradaSubida.cs:87` (el cuerpo del error de OpenAI, por el código HTTP y su longitud) y
+  `ElTramo.cs:190` (la «←» del tramo, con `Tapar`). **Contando la clase O entera** (patrón nº5: `grep`
+  de `_objetivo` y de `Freno.Tarea` hasta el log, leído cada resultado) salieron **2 sitios más** que ni
+  el censo ni la 399 ven, y se cierran aquí: la «←» del mapa para `map_tramo_estado` y `map_alto`, que
+  no traen argumentos y cuya respuesta cita el objetivo («tramo en marcha: «…»», «paré el tramo «…»»), y
+  la de `map_tramo` cuando cita el del tramo anterior —se tapa el objetivo solo para esas tres
+  herramientas: tapándolo en todas, un objetivo corto como «Descargas» dejaría cada «Descargas» del resto
+  de la sesión en `‹9 car.›`—; y la línea `album` de `MapaVivo.cs:512`, «mientras: {Freno.Tarea}», que con
+  un tramo en marcha es «tramo: {objetivo}» —el álbum la sigue guardando entera en disco, que es donde se
+  usa—. **Sin juez propio**, dicho aquí. En total, **21** sitios en esta fase (17 + 1 de la regla + 1 de
+  la fase 4 + 2 de la clase O). Contrato: 302 → **304** cumplidas, **0** rojas, `CONTRATO INTACTO`; el de
+  la voz, `VOZ ÍNTEGRA` **(M)**. La 399(a), **35 de 35**; la 399(b), sin aciertos, con **33**
+  lambdas-embudo, **37** nombres y **144** sentencias por las formas derivadas (35 → 33 y 39 → 37: los
+  dos manejadores de `ElPiloto`, `OutputDataReceived` y `ErrorDataReceived`, dejan de ser embudos porque
+  `e.Data` ya solo llega al log por `LineaDelPiloto` y `SinValor.Forma`; medido con el sondeo de abajo,
+  que no toca ninguna lambda) **(M)**. Sabotajes, cada uno aplicado con `sed -b`, visto por `diff` contra
+  una copia (una sola línea, CRLF conservada), juzgado y restaurado con `cmp` **(M)**: (398, cableado)
+  «usuario dijo: {SinValor.Forma(_fraseUsuario.ToString())}» → «usuario dijo: {_fraseUsuario}» → la 398
+  roja por (a), «anotó: «usuario dijo: Paciente Inventado Cero tiene 38,5 inventado»», y por «ninguna
+  línea contiene lo dicho»; la 399(a), 34 de 35 nombrando «D2: «_fraseUsuario» en
+  `ConversacionEnVivo.cs:1972`»; (399, cableado) O2 vuelve a `$"→ {r}"` → **solo** la 399, por (a), 34
+  de 35, «O2: hueco(s) que sobran: «r» en `SurfaceMapTools.cs:1774`», con la 399(b) verde (`r` no es
+  `valor` ni `texto`) y la 398 verde (ningún juez dinámico pasa por el tramo): es la prueba de que el
+  censo es el juez; (398 y 399, función, a la vez porque tocan archivos y promesas disjuntos)
+  `LineaDelPiloto` devuelve `{l.Texto}` → la 398 roja solo por (c), «es «texto: Paciente Inventado
+  Cero»»; y E9 vuelve a «no pude escribir «{texto}»» → la 399 roja por (a), 34 de 35 nombrando E9, y por
+  (b), `FaceWindow.xaml.cs:855` y `MundoQueToca.cs:102` (la lambda de E9 vuelve a ser embudo: 34 lambdas,
+  39 nombres, 145 sentencias); (399(b), sondeo) `MiradaSubida.cs` vuelve a «{(int)r.StatusCode} {texto}»
+  → la 399 roja solo por (b), `MiradaSubida.cs:92 (anotar.Invoke())`, y la (a) sigue en 35 de 35. En
+  cada uno, ningún otro veredicto cambió (303, 302, 302 y 303 ✔).
+  **Lo que se pierde en el log local, dicho:** lo que dijo la persona y lo que contestó Ü (la frase
+  sigue en la conversación); los 400 primeros caracteres de un mensaje del servidor que no se traduce
+  (queda su tipo); lo que narra el piloto y lo que escribe en `stderr` —una traza de Node se lee
+  corriendo el piloto a mano—; el cuerpo de un error de OpenAI al subir una mirada (queda el código
+  HTTP); y qué tarea paró el freno (lo dice la línea de quien la empezó). `scripts/nivel4-voz/analizar.py`
+  sigue leyendo «Ü dijo:», y ahora imprime su longitud en vez de la frase.
+- **2026-09-24 · El veredicto del contrato cuenta comprobaciones, no promesas.** Visto en los sabotajes
+  de la fase 5: con dos promesas rojas (398 y 399) el pie dice «CONTRATO ROTO: **3** promesa(s)
+  incumplida(s)», porque suma cada `Debe` que falla —la 398 falló dos— **(M)**. No cambia ningún
+  veredicto (roto sigue siendo roto), pero el número no dice lo que afirma (aprendizaje nº2). Es del
+  arnés, no de esta spec: se anota y no se toca aquí.
 
 ## Revisiones
 
@@ -677,8 +731,8 @@ los argumentos y **los canales**: congelar etiquetas congelaba lo que no importa
 
 ## Cierre
 
-- [ ] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), y el de la voz intacto
-- [ ] Dos sabotajes por promesa —función y cableado—, vistos rojos y verificados por diff
+- [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), y el de la voz intacto — 2026-09-24, fase 5: 304 cumplidas, 0 rojas; VOZ ÍNTEGRA
+- [x] Dos sabotajes por promesa —función y cableado—, vistos rojos y verificados por diff — fases 1–5, uno de cada por promesa (394–399), en §*Hallazgos*
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
 - [ ] Nivel 4 en ≥2 pantallas, con nombre: triage (`SAPLY000`) y admisión (`NV2000`)
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)

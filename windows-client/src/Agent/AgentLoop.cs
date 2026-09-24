@@ -88,9 +88,13 @@ public sealed class AgentLoop
         // LO QUE SE NARRA ES QUE EMPEZAMOS, NO EL ENCARGO ENTERO. Desde que narrar se OYE
         // (promesa 142), soltar aquí el objetivo tal cual hacía que Ü leyera en voz alta los 4442
         // caracteres del encargo de comprobar, superficies y URLs incluidas — 2026-09-03 21:35:12,
-        // insufrible. El objetivo entero sigue yendo al log, que es donde sirve.
+        // insufrible.
         _voice.Narrate(goal.Length > 90 ? "¡Vamos!" : $"¡Vamos! {goal}");
-        LogBus.Log("agent", $"▶ objetivo: «{Short(goal, 160)}»" +
+        // Y AL LOG, POR SU FORMA (spec 051, O1). Hasta el 2026-09-24 este comentario decía «el objetivo entero
+        // sigue yendo al log, que es donde sirve», y con el dictado de respaldo el objetivo ES la frase dicha
+        // (FaceWindow.xaml.cs:2607): el log la guardaba, y salía del equipo por el espejo. El encargo del puente
+        // lo construye el código con piezas que ya están en el log; el de la voz vive en la conversación.
+        LogBus.Log("agent", $"▶ objetivo: {SinValor.Forma(goal)}" +
             (requireOrigin.Length > 0 ? $" · compuerta: solo actúa en «{requireOrigin}»" : " · SIN compuerta de superficie"));
         // Telemetría "Windows Live": esta corrida consciente entera se correlaciona por runId.
         // El objetivo sube por su FORMA: con el dictado de respaldo el objetivo ES la frase dicha
@@ -183,7 +187,8 @@ public sealed class AgentLoop
             _voice.Speak(summary);
         }
         _voice.Narrate("¡Listo! 🎉");
-        LogBus.Log("agent", $"■ fin · {actions} acción(es) · {Short(summary, 160)}");
+        // Lo que Ü contestó, por su forma también aquí (spec 051, N8): repite lo pedido y lo leído de la pantalla.
+        LogBus.Log("agent", $"■ fin · {actions} acción(es) · {SinValor.Forma(summary)}");
         // Lo que Ü contestó sube por su forma: repite lo pedido y lo leído de la pantalla (spec 051, S4).
         TelemetryBus.Emit("conscious_run_end", runId: runId, label: SinValor.Forma(summary));
         return string.IsNullOrWhiteSpace(summary) ? "Hecho" : summary;

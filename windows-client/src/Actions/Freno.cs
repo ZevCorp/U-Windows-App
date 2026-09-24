@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using U.WindowsClient.Diagnostics;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Actions;
 
@@ -125,7 +126,9 @@ public static class Freno
     {
         if (Interlocked.CompareExchange(ref _haciendoAlgo, 1, 1) == 0) return;
         if (Interlocked.Exchange(ref _pidieron, 1) == 1) return;
-        LogBus.Log("freno", $"alto pedido ({porque}); paro «{Tarea}»");
+        // La tarea por su FORMA (spec 051, O4): la de un tramo es «tramo: {objetivo}», y el objetivo lo escribe
+        // el modelo de voz con lo que dijo la persona. Cuál tarea era lo dice la línea de quien la empezó.
+        LogBus.Log("freno", $"alto pedido ({porque}); paro {SinValor.Forma(Tarea)}");
         try { Pidio?.Invoke(); } catch { }
         try { Dice?.Invoke(DevuelvoElControl); } catch { }
     }

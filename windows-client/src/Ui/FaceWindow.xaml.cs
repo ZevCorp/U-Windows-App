@@ -3183,7 +3183,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             string destino = Navigation.ElEncargoDeComprobar.Destino(skill);
             string aqui = _locator?.DondeEstoy()?.Id ?? "";
             var aterrizaje = Navigation.ElRescate.Aterrizo(destino, aqui);
-            LogBus.Log("comprobar", $"piloto: {relato}");
+            // Lo que contó el agente, por su forma (spec 051, N4): repite el encargo y lo leído de la pantalla. El
+            // veredicto, que es lo que sirve, va en la línea de abajo y lo da la compuerta.
+            LogBus.Log("comprobar", $"piloto: {SinValor.Forma(relato)}");
             LogBus.Log("comprobar", aterrizaje.Llego
                 ? $"ATERRIZÓ en «{destino}»"
                 : $"NO aterrizó: {aterrizaje.Motivo}");
@@ -3322,7 +3324,8 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         LogBus.Log("comprobar", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
             + $"{registro.Hechos}/{registro.Total} hechos · costo estimado ${r.CostoUsd:0.000} · "
             + (final.Comprobada ? "COMPROBADA" : "SIGUE PENDIENTE") + $" · {final.Motivo}");
-        if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {r.Ultimo}");
+        // Lo último que narró el piloto, por su forma (spec 051, N5): trabaja con la nota delante.
+        if (!r.Termino && r.Ultimo.Length > 0) LogBus.Log("comprobar", $"piloto: {SinValor.Forma(r.Ultimo)}");
         string veredicto = final.Comprobada
             ? $"Comprobada: {final.Motivo}"
             : $"Sigue pendiente: {final.Motivo}" + (r.Termino ? "" : $" · el piloto no terminó bien ({r.Ultimo})");
@@ -5601,7 +5604,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 await DevolverLaVozAsync("envio");
             }
             LogBus.Log("envio", $"piloto terminó ({(r.Termino ? "bien" : $"salida {r.Salida}")}) en {reloj.ElapsedMilliseconds} ms · "
-                + $"costo estimado ${r.CostoUsd:0.000} · {r.Ultimo}");
+                + $"costo estimado ${r.CostoUsd:0.000} · {SinValor.Forma(r.Ultimo)}");   // la cuenta del piloto repite la nota (spec 051, N6)
             return r.Termino
                 ? (r.Ultimo.Length > 0 ? r.Ultimo : "el piloto terminó sin contar nada.")
                 : $"el piloto no terminó bien: {r.Ultimo}";

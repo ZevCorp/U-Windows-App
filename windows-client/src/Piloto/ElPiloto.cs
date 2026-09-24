@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Teach;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Piloto;
 
@@ -86,21 +87,28 @@ public static class ElPiloto
         p.OutputDataReceived += (_, e) =>
         {
             if (string.IsNullOrWhiteSpace(e.Data)) return;
-            try
+            // UNA sola línea por lo que cuenta el piloto, y por su forma (spec 051, N1 y N2): la de antes
+            // llevaba los 300 primeros caracteres de su narración, y el piloto trabaja con la nota delante.
+            LogBus.Log("piloto", LineaDelPiloto(e.Data));
+            if (Leer(e.Data, out string _) is not { } l) return;
+            if (l.Sesion != null) sesion = l.Sesion;
+            if (l.Costo is { } c) costo = c;
+            if (l.Texto.Length > 0) ultimo = l.Texto;
+            try { avance(l.Tipo, l.Texto); }
+            catch (Exception ex)
             {
-                using var doc = JsonDocument.Parse(e.Data);
-                var r = doc.RootElement;
-                string tipo = r.TryGetProperty("tipo", out var t) ? t.GetString() ?? "" : "";
-                string texto = r.TryGetProperty("texto", out var x) ? x.GetString() ?? "" : "";
-                if (r.TryGetProperty("sesion", out var s)) sesion = s.GetString() ?? sesion;
-                if (r.TryGetProperty("costo", out var c) && c.ValueKind == JsonValueKind.Number) costo = c.GetDouble();
-                if (texto.Length > 0) ultimo = texto;
-                LogBus.Log("piloto", $"{tipo}: {(texto.Length > 300 ? texto[..300] + "…" : texto)}");
-                avance(tipo, texto);
+                // Antes, un solo catch cubría el JSON y el avance, y los dos acababan anotando la línea CRUDA:
+                // «no era JSON» y «el avance reventó» se veían igual. Ahora el JSON lo dice LineaDelPiloto, y
+                // esto dice que reventó el avance, sin lo que el piloto contó.
+                LogBus.Log("piloto", $"el avance de una línea «{l.Tipo}» reventó: {ex.GetType().Name}: {ex.Message}");
             }
-            catch { LogBus.Log("piloto", e.Data); }
         };
-        p.ErrorDataReceived += (_, e) => { if (!string.IsNullOrWhiteSpace(e.Data)) LogBus.Log("piloto-err", e.Data); };
+        // Lo que el piloto escribe en stderr, por su longitud (spec 051, N3): una traza de Node puede arrastrar
+        // el encargo, que lleva la nota. Para leer la traza entera, el piloto se corre a mano.
+        p.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data)) LogBus.Log("piloto-err", $"el piloto escribió en stderr: {SinValor.Forma(e.Data)}");
+        };
         try
         {
             if (!p.Start()) return new(false, -1, "", "node no arrancó", 0);
@@ -116,5 +124,45 @@ public static class ElPiloto
             int salida = await fin.Task;
             return new(salida == 0, salida, sesion, ultimo, costo);
         }
+    }
+
+    /// <summary>
+    /// La línea que el log guarda de lo que cuenta el piloto: su tipo y la longitud de su texto, nunca el
+    /// texto (spec 051, promesa 398). <c>texto: ‹23 car.›</c>; una que no es JSON, <c>línea sin JSON: ‹N car.›</c>.
+    /// </summary>
+    /// <remarks>
+    /// El piloto trabaja con el encargo delante, y el encargo lleva la nota; lo que narra la repite. Hasta el
+    /// 2026-09-24 el log guardaba los 300 primeros caracteres de cada línea, y enteras las que no eran JSON, y
+    /// el log salía del equipo por el espejo. El tipo lo pone <c>piloto.mjs</c> (<c>di("texto", …)</c>: siete
+    /// literales, de <c>inicio</c> a <c>fin</c>): es vocabulario nuestro, y es lo que dice por dónde va.
+    /// </remarks>
+    public static string LineaDelPiloto(string linea)
+        => Leer(linea, out string porque) is { } l
+            ? $"{(l.Tipo.Length > 0 ? l.Tipo : "(sin tipo)")}: {SinValor.Forma(l.Texto)}"
+            : $"{porque}: {SinValor.Forma(linea)}";
+
+    /// <summary>Lo que trae una línea del piloto, ya sacado del JSON (el documento no sobrevive a la lectura).</summary>
+    private readonly record struct Linea(string Tipo, string Texto, string? Sesion, double? Costo);
+
+    /// <summary>
+    /// Una línea del piloto leída, o null diciendo por qué no: no es JSON, o es JSON pero no un objeto. Son
+    /// dos causas y se nombran las dos (patrón nº2).
+    /// </summary>
+    private static Linea? Leer(string linea, out string porque)
+    {
+        porque = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(linea);
+            var r = doc.RootElement;
+            if (r.ValueKind != JsonValueKind.Object) { porque = $"línea JSON que no es un objeto ({r.ValueKind})"; return null; }
+            string Texto(string clave) => r.TryGetProperty(clave, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+            return new Linea(
+                Texto("tipo"),
+                Texto("texto"),
+                r.TryGetProperty("sesion", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null,
+                r.TryGetProperty("costo", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetDouble() : null);
+        }
+        catch (JsonException) { porque = "línea sin JSON"; return null; }
     }
 }

@@ -1766,8 +1766,12 @@ public sealed class SurfaceMapTools
             return "todavía no sé recorrer un tramo: el decisor está apagado (U_DECISOR ausente o en «luna», o el botón Jev apagado). "
                  + "Avanza tú paso a paso con map_take.";
         int.TryParse(tope, out int n);
-        string r = ElTramo().Arrancar(objetivo, n);
-        LogBus.Log("tramo", $"→ {r}");
+        var tramo = ElTramo();
+        string r = tramo.Arrancar(objetivo, n);
+        // EL OBJETIVO VA POR SU FORMA (spec 051, O2): lo escribe el modelo de voz con lo que dijo la persona. Se
+        // tapan los dos que la respuesta puede citar: el pedido y el del tramo que ya corría («ya hay un tramo en
+        // marcha («…»)»). Al modelo se le devuelve entera: necesita saber qué arrancó.
+        LogBus.Log("tramo", $"→ {SinValor.Tapar(r, objetivo, tramo.Objetivo)}");
         return r;
     }
 
@@ -1778,7 +1782,7 @@ public sealed class SurfaceMapTools
         if (t == null || !t.EnMarcha) return "no hay ningún tramo en marcha que parar.";
         string r = t.Parar("lo pidió la voz (map_alto)");
         try { PedirFreno?.Invoke("lo pidió la voz (map_alto)"); } catch (Exception e) { LogBus.Log("tramo", $"no pude pedir el freno: {e.Message}"); }
-        LogBus.Log("tramo", $"ALTO: {r}");
+        LogBus.Log("tramo", $"ALTO: {SinValor.Tapar(r, t.Objetivo)}");   // «paré el tramo «…»»: el objetivo, por su forma (spec 051, O3)
         return r;
     }
 
@@ -2157,7 +2161,11 @@ public sealed class SurfaceMapTools
         // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
         // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
-        LogBus.Log("mapa-mcp", LineaDeRespuesta(reloj.ElapsedMilliseconds, r, args));
+        // LAS RESPUESTAS DEL TRAMO CITAN SU OBJETIVO sin que venga en los argumentos: map_tramo_estado y map_alto
+        // no traen ninguno, y la de map_tramo cita el del tramo que ya corría (spec 051, clase O, hallazgo de la
+        // fase 5). Solo para esas tres: tapar el objetivo en todas dejaría un «Descargas» en ‹9 car.› toda la sesión.
+        string anotada = tool is "map_tramo" or "map_alto" or "map_tramo_estado" ? SinValor.Tapar(r, _tramo?.Objetivo) : r;
+        LogBus.Log("mapa-mcp", LineaDeRespuesta(reloj.ElapsedMilliseconds, anotada, args));
         return r;
     }
 

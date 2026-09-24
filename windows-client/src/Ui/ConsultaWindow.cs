@@ -2087,7 +2087,9 @@ public sealed partial class ConsultaWindow : Window
             LogBus.Log("consulta", $"✓ enviado: {string.Join(", ", claves)}");
             string cuenta = await PuenteASap.Enviar!(encargo, new Progress<string>(Pinta), CancellationToken.None);
             Pinta(cuenta);
-            LogBus.Log("consulta", $"cuenta del envío: {cuenta}");
+            // La cuenta la escribe el piloto, que trabaja con la nota delante: por su forma (spec 051, N7). Se
+            // sigue pintando entera en la sección, que es donde la lee el médico.
+            LogBus.Log("consulta", $"cuenta del envío: {SinValor.Forma(cuenta)}");
         }
         catch (Exception e)
         {
