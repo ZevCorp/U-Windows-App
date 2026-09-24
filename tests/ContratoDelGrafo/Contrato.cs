@@ -13814,10 +13814,12 @@ internal static class Contrato
             "todas las peticiones piden store:false");
         Debe(conDocs.All(x => x.Texto.Contains("literal", StringComparison.OrdinalIgnoreCase)), "se pide transcribir LITERAL, no resumir");
 
-        string conPdf = cuerpos.First(c => LoQueLlevaLaHistoria(c).Archivos > 0);
+        // FirstOrDefault y no First: sin ningún PDF enviado, la promesa tiene que decir «incumplida», no
+        // reventar con «Sequence contains no matching element» (aprendizaje nº17).
+        string conPdf = cuerpos.FirstOrDefault(c => LoQueLlevaLaHistoria(c).Archivos > 0) ?? "";
         Debe(conPdf.Contains("\"filename\":\"laboratorio.pdf\"") && conPdf.Contains("data:application/pdf;base64,"),
             "el PDF viaja como archivo con su nombre");
-        string conFoto = cuerpos.First(c => LoQueLlevaLaHistoria(c).Imagenes > 0);
+        string conFoto = cuerpos.FirstOrDefault(c => LoQueLlevaLaHistoria(c).Imagenes > 0) ?? "";
         Debe(conFoto.Contains("\"detail\":\"high\""), "la foto de un documento viaja con detalle alto: letra pequeña");
 
         var docs = ((System.Collections.IEnumerable)h.Documentos).Cast<dynamic>().ToList();
