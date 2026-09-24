@@ -310,7 +310,7 @@ los espacios quitados:
 | S2 | `Agent/AgentLoop.cs` | `"conscious_run_start"` | `runId: runId` · `label: SinValor.Forma(goal)` |
 | S3 | `Agent/AgentLoop.cs` | `"conscious_run_end"` | `phase: "error"` · `runId: runId` · `label: e.GetType().Name` |
 | S4 | `Agent/AgentLoop.cs` | `"conscious_run_end"` | `runId: runId` · `label: SinValor.Forma(summary)` |
-| S5 | `Agent/AgentLoop.cs` | `"analyze"` | `runId: runId` · `appId: loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : ""` · `surfaceUrl: loc?.Id ?? ""` (sin cambio) |
+| S5 | `Agent/AgentLoop.cs` | `"analyze"` | `runId: runId` · `appId: loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : ""` · `surfaceUrl: PoliticaDeLoQueViaja.UbicacionQueViaja(loc?.Id ?? "")` — **cambiada por la 052** (2026-09-24): hasta entonces `loc?.Id ?? ""`, sin cambio en esta spec |
 | S6 | `Agent/AgentLoop.cs` | `"mcp"` | `runId: runId` · `label: a.Tool ?? ""` (sin cambio) |
 | S7 | `Agent/AgentLoop.cs` | `"action"` | `runId: runId` · `label: a.Kind` · `detail: new { x = a.X, y = a.Y }` (sin cambio) |
 | S8 | `Mcp/WorkflowMcpRunner.cs` | `"workflow_start"` | `workflowId: workflowId` · `runId: runId` · `label: SinValor.Forma(context)` |
@@ -517,7 +517,10 @@ regla de la decisión 1, con su lectura.
   de clase L—, pero sigue en el log local y sale por **S5** (`surfaceUrl` de `analyze`). Ejemplos
   contados, **no un censo**: `SapGuiSurface.cs:1883, 2022, 2037`, `WorkflowPlayer.cs:193, 248, 316,
   351, 499, 511`, `FaceWindow.xaml.cs:332, 345, 358`, `InspectorDiagnostics.cs:104`. Pide su propia
-  spec (propuesta: 052, «lo leído tampoco sube»), que empieza por S5.
+  spec (propuesta: 052, «lo leído tampoco sube»), que empieza por S5. **Hecho en parte** el 2026-09-24:
+  [`052-lo-leido-tampoco-sube.md`](052-lo-leido-tampoco-sube.md) cierra S5 (sube solo el origin) y dos
+  caminos por los que lo que la 393 le niega a Jev salía igual (402, 403); los ejemplos del log local
+  siguen como estaban.
 - **Lo que viaja a los modelos y a la enseñanza.** **Sin dueño y sin promesa** —la primera versión
   de esta spec lo atribuía a la 012 (168, 169, 171) y a la 046 (393), y es un guardia que se cree
   puesto: 168–171 de `Contrato.cs` son hoy la lección (`:470-473`), las 168 y 169 de la 012 no tratan

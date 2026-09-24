@@ -64,6 +64,13 @@ public sealed class ElTramo
     {
         public HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; } =
             Cambio && QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada ? HuellaDeLoQueSeVe.QueCambio.DeSitio : QueCambio;
+
+        /// <summary>
+        /// La decisión de este paso no se tomó porque la política no deja salir el texto de la pantalla (393). El tramo no lo
+        /// mira: lo lee quien cuenta lo que hay delante al parar, para no contar por su texto las filas que la política acaba
+        /// de negarle a Jev (402, spec 052). Falso en cualquier otro paso.
+        /// </summary>
+        public bool LaPoliticaNoDejoViajar { get; init; }
     }
 
     /// <summary>Las manos del tramo, todas inyectables.</summary>

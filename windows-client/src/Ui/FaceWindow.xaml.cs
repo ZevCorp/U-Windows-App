@@ -952,12 +952,13 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 // LAS MANOS DEL PILOTO DAN EL PASO CON LA MISMA COREOGRAFÍA QUE EL PLAN (promesa 191).
                 mcp.Map.DarUnPasoConCoreografia = DarUnPasoConCoreografia;
                 mcp.Map.CajasEnSap = LeerCajasDeSap;
-                // LOS CAMPOS DEL DYNPRO, para nombrarlos (promesa 188). Solo dentro de SAP: fuera, vacío.
-                mcp.Map.CamposDeSap = () =>
+                // LOS CAMPOS DEL DYNPRO, para nombrarlos (promesa 188). Solo dentro de SAP: fuera, vacío. Y PARA EL DÓNDE QUE
+                // YA JUZGÓ QUIEN PREGUNTA (403, spec 052): aquí se volvía a preguntar DondeEstoy(), y si SAP pasaba al frente
+                // entre las dos preguntas, sus etiquetas entraban en la lista de otra pantalla y viajaban a Jev con su origin.
+                mcp.Map.CamposDeSap = donde =>
                 {
                     var sap = _locator?.SuperficieSap;
-                    string donde = _locator?.DondeEstoy()?.Id ?? "";
-                    if (sap == null || !donde.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
+                    if (sap == null || !(donde ?? "").StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
                         return Array.Empty<U.Graph.DetectedField>();
                     try { return sap.ReadFields(); } catch { return Array.Empty<U.Graph.DetectedField>(); }
                 };

@@ -2,6 +2,7 @@ using U.Graph;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Backend;
 using U.WindowsClient.Capture;
+using U.WindowsClient.Decision;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Domain;
 using U.WindowsClient.Mcp;
@@ -233,10 +234,12 @@ public sealed class AgentLoop
             state.SurfaceOrigin = loc.Origin;
             state.SurfacePathname = loc.Path;
         }
-        // Telemetría: "analiza la pantalla" (pulso del consciente hacia el nodo Analizar).
+        // Telemetría: "analiza la pantalla" (pulso del consciente hacia el nodo Analizar). DE LA UBICACIÓN SUBE SOLO EL
+        // ORIGIN (spec 052, S5 del censo de la 051): el Id entero es, en uia://, el título de la ventana —también el de SAP
+        // visto por UIA— y en web:// la ruta. Con el mismo recorte que ya se le aplica a Jev (393), en un solo sitio.
         TelemetryBus.Emit("analyze", runId: runId,
             appId: loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : "",
-            surfaceUrl: loc?.Id ?? "");
+            surfaceUrl: PoliticaDeLoQueViaja.UbicacionQueViaja(loc?.Id ?? ""));
 
         // SAP GUI Scripting SE AÑADE al árbol de lectura (UIA apenas ve dentro de SAP): si la app en
         // foco es SAP, el cerebro recibe además los campos reales de la pantalla SAP.

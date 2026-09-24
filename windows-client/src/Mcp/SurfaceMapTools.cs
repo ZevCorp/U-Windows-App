@@ -210,8 +210,9 @@ public sealed class SurfaceMapTools
     /// Desde la 365 esa lista son las <see cref="Candidata"/>s, y la tupla se deriva de ellas.
     /// </summary>
     /// <returns>Dónde, las puertas que se cuentan (con su tope), cuántas hay en total y las mismas puertas como
-    /// candidatas, con caja e identidad y en el mismo orden.</returns>
-    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total, IReadOnlyList<Candidata> Candidatas) PuertasDeAhora()
+    /// candidatas, con caja e identidad y en el mismo orden. Y POR QUÉ LO LEÍDO NO ES DE AQUÍ (403, spec 052): vacío si
+    /// lo es, o si no se leyó nada que comparar (puertas inyectadas).</returns>
+    private (string Aqui, IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> Puertas, int Total, IReadOnlyList<Candidata> Candidatas, string NoEsDeAqui) PuertasDeAhora()
     {
         var loc = _where();
         string aqui = loc?.Id ?? "";
@@ -219,7 +220,7 @@ public sealed class SurfaceMapTools
         {
             UltimasCandidatas = Array.Empty<Candidata>();
             LogBus.Log("lectura", "candidatas: ninguna (no sé en qué pantalla estoy: no se leyó nada)");
-            return ("", Array.Empty<(string, string, string)>(), 0, Array.Empty<Candidata>());
+            return ("", Array.Empty<(string, string, string)>(), 0, Array.Empty<Candidata>(), "");
         }
         var crono = System.Diagnostics.Stopwatch.StartNew();
         if (Puertas != null)
@@ -232,13 +233,17 @@ public sealed class SurfaceMapTools
             crono.Stop();
             UltimasCandidatas = comoCandidatas;
             LogBus.Log("lectura", LineaDeCandidatas(comoCandidatas, inyectadas.Count, crono.ElapsedMilliseconds, "inyectadas: sin lectura"));
-            return (aqui, inyectadas, inyectadas.Count, comoCandidatas);
+            return (aqui, inyectadas, inyectadas.Count, comoCandidatas, "");
         }
 
         // UNA LECTURA POR CICLO (promesa 362): se pide la observación compartida y solo se lee si no sirve.
         // La criba de las candidatas —con nombre, ni text ni image— se aplica sobre los CRUDOS, aquí: la
         // observación no criba, porque la compuerta aplica otra (la del latido) sobre los mismos crudos.
         var (vista, reutilizada) = VistaReciente(aqui);
+        // LO LEÍDO ES DE LA VENTANA QUE SE JUZGÓ, o se dice (403, spec 052). El dónde se juzga una vez, arriba, y la ventana
+        // la elige VistaReciente al leer: si SAP pasó al frente entre las dos, o si SurfaceLocator sostiene la ubicación
+        // anterior mientras SAP está Busy, lo de SAP viajaba a Jev bajo un origin que la 393 deja pasar. Quien decide lo mira.
+        string noEsDeAqui = PorQueLoLeidoNoEsDeAqui(loc!, vista.Hwnd);
         var cribados = vista.Elementos
             .Where(e => e.Etiqueta.Length > 0
                      && !e.Tipo.Equals("text", StringComparison.OrdinalIgnoreCase)
@@ -267,7 +272,9 @@ public sealed class SurfaceMapTools
         // Y LOS CAMPOS DEL DYNPRO por su etiqueta (promesa 188): UIA los lista por su nombre técnico
         // («Y0000000-ZTXTTASIS»); la persona y el piloto los llaman «Presión Arterial».
         var terreno = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string, string, string)>();
-        var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas());
+        // LOS CAMPOS DEL DYNPRO, PARA EL DÓNDE YA JUZGADO (403): se les pasa. Hasta el 2026-09-24 CamposDeSap volvía a
+        // preguntar DondeEstoy() por su cuenta, y con SAP recién delante sus etiquetas viajaban con el origin de antes.
+        var candidatos = ConLaEtiquetaQueSeLee(terreno, CamposDeSapComoPuertas(aqui));
         var delTerreno = FundirPuertas(vivos.Select(v => v.Etiqueta), candidatos);
         // DE DÓNDE VIENE cada una del terreno, por la MISMA clave con la que ConLaEtiquetaQueSeLee las junta
         // (SapSelector.Normalize): comparar por otro camino daría «dynpro» a una del terreno en silencio (nº16).
@@ -292,7 +299,44 @@ public sealed class SurfaceMapTools
             $"lectura v{vista.Version} {(reutilizada ? "reutilizada" : $"nueva ({vista.MsDeLectura} ms)")} · fuera: "
             + $"{repetidas} repetida(s) por identidad, {sinCajaDeUia} de UIA sin caja leída, "
             + $"{candidatos.Count - delTerreno.Count} del terreno fundida(s) por etiqueta (183), {total - candidatas.Count} por el tope"));
-        return (aqui, lista, total, candidatas);
+        return (aqui, lista, total, candidatas, noEsDeAqui);
+    }
+
+    /// <summary>
+    /// DE QUÉ PROCESO ES UNA VENTANA (403, spec 052). Null = <see cref="AppAligner.ProcesoDe"/>, el de todo el sistema.
+    /// Inyectable para que el contrato juzgue el Busy de SAP sin SAP delante.
+    /// </summary>
+    public Func<IntPtr, string>? ProcesoDeLaVentana { get; set; }
+
+    /// <summary>
+    /// POR QUÉ LO LEÍDO NO ES DE LA UBICACIÓN QUE SE JUZGÓ, o vacío si lo es (403, spec 052). Dos reglas, y la frase dice
+    /// cuál mordió (patrón nº2):
+    ///   · OTRA VENTANA: la que se leyó no es la de la ubicación. Solo si se conocen las dos: un hwnd 0 es «no vino», no
+    ///     «otra» (patrón nº9).
+    ///   · SAP BAJO OTRO MUNDO: la que se leyó es de SAP y la ubicación no. Es la que caza el Busy: SurfaceLocator.Compute
+    ///     sostiene la ubicación anterior (Current) y ConVentana le pone el hwnd de SAP, así que la primera no lo ve. SAP se
+    ///     reconoce por el camino de la política (Mundos.EsSesionDeSap → SurfaceLocator.IsSap), no por otro (aprendizaje nº16).
+    /// </summary>
+    private string PorQueLoLeidoNoEsDeAqui(Uia.SurfaceLocator.SurfaceLocation loc, IntPtr leida)
+    {
+        if (leida == IntPtr.Zero) return "";
+        if (loc.Hwnd != IntPtr.Zero && loc.Hwnd != leida)
+            return $"lo leído no es de aquí: se leyó otra ventana (0x{leida.ToInt64():X}) que la de «{loc.Id}» (0x{loc.Hwnd.ToInt64():X})";
+        if (U.WindowsClient.Teach.Mundos.EsSesionDeSap(loc.Id)) return "";
+        string proceso;
+        try { proceso = (ProcesoDeLaVentana ?? AppAligner.ProcesoDe)(leida) ?? ""; }
+        catch (Exception e)
+        {
+            // SIN SABER DE QUÉ PROCESO ES, NO SE OFRECE: fallar cerrado, y con la cadena entera (patrón nº3).
+            string causa = "";
+            for (var x = e; x != null; x = x.InnerException)
+                causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+            return $"lo leído no es de aquí: no pude saber de qué proceso es la ventana que se leyó (0x{leida.ToInt64():X}: {causa})";
+        }
+        return U.WindowsClient.Teach.Mundos.EsSesionDeSap($"uia://{proceso}")
+            ? $"lo leído no es de aquí: la ventana que se leyó es de SAP («{proceso}») y «{loc.Id}» no lo es —SAP en tránsito sostiene la "
+              + "ubicación anterior, o pasó al frente entre juzgar y leer—"
+            : "";
     }
 
     // ── La observación compartida (spec 048, promesa 362) ─────────────────────────────────────────
@@ -598,9 +642,18 @@ public sealed class SurfaceMapTools
     /// </summary>
     public Func<string, string>? Desplaza { get; set; }
 
-    private string LoQueVeo()
+    /// <summary>Lo que hay delante, para map_what_i_see y para pegarlo detrás de un acto (263).</summary>
+    /// <remarks>
+    /// CON <paramref name="filasSinTexto"/>, CADA FILA POR NÚMERO Y TIPO (402, spec 052): «fila 2 (GuiGridFila)», por el
+    /// mismo camino con que viaja a Jev y se cuenta en el log (NombreParaContar, aprendizaje nº16), con N la posición en la
+    /// misma lista que numera DecidirYPulsar (285): «fila 2» en el relato y en el inventario son la misma puerta. Lo piden
+    /// los DOS sitios que pegan lo que hay delante detrás de una decisión que la política no dejó tomar —el despacho de
+    /// map_decidir y la cuenta del tramo—. map_what_i_see, el tercer lector, no: es la 183, y cambiar lo que ve Luna en
+    /// general lo decide el dueño (spec 052, decisión 1).
+    /// </remarks>
+    private string LoQueVeo(bool filasSinTexto = false)
     {
-        var (aqui, puertas, total, _) = PuertasDeAhora();
+        var (aqui, puertas, total, _, _) = PuertasDeAhora();
         if (aqui.Length == 0) return "no sé en qué pantalla estoy";
         // EL «NO VEO NADA» VA DESPUÉS DE MIRAR EN LOS TRES SITIOS (2026-09-08): con UIA en blanco
         // —SAP recién delante, el lector aún sin leer— se contestaba «no veo ningún elemento» sin
@@ -609,9 +662,17 @@ public sealed class SurfaceMapTools
 
         var sb = new System.Text.StringBuilder(
             $"EN PANTALLA AHORA, en «{aqui}» ({total} elemento(s)):" + "\n");
+        int n = 0, sinTexto = 0;
         foreach (var (_, etiqueta, tipo) in puertas)
-            sb.AppendLine($"  «{etiqueta}» ({tipo})");
+        {
+            n++;
+            string nombre = filasSinTexto ? Decision.PoliticaDeLoQueViaja.NombreParaContar($"{n}) {etiqueta} ({tipo})", etiqueta) : etiqueta;
+            if (string.Equals(nombre, etiqueta, StringComparison.Ordinal)) sb.AppendLine($"  «{etiqueta}» ({tipo})");
+            else { sinTexto++; sb.AppendLine($"  {nombre}"); }
+        }
         if (total > 220) sb.AppendLine($"  …y {total - 220} más");
+        if (sinTexto > 0)
+            sb.AppendLine($"  ({sinTexto} fila(s) por número y tipo, sin su texto: la política no deja que salga el texto de esta pantalla)");
         return sb.ToString();
     }
 
@@ -632,13 +693,19 @@ public sealed class SurfaceMapTools
     /// hasta hoy. Y la mano NO cuenta un intento: no se pulsó nada, y contarlo frenaría el «pruebo
     /// otro» del tope de la 204 —el mismo argumento que la lista de homónimos (207).
     /// </remarks>
-    private string Decidir(string objetivo, string decir, string recuerdo)
+    /// <param name="filasSinTexto">Si la política no dejó decidir (402): quien pegue el inventario detrás lo cuenta sin el
+    /// texto de las filas. Sale por aquí, y no por un campo del mapa, porque el tramo corre en su tarea y Luna puede llamar
+    /// a la vez: un estado compartido le daría a una respuesta la señal de la otra.</param>
+    private string Decidir(string objetivo, string decir, string recuerdo, out bool filasSinTexto)
     {
+        filasSinTexto = false;
         if (objetivo.Length == 0) return "falta `objetivo`: qué se quiere conseguir en esta pantalla, para que el decisor elija la puerta";
         if (Decisor == null)
             return "todavía no sé decidir: el decisor está apagado (U_DECISOR ausente o en «luna»), así que decide Luna. "
                  + "Elige tú la puerta con map_take.";
-        return UnPasoDecidido(objetivo, decir, recuerdo).Cuenta;
+        var paso = UnPasoDecidido(objetivo, decir, recuerdo);
+        filasSinTexto = paso.LaPoliticaNoDejoViajar;
+        return paso.Cuenta;
     }
 
     // ── El evento para quien pinta (spec 048, promesa 368) ───────────────────────────────────────
@@ -755,13 +822,23 @@ public sealed class SurfaceMapTools
         // EL RELOJ DE CADA FASE, para el log del tramo: leer la pantalla, decidir, y pulsar (con la espera del
         // cambio dentro). Es la medida que la fase 4 del plan necesita para saber qué recortar.
         var relojLeer = System.Diagnostics.Stopwatch.StartNew();
-        var (aqui, puertas, total, candidatas) = PuertasDeAhora();
+        var (aqui, puertas, total, candidatas, noEsDeAqui) = PuertasDeAhora();
         relojLeer.Stop();
         if (anotado != null) { anotado.Donde = aqui; anotado.Candidatas = candidatas; anotado.MsLeer = relojLeer.ElapsedMilliseconds; }
         // LA CUENTA DE LECTURAS SE TOMA AQUÍ (promesa 362), antes de pulsar: Take invalida la observación al
         // volver y pone el contador a cero, así que leerlo después contaría siempre «0 · 0».
         string lecturas = CuentaDeLecturas();
         if (aqui.Length == 0) return Sin("no sé en qué pantalla estoy, así que no hay nada entre lo que decidir.", "no sé en qué pantalla estoy");
+        // LO QUE SE LE OFRECE AL DECISOR ES DE LA VENTANA Y DEL DÓNDE QUE SE JUZGARON (403, spec 052). La política (393) juzga
+        // el origin de «aqui»; si lo leído es de otra ventana, o de SAP bajo un origin que no lo es, juzgaría una cosa y
+        // viajaría otra. No se le ofrece a nadie —el transporte no se toca— y decide Luna. Antes que «no veo nada»: sin saber
+        // de qué ventana es lo leído, tampoco se sabe si es verdad que no hay nada.
+        if (noEsDeAqui.Length > 0)
+        {
+            LogBus.Log("decisor", $"✋ «{aqui}» · {noEsDeAqui}: no se le ofrece al decisor. Decide Luna.");
+            return Sin($"no se acciona: {noEsDeAqui}; no se le ofrece al decisor. Decide Luna.", noEsDeAqui,
+                tiempos: $"leer {relojLeer.ElapsedMilliseconds} ms · {lecturas}");
+        }
         if (total == 0) return Sin($"en «{aqui}» no veo ningún elemento accionable ahora mismo: nada entre lo que decidir.", "no veo ningún elemento accionable");
         // PUERTAS ÚNICAS Y NUMERADAS (promesa 287): «2) Detalles (RadioButton)». Con etiquetas a secas, en
         // openai.com Jev eligió bien tres veces y las tres se perdieron en «hay 2 puertas vivas para…»
@@ -897,9 +974,12 @@ public sealed class SurfaceMapTools
         // «JEV CREE QUE YA ESTÁ» LO DECIDE EL NÚMERO, NO EL TEXTO DEL PORQUÉ (promesa 386, spec 046). Hasta el 2026-09-22
         // también bastaba la palabra «cumplido» en el porqué: «…y el objetivo no parece cumplido…», con Cumplido=0,1, paraba
         // el tramo por «ya está». El porqué es prosa para leer; lo que Jev contestó a la pregunta es el número.
+        // Y SI NO SE DECIDIÓ PORQUE LA POLÍTICA NO DEJA SALIR EL TEXTO, EL PASO LO LLEVA (402, spec 052): es lo que leen el
+        // despacho de map_decidir y la cuenta del tramo para no pegar detrás, en crudo, las filas que Jev no pudo ver.
         if (!d.Actuar)
             return Sin($"no se acciona: {d.Porque} [{senal}]", d.Porque, d.Confianza,
-                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo, tiempos: TiemposSinPulsar());
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo, tiempos: TiemposSinPulsar())
+                with { LaPoliticaNoDejoViajar = d.LaPoliticaNoDejoViajar };
 
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
         // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
@@ -1347,7 +1427,7 @@ public sealed class SurfaceMapTools
         // «sap:wnd[0]/usr/...», así que cuando Windows no encuentra lo que se nombra se le pregunta
         // al grafo por lo que hay VIVO aquí. Un empate no se adivina: lo dice ElCampoQueNombras.
         else if (sobre.Length > 0
-                 && LoQueSeNombra(sobre, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke()) is { } nombrado)
+                 && LoQueSeNombra(sobre, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke(donde)) is { } nombrado)
         {
             // …o un campo del dynpro por su etiqueta (promesa 188): «Presión Arterial» ya se cuelga.
             selector = nombrado.Selector;
@@ -1826,7 +1906,7 @@ public sealed class SurfaceMapTools
                 // señala por la caja que SAP declara, que es la rama de arriba.
                 string donde = _where()?.Id ?? "";
                 if (donde.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase)
-                    && LoQueSeNombra(etiqueta.Length > 0 ? etiqueta : selector, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke()) is { } enSap
+                    && LoQueSeNombra(etiqueta.Length > 0 ? etiqueta : selector, PuertasVivas?.Invoke(donde), CamposDeSap?.Invoke(donde)) is { } enSap
                     && U.Graph.Surfaces.SapSelector.Owns(enSap.Selector))
                     return IluminarUno(enSap.Selector, etiqueta.Length > 0 ? etiqueta : enSap.Etiqueta);
                 return false;
@@ -2377,16 +2457,25 @@ public sealed class SurfaceMapTools
     /// <summary>Para los jueces: espera a que el tramo en marcha termine.</summary>
     public bool EsperarTramo(int ms) => _tramo?.Esperar(ms) ?? true;
 
-    private Navigation.ElTramo ElTramo() => _tramo ??= new Navigation.ElTramo(new Navigation.ElTramo.Manos(
-        Donde: () => { try { return _where()?.Id ?? ""; } catch { return ""; } },
-        Paso: objetivo => UnPasoDecidido(objetivo, "", ""),
-        HayQueParar: () => HayQueParar?.Invoke() ?? Actions.Freno.Pidieron,
-        Progreso: l => Progreso?.Invoke(l),
-        Inventario: () => InventarioParaLosActos?.Invoke() ?? LoQueVeo(),
-        AvisarALaVoz: AvisarALaVoz == null ? null : (Action<string>)(c => AvisarALaVoz?.Invoke(c)),
-        Log: l => LogBus.Log("tramo", l),
-        AlEmpezar: t => AlEmpezarTramo?.Invoke(t),
-        AlTerminar: () => AlTerminarTramo?.Invoke()));
+    private Navigation.ElTramo ElTramo()
+    {
+        if (_tramo != null) return _tramo;
+        // LA CUENTA DEL TRAMO NO CUENTA POR SU TEXTO LAS FILAS QUE LA POLÍTICA LE NEGÓ A JEV (402, spec 052). La cuenta lleva
+        // detrás lo que hay delante, va entera a la voz (295) y queda para map_tramo_estado; si el último paso no se decidió
+        // porque la política no deja salir el texto, el inventario va con las filas por número. Lo recuerda el propio tramo,
+        // no un campo del mapa: el paso, la cuenta y el empezar corren en la tarea del tramo, y Luna puede llamar a la vez.
+        bool ultimoSinTexto = false;
+        return _tramo = new Navigation.ElTramo(new Navigation.ElTramo.Manos(
+            Donde: () => { try { return _where()?.Id ?? ""; } catch { return ""; } },
+            Paso: objetivo => { var p = UnPasoDecidido(objetivo, "", ""); ultimoSinTexto = p.LaPoliticaNoDejoViajar; return p; },
+            HayQueParar: () => HayQueParar?.Invoke() ?? Actions.Freno.Pidieron,
+            Progreso: l => Progreso?.Invoke(l),
+            Inventario: () => InventarioParaLosActos?.Invoke() ?? LoQueVeo(ultimoSinTexto),
+            AvisarALaVoz: AvisarALaVoz == null ? null : (Action<string>)(c => AvisarALaVoz?.Invoke(c)),
+            Log: l => LogBus.Log("tramo", l),
+            AlEmpezar: t => { ultimoSinTexto = false; AlEmpezarTramo?.Invoke(t); },
+            AlTerminar: () => AlTerminarTramo?.Invoke()));
+    }
 
     /// <summary>«map_tramo»: contesta al instante y el bucle corre por detrás (291).</summary>
     private string Tramo(string objetivo, string tope, string decir)
@@ -2581,7 +2670,13 @@ public sealed class SurfaceMapTools
     /// Es lo que hace que un campo se pueda NOMBRAR para colgarle un recuerdo, señalarlo o verlo en la
     /// lista, con el mismo criterio que para escribir en él (promesa 188).
     /// </summary>
-    public Func<IReadOnlyList<DetectedField>>? CamposDeSap { get; set; }
+    /// <remarks>
+    /// RECIBE EL DÓNDE YA JUZGADO por quien pregunta, y lee para ese (403, spec 052). Hasta el 2026-09-24 no recibía nada
+    /// y quien la cableaba volvía a preguntar DondeEstoy(): si SAP pasaba al frente entre las dos preguntas, las etiquetas
+    /// del dynpro entraban en la lista de una pantalla que no era SAP, y de ahí a Jev con un origin que la política 393
+    /// deja pasar. Sus tres llamadores ya tenían el dónde a mano.
+    /// </remarks>
+    public Func<string, IReadOnlyList<DetectedField>>? CamposDeSap { get; set; }
 
     /// <summary>
     /// LO QUE LA PERSONA NOMBRA DENTRO DE SAP, resuelto en UN solo sitio (promesa 188): primero las
@@ -2646,11 +2741,11 @@ public sealed class SurfaceMapTools
         return salida;
     }
 
-    /// <summary>Los campos del dynpro como puertas, para fundirlos con lo del terreno.</summary>
-    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> CamposDeSapComoPuertas()
+    /// <summary>Los campos del dynpro de <paramref name="aqui"/> —el dónde ya juzgado (403)— como puertas, para fundirlos con lo del terreno.</summary>
+    private IReadOnlyList<(string Selector, string Etiqueta, string Tipo)> CamposDeSapComoPuertas(string aqui)
     {
         IReadOnlyList<DetectedField> campos;
-        try { campos = CamposDeSap?.Invoke() ?? Array.Empty<DetectedField>(); } catch { return Array.Empty<(string, string, string)>(); }
+        try { campos = CamposDeSap?.Invoke(aqui) ?? Array.Empty<DetectedField>(); } catch { return Array.Empty<(string, string, string)>(); }
         return campos.Where(c => c.Label.Length > 0).Select(c => (c.Selector, c.Label, c.ControlType)).ToList();
     }
 
@@ -2714,12 +2809,14 @@ public sealed class SurfaceMapTools
             && !tool.Equals("map_exclude", StringComparison.OrdinalIgnoreCase))
             Ui.Senalador.Soltar();
 
+        // Lo pone map_decidir si la política no dejó decidir (402): el inventario que se pega detrás va sin el texto de las filas.
+        bool filasSinTexto = false;
         string r = tool switch
         {
             "map_where_am_i" => WhereAmI(),
             "map_go_to" => GoTo(A("surface")),
             "map_take" => Take(A("exit"), A("which"), A("decir"), A("recuerdo")),
-            "map_decidir" => Decidir(A("objetivo"), A("decir"), A("recuerdo")),
+            "map_decidir" => Decidir(A("objetivo"), A("decir"), A("recuerdo"), out filasSinTexto),
             "map_tramo" => Tramo(A("objetivo"), A("tope"), A("decir")),
             "map_alto" => Alto(),
             "map_tramo_estado" => EstadoDelTramo(),
@@ -2789,9 +2886,11 @@ public sealed class SurfaceMapTools
         // herramienta: había seis sitios y la clase de error se arregla una vez donde pasan todos. Lo que
         // compra: la mitad de los actos iban seguidos de un «¿y ahora qué hay?» que ya no hace falta. Va
         // ANTES de parar el reloj, para que el coste de leer la pantalla cuente como parte del acto.
+        // Y DETRÁS DE UNA DECISIÓN QUE LA POLÍTICA NO DEJÓ TOMAR, CON LAS FILAS POR NÚMERO (402, spec 052): la 393 acababa de
+        // negarle ese texto a Jev, y volvía en crudo a Luna —y de ahí a OpenAI— en esta misma respuesta.
         if (ComoSeContesta.LlevaInventario(tool, r))
         {
-            try { r = ComoSeContesta.Pegar(r, InventarioParaLosActos?.Invoke() ?? LoQueVeo()); }
+            try { r = ComoSeContesta.Pegar(r, InventarioParaLosActos?.Invoke() ?? LoQueVeo(filasSinTexto)); }
             catch (Exception e) { LogBus.Log("mapa-mcp", $"no pude añadir lo que hay delante: {e.Message}"); }
         }
 

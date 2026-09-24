@@ -1,6 +1,7 @@
 # Lo leído tampoco sale por otro camino
 
-Estado: **en curso** · Nace de la revisión de fugas del 2026-09-24 sobre la rama de pruebas
+Estado: **fases 1–3 hechas** (automático: contrato intacto y voz íntegra; nivel 4 pendiente, del
+dueño) · Nace de la revisión de fugas del 2026-09-24 sobre la rama de pruebas
 `jero/jev-todo-junto` (main `043addc` + A #118 + B #119 + C #117 + D #120 + la 051 #121) · Rama: la
 misma, antes de que el dueño empiece a probar.
 
@@ -106,13 +107,48 @@ promesa que la juzga.
 
 ## Hallazgos
 
-<!-- Se rellena durante la implementación. -->
+- **2026-09-24, el rojo, medido** (tras `e58190b`, contrato `INTACTO` con 347 verdes). Con las promesas
+  escritas y sin código: `CONTRATO ROTO: 12` (el recuento es de aserciones), rojas **exactamente** 395
+  (S5: «`surfaceUrl: loc?.Id??""` no está en el censo» y «falta S5»), 402 (5: la respuesta de
+  `map_decidir`, lo que llega a la voz y `map_tramo_estado` llevan «fila de prueba · 402», y ninguna
+  nombra las filas por número) y 403 (6: con otra ventana `llamadas=1, pulsos=1`, la respuesta no dice
+  «otra ventana» ni el log «lo leído no es de aquí», `ProcesoDeLaVentana` PENDIENTE, `CamposDeSap` es
+  ``Func`1``, y la lambda de `FaceWindow` pregunta `DondeEstoy`). 346 verdes.
+- **El verde**: `CONTRATO INTACTO`, **349 verdes** (347 + 402 + 403), 0 sin juzgar.
+- **El sabotaje, verificado por diff** (`diff` contra copia: exactamente 3 líneas, CRLF conservado
+  —3834 CR de 3834 líneas, 350 de 350—; el primer intento con `sed -i` de Git Bash **convirtió el
+  archivo entero a LF** y no aplicó el sabotaje de la 403, y se tiró: el sabotaje también se comprueba).
+  Tres a la vez, cada uno en su promesa: `LoQueVeo` ignora `filasSinTexto`; `PorQueLoLeidoNoEsDeAqui`
+  devuelve siempre «» (el compilador avisó `CS0162` en `SurfaceMapTools.cs(323,9)`: el binario juzgado
+  era el saboteado); `surfaceUrl: loc?.Id ?? ""`. → `CONTRATO ROTO: 11`, rojas **exactamente** 395 (S5),
+  402 (5) y 403 (5: las de las dos reglas; el control, la ubicación sin ventana y `CamposDeSap` siguen
+  verdes, como debe ser) y ninguna otra; 346 verdes. Restaurados desde la copia (`cmp` sin diferencias,
+  SHA-256 `7af5d6d3…` y `d752463e…` idénticos).
+- **Una aserción de la 402 no mordió con el sabotaje**: «ninguna línea del log lleva el texto de una
+  fila». La línea «mapa-mcp ←» guarda los primeros 200 caracteres de la respuesta
+  (`LineaDeRespuesta`), y en el fixture la primera fila cae más allá: el porqué de la política, la
+  señal y la cabecera del inventario ya pasan de 200. Se queda como guardia —con un dónde corto o un
+  porqué más breve sí mordería—, no como prueba de este arreglo, y se dice aquí.
+- **Sitios, contados (patrón nº5)**: `PuedeViajar(` → 1 llamador (`ConJev`), que es el único que
+  acuña `NoPorLaPolitica`; lectores de `LoQueVeo` → 3 (el despacho de `map_what_i_see`, el pegado
+  del despacho y las manos del tramo), 2 con la señal; copias de `DecisionDeUnPaso` → 4, las 4 la
+  llevan; lecturas de contenido que elegían su ventana o su dónde por su cuenta → 2 (`VistaReciente`
+  y `CamposDeSap` en `FaceWindow`); llamadas a `CamposDeSap` → 3, las 3 con el dónde; `TelemetryBus.Emit`
+  con la ubicación entera → 1 (S5).
+- **Lo que el nivel 4 tiene que mirar (D, sin medir)**: con la carita delante, `DondeEstoy` elige la
+  ventana por la regla de la ventana de delante (230) y `VentanaDelUsuario` por la última que activó la
+  persona. Si alguna vez discrepan, la 403 frena al decisor con «otra ventana» —falla cerrado, decide
+  Luna—, y eso sería un freno de más, no una fuga. Si aparece en el log sin que haya cambiado nada
+  delante, es esto.
+- **Fuera, y visto de paso**: el mismo `loc.Id` entero viaja al cerebro en cada turno del consciente
+  (`AgentLoop.cs`, `state.SurfaceId` → `/agent/turn`). Es «lo que viaja a los modelos», que la 051 dejó
+  sin dueño; esta spec no lo toca.
 
 ## Cierre
 
-- [ ] 402 y 403 verdes, 395 verde con S5 nueva, y el resto intacto (`contrato-del-grafo.ps1`)
-- [ ] La voz íntegra (`contrato-de-la-voz.ps1`)
-- [ ] Sabotaje de cada una, visto rojo y restaurado
+- [x] 402 y 403 verdes, 395 verde con S5 nueva, y el resto intacto (`contrato-del-grafo.ps1`)
+- [x] La voz íntegra (`contrato-de-la-voz.ps1`): `VOZ ÍNTEGRA`
+- [x] Sabotaje de cada una, visto rojo y restaurado
 - [ ] Nivel 4 (a mano, por el dueño): SAP sin habilitar, `map_decidir` y `map_tramo` sobre NWP1 —la
       respuesta y el aviso a la voz nombran las filas por número—; y el Busy de SAP con otra app delante
       justo antes —el log dice «decisor: ✋ … lo leído no es de aquí» y no hay llamada a Jev—

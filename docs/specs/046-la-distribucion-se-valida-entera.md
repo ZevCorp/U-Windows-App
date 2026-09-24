@@ -629,7 +629,9 @@ Se rellena durante la implementación. Lo encontrado al especificar, con fecha:
   y después `CamposDeSap` (`FaceWindow.xaml.cs:948-955`) vuelve a preguntar `DondeEstoy()` por su cuenta; si SAP pasa
   al frente entre las dos lecturas, las etiquetas del dynpro viajarían con el origin de la pantalla anterior, que la
   política ya dejó pasar. El arreglo es que `CamposDeSap` reciba el `aqui` juzgado —cambia su firma y toca la UI de
-  `windows-client` (zona de choque alta)—; va a una rama propia, con su promesa y un lector inyectable. (b) El portal
+  `windows-client` (zona de choque alta)—; va a una rama propia, con su promesa y un lector inyectable. **Cerrada el
+  2026-09-24 por la 052 (promesa 403)**, junto con un segundo sitio de la misma clase que esta nota no nombraba: la
+  lectura UIA de `VistaReciente`, que elige su ventana al leer (`docs/specs/052-lo-leido-tampoco-sube.md`). (b) El portal
   clínico visto por UIA: si Chrome tiene barra pero no se lee (`SurfaceLocator.cs:446`), la ubicación es
   `uia://chrome.exe/<título>` y el veto `web://itsmiracleai.com` no muerde; no hay forma de saber que es el portal sin
   leer el título, que es justo lo que no viaja. Se decide con el dueño (¿vetar `uia://chrome.exe` cuando la barra no

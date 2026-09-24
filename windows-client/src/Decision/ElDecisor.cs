@@ -88,6 +88,15 @@ public sealed class DecisionDeUnPaso
     /// </summary>
     public string Veto { get; init; } = "";
 
+    /// <summary>
+    /// Si no se decidió porque LA POLÍTICA NO DEJA SALIR EL TEXTO de esta pantalla (393): SAP sin habilitar, u origin vetado.
+    /// Falso en cualquier otra rama. ES UN DATO, no la prosa del porqué (aprendizaje nº2): lo lee quien cuenta lo que hay
+    /// delante después de esta decisión —el inventario que vuelve pegado a map_decidir y el de la cuenta del tramo—, para no
+    /// contar por su texto las filas que la política acaba de negarle a Jev (402, spec 052). Hasta el 2026-09-24 la 393
+    /// decidía quién decidía, y el mismo texto volvía a Luna, y de ahí a OpenAI, en la respuesta de al lado.
+    /// </summary>
+    public bool LaPoliticaNoDejoViajar { get; init; }
+
     private DecisionDeUnPaso(bool actuar, string puerta, double confianza, string porque)
     {
         Actuar = actuar;
@@ -102,28 +111,33 @@ public sealed class DecisionDeUnPaso
     internal static DecisionDeUnPaso No(string porque, double confianza = 0) =>
         new DecisionDeUnPaso(false, "", confianza, porque);
 
+    /// <summary>No se decide porque la política no deja salir el texto de la pantalla (393), y queda dicho como dato (402).</summary>
+    internal static DecisionDeUnPaso NoPorLaPolitica(string porque) =>
+        new DecisionDeUnPaso(false, "", 0, porque) { LaPoliticaNoDejoViajar = true };
+
     // LAS CUATRO COPIAS LLEVAN TODAS LAS PROPIEDADES (patrón nº5): una que se olvidara N/Masa5/InputTokens los devolvería a
     // «sin medir» en silencio, y la línea «decisor:» diría que no se midió lo que sí se midió; una que se olvidara el Veto
-    // volvería a presentar como pulsable lo que la lista vetó.
+    // volvería a presentar como pulsable lo que la lista vetó; y una que se olvidara LaPoliticaNoDejoViajar volvería a
+    // contar las filas por su texto (402). Hoy la rama de la política vuelve antes de copiar; mañana puede no hacerlo.
     internal DecisionDeUnPaso Con(IReadOnlyList<(string, double)> alternativas, double cumplido, double peligro, string queNoCuadro = "") =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = alternativas, Cumplido = cumplido, Peligro = peligro, QueNoCuadro = queNoCuadro,
               Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
-              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto };
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto, LaPoliticaNoDejoViajar = LaPoliticaNoDejoViajar };
 
     /// <summary>La misma decisión, con lo que viajó para tomarla (350).</summary>
     internal DecisionDeUnPaso ConLoQueViajo(int viajaron, int filasSinTexto, int caracteres) =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
               Viajaron = viajaron, FilasSinTexto = filasSinTexto, Caracteres = caracteres,
-              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto };
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = Veto, LaPoliticaNoDejoViajar = LaPoliticaNoDejoViajar };
 
     /// <summary>La misma decisión, con la señal de la respuesta (387). Nada de lo que decide cambia.</summary>
     internal DecisionDeUnPaso ConLaSenal(int n, double masa5, int? inputTokens) =>
         new DecisionDeUnPaso(Actuar, Puerta, Confianza, Porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
               Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
-              N = n, Masa5 = masa5, InputTokens = inputTokens, Veto = Veto };
+              N = n, Masa5 = masa5, InputTokens = inputTokens, Veto = Veto, LaPoliticaNoDejoViajar = LaPoliticaNoDejoViajar };
 
     /// <summary>
     /// LA MISMA DECISIÓN, VETADA (390): ya no acciona, la puerta queda vacía —como en toda decisión que no acciona—, el porqué
@@ -134,7 +148,7 @@ public sealed class DecisionDeUnPaso
         new DecisionDeUnPaso(false, "", Confianza, porque)
             { Alternativas = Alternativas, Cumplido = Cumplido, Peligro = Peligro, QueNoCuadro = QueNoCuadro,
               Viajaron = Viajaron, FilasSinTexto = FilasSinTexto, Caracteres = Caracteres,
-              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = veto };
+              N = N, Masa5 = Masa5, InputTokens = InputTokens, Veto = veto, LaPoliticaNoDejoViajar = LaPoliticaNoDejoViajar };
 
     /// <summary>
     /// LA SEÑAL EN UNA FRASE (387): «N=6 · masa5 0.98 · 1.2× lo plano · tokens 312». La escriben la línea «decisor:» y la
@@ -427,8 +441,9 @@ public static class ElDecisor
         // LA POLÍTICA ANTES DEL TRANSPORTE (393): lo que no puede viajar no se manda, y tampoco se decide por la regla
         // local —con «jev» eso sería cambiar de juez—. El transporte no se toca ni una vez; decide Luna, y el porqué
         // dice cuál de las dos reglas mordió (SAP sin habilitar, u origin vetado y bajo qué veto).
+        // Y LO DICE COMO DATO (402, spec 052): quien pegue lo que hay delante detrás de esta decisión no lo cuenta por su texto.
         if (!politica.PuedeViajar(pantalla, out string noViaja))
-            return DecisionDeUnPaso.No(noViaja);
+            return DecisionDeUnPaso.NoPorLaPolitica(noViaja);
 
         if (transporte == null)
             return DecisionDeUnPaso.No("se pidió Jev pero no hay transporte con el que hablarle.");
