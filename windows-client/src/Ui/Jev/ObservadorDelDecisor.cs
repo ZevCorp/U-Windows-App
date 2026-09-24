@@ -1,88 +1,143 @@
-using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using U.WindowsClient.Decision;
 using U.WindowsClient.Diagnostics;
+using U.WindowsClient.Mcp;
+using U.WindowsClient.Navigation;
 
 namespace U.WindowsClient.Ui.Jev;
 
 /// <summary>
-/// EL PUENTE PROVISIONAL: cronometra al decisor, arma el ciclo y devuelve la decisión intacta. Promesa 382 (spec 049).
+/// LA VISTA OYE CADA PASO DECIDIDO: se suscribe al evento del mapa, traduce el paso a un ciclo y lo publica. Promesa 382
+/// (spec 049).
 /// </summary>
 /// <remarks>
-/// HASTA QUE ENTRE LA 048 (rama C, PR #117). C publica cada paso decidido como un evento tipado,
-/// <c>SurfaceMapTools.AlDecidir(PasoDecidido)</c> (368); mientras no esté en <c>main</c>, la vista decora el
-/// <c>Decisor</c> del mapa DESDE FUERA —<c>SurfaceMapTools.Decisor</c> es una propiedad pública— y ni
-/// <c>Decision/</c> ni <c>Navigation/</c> ni <c>SurfaceMapTools</c> se tocan (spec 049 §El puente provisional).
-/// Cuando C entre, el parcial se suscribe a <c>AlDecidir</c> y llama a <see cref="CicloDe"/> con los campos del
-/// evento —<c>CicloDe(e.Objetivo, e.Ofrecidas, e.Decision, e.Ms.Decidir, cajas de e.Candidatas)</c>—;
-/// <see cref="Envolver"/> deja de hacer falta y el modelo no cambia. Lo que el puente NO ve, y el evento sí: la
-/// caja de cada candidata (365). Por eso hoy el overlay no pinta ninguna verde, y lo dice (375).
+/// DESDE EL 2026-09-24 OYE EL EVENTO DE C, Y EL PUENTE PROVISIONAL SE FUE. Mientras la 048 no estaba en <c>main</c>, la
+/// vista decoraba el <c>Decisor</c> del mapa desde fuera (<c>Envolver</c>) y sacaba la pulsada de la línea de progreso.
+/// Al juntar A, B, C y D sobraban las dos cosas, y las dos mentían:
+/// (1) el envoltorio ve la decisión ANTES del veto de A (390, <c>SurfaceMapTools.DecidirYPulsar</c>), así que con
+/// «Guardar» a 0,99 publicaba Actuar=true y el panel decía «Pulsando «Guardar»» sobre algo que no se pulsa; el evento
+/// <c>AlDecidir</c> (368) sale con la decisión ya vetada (ec72d96);
+/// (2) la regex de la línea terminaba en «· (no )?cambió» y B (353) escribe «cambió de sitio», «dentro» y «delante»: toda
+/// pulsación que cambió algo perdía su pulsada. El evento trae el paso con su número (<c>Paso.Numero</c>).
+/// Y con las dos fuentes a la vez cada decisión se habría publicado dos veces, con dos números de paso.
 ///
-/// LA DECISIÓN NO SE TOCA. Sale el mismo objeto que devolvió el decisor, y una excepción del decisor sale tal cual:
-/// <c>SurfaceMapTools</c> ya la recoge con su cadena entera y le devuelve el paso a Luna, y el tramo lo cuenta en su
-/// línea de progreso, que llega al panel por su camino. Lo que haga la vista después —armar el ciclo, publicarlo—
-/// no puede cambiar ni retrasar lo que se pulsa: si lanza, se dice en el log y la decisión sigue su camino.
+/// LO QUE CUESTA, Y SE DICE: el evento sale cuando el paso TERMINÓ —decidir, pulsar y la espera—, no al decidir. El panel
+/// pinta la decisión después del clic; la flecha sigue volando AL pulsar, porque ese aviso llega por
+/// <c>UiaSurface.Pulso</c> (381), que no es parte del puente y se queda.
 ///
-/// ENVOLVER DOS VECES ENVUELVE UNA. <c>InterruptorDelDecisor</c> reasigna el <c>Decisor</c> en cada
-/// <c>Encender</c> y <c>Apagar</c> (<c>InterruptorDelDecisor.cs:66, 81</c>), y la vista se sincroniza después de
-/// los dos; sin esto cada pulsación del botón apilaría un cronómetro más y un ciclo publicado de más.
+/// NADA DE ESTO TOCA EL DECISOR NI EL PASO. <see cref="Oir"/> no envuelve ni reasigna nada: el interruptor sigue siendo
+/// el único que escribe <c>SurfaceMapTools.Decisor</c>. El evento sale en el hilo del paso; <c>Publicar</c> solo encola
+/// (382), y si traducir o publicar lanza, se dice aquí con la cadena entera y el paso sigue —el mapa también lo ataja,
+/// pero sin decir que era la vista—.
 /// </remarks>
 public static class ObservadorDelDecisor
 {
+    /// <summary>Los mapas que ya se oyen: oír dos veces el mismo publicaría cada paso dos veces, con dos números de paso.</summary>
+    private static readonly ConditionalWeakTable<SurfaceMapTools, object> Oidos = new();
+
     /// <summary>
-    /// El decisor con un cronómetro alrededor: devuelve lo mismo que <paramref name="interno"/> y, además, avisa a
-    /// <paramref name="alDecidir"/> con el ciclo. Si <paramref name="interno"/> ya es un envoltorio, se envuelve
-    /// su decisor de dentro, no el envoltorio: el último <paramref name="alDecidir"/> manda y hay un solo cronómetro.
+    /// La vista oye cada paso decidido de <paramref name="mapa"/>: <see cref="CicloDe(SurfaceMapTools.PasoDecidido)"/> y
+    /// <paramref name="publicar"/>. Devuelve <c>true</c> si se suscribió ahora y <c>false</c> si ya lo oía: el primer
+    /// <paramref name="publicar"/> es el que queda.
     /// </summary>
-    public static Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso> Envolver(
-        Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso> interno, Action<CicloDeJev> alDecidir)
+    public static bool Oir(SurfaceMapTools mapa, Action<CicloDeJev> publicar)
     {
-        ArgumentNullException.ThrowIfNull(interno);
-        ArgumentNullException.ThrowIfNull(alDecidir);
-        if (interno.Target is Envoltorio ya && ya.AlDecidir == alDecidir) return interno;
-        return new Envoltorio(InternoDe(interno)!, alDecidir).Decidir;
+        ArgumentNullException.ThrowIfNull(mapa);
+        ArgumentNullException.ThrowIfNull(publicar);
+        lock (Oidos)
+        {
+            if (Oidos.TryGetValue(mapa, out _)) return false;
+            Oidos.Add(mapa, publicar);
+        }
+        mapa.AlDecidir += paso =>
+        {
+            try { publicar(CicloDe(paso)); }
+            catch (Exception e)
+            {
+                // LA CADENA ENTERA (patrón nº3), y cuentas, NUNCA texto de pantalla (spec 049 §Con qué se juzga).
+                string causa = "";
+                for (var x = e; x != null; x = x.InnerException)
+                    causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
+                LogBus.Log("jev-vista", $"✘ la vista no pudo pintar un paso decidido de {paso.Ofrecidas.Count} ofrecida(s) y {paso.Ms.Decidir} ms: {causa}. "
+                    + "El paso sigue; la vista se queda con lo anterior.");
+            }
+        };
+        return true;
     }
 
-    /// <summary>Si <paramref name="decisor"/> es un envoltorio de este observador.</summary>
-    public static bool EstaEnvuelto(Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso>? decisor) =>
-        decisor?.Target is Envoltorio;
+    /// <summary>
+    /// EL PASO DECIDIDO, COMO CICLO: lo que el evento de la 048 publicó, tal como lo pinta la vista. La decisión, ya
+    /// vetada (390); la pulsada, la del paso; y la caja de cada candidata, solo si sigue siendo de lo que se ve.
+    /// </summary>
+    /// <remarks>
+    /// LA PULSADA ES <c>Paso.Numero</c>, y solo si la mano actuó y TERMINÓ: «no terminó» es que no se pulsó (la elegida no
+    /// estaba y no hubo segunda, o el tope), y decir «pulsé» sería mentira. Es el número que la mano sacó del id
+    /// (<c>id.Substring(0, id.IndexOf(')'))</c>), el mismo que <see cref="CandidataDeJev.NumeroDelId"/>.
+    ///
+    /// LAS CAJAS, SOLO SI EL PASO NO CAMBIÓ LO QUE SE VE (<c>Paso.QueCambio == Nada</c>). El evento sale cuando el paso
+    /// acabó, espera incluida: si la mano cambió de sitio, dentro o delante, las cajas leídas son de la pantalla de antes, y
+    /// pintarlas sobre la nueva es la caja que miente (patrón nº8). Van sin caja —se ofrecen, se cuentan y no se pintan:
+    /// 375—, igual que las del terreno. Si llegaran menos cajas que ofrecidas (el paso no llegó a leer), tampoco: no se
+    /// emparejan a ojo.
+    ///
+    /// SIN DECISIÓN (decisor apagado, pantalla sin nombre, nada accionable, el decisor lanzó) el ciclo sale igual, sin
+    /// decisión y sin pulsada: un paso no ejecutado deja rastro (patrón nº10), y la línea de progreso que viene detrás
+    /// dice por qué. Así el número de paso de la vista es el del tramo.
+    /// </remarks>
+    public static CicloDeJev CicloDe(SurfaceMapTools.PasoDecidido paso)
+    {
+        ArgumentNullException.ThrowIfNull(paso);
+        var ofrecidas = paso.Ofrecidas ?? Array.Empty<string>();
+        var candidatas = paso.Candidatas ?? Array.Empty<SurfaceMapTools.Candidata>();
+        bool mismaPantalla = paso.Paso.QueCambio == HuellaDeLoQueSeVe.QueCambio.Nada;
+        IReadOnlyList<Rect>? cajas = mismaPantalla && candidatas.Count == ofrecidas.Count
+            ? candidatas.Select(c => c.Caja).ToList()
+            : null;
+        // VACÍO NO ES AUSENTE (patrón nº9): un número en blanco es que no se sabe cuál fue.
+        string? pulsada = paso.Paso.Actuo && paso.Paso.Termino && !string.IsNullOrWhiteSpace(paso.Paso.Numero)
+            ? paso.Paso.Numero
+            : null;
 
-    /// <summary>El decisor de dentro de un envoltorio; el mismo si no lo es. Desenvolver es quedarse con esto.</summary>
-    public static Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso>? InternoDe(
-        Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso>? decisor) =>
-        decisor?.Target is Envoltorio e ? e.Interno : decisor;
+        if (paso.Decision != null)
+            return CicloDe(paso.Objetivo, ofrecidas, paso.Decision, paso.Ms.Decidir, cajas) with { Pulsada = pulsada };
+        return new CicloDeJev
+        {
+            Objetivo = paso.Objetivo ?? "",
+            Candidatas = Candidatas(ofrecidas, cajas),
+            MsDecidir = paso.Ms.Decidir,
+            Fase = FaseDelCiclo.Decidido,
+        };
+    }
 
     /// <summary>
-    /// LA TRADUCCIÓN ENTERA de lo que ve la costura del decisor a lo que pinta la vista. Sus argumentos son los
-    /// campos del evento de la 048 (<c>PasoDecidido</c>: <c>Objetivo</c>, <c>Ofrecidas</c>, <c>Decision</c>,
-    /// <c>Ms.Decidir</c> y la <c>Caja</c> de cada candidata), para que el puente de hoy y el evento de mañana
-    /// pinten por el mismo camino (aprendizaje nº16).
+    /// LA TRADUCCIÓN ENTERA de una decisión a lo que pinta la vista. Sus argumentos son los campos del evento de la 048
+    /// (<c>PasoDecidido</c>: <c>Objetivo</c>, <c>Ofrecidas</c>, <c>Decision</c>, <c>Ms.Decidir</c> y la <c>Caja</c> de
+    /// cada candidata); <see cref="CicloDe(SurfaceMapTools.PasoDecidido)"/> pasa por aquí (aprendizaje nº16).
     /// </summary>
     /// <remarks>
     /// <see cref="DecisionDeUnPaso"/> Y <see cref="DecisionDeJev"/> NO SIGNIFICAN LO MISMO en dos campos, y aquí se
     /// traduce, no se copia (hallazgo de la fase 2 de la 049). (1) <c>Puerta</c> viene VACÍA cuando no se actúa
-    /// (<c>DecisionDeUnPaso.No</c>), y el panel necesita la elegida también entonces para decir «"Grabar" no se
-    /// deshace»: es la primera de la distribución, que llega de mayor a menor (288). (2) <c>Cumplido</c> vale 0
-    /// cuando no se preguntó, y solo se pregunta con distribución: sin ella es <c>null</c> y el medidor enseña «—»
-    /// (373), no un 0 que parece medido. Con distribución se da por preguntado, y es la única lectura posible: un
-    /// transporte viejo que no trae la noul deja 0 igual (<c>ElDecisor.cs:183</c>), y ahí el medidor dirá 0.00 sin
-    /// que nadie lo haya medido; ninguna comprobación lo distingue (dicho en la spec).
-    /// <c>Ausente</c> no viaja en <see cref="DecisionDeUnPaso"/> y va <c>null</c>
-    /// siempre. Y la pulsada y los tokens tampoco pasan por aquí: la mano aún no pulsó, y nadie lee
-    /// <c>input_tokens</c> todavía (350 de A).
+    /// (<c>DecisionDeUnPaso.No</c>, y también la vetada: <c>ConVeto</c>), y el panel necesita la elegida también entonces
+    /// para decir «"Grabar" no se deshace»: es la primera de la distribución, que llega de mayor a menor (288). (2)
+    /// <c>Cumplido</c> vale 0 cuando no se preguntó, y solo se pregunta con distribución: sin ella es <c>null</c> y el
+    /// medidor enseña «—» (373), no un 0 que parece medido. Con distribución se da por preguntado, y es la única lectura
+    /// posible: un transporte viejo que no trae la noul deja 0 igual (<c>ElDecisor.cs:183</c>), y ahí el medidor dirá 0.00
+    /// sin que nadie lo haya medido; ninguna comprobación lo distingue (dicho en la spec).
+    /// <c>Ausente</c> no viaja en <see cref="DecisionDeUnPaso"/> y va <c>null</c> siempre. El <c>Veto</c> (390) se copia
+    /// tal cual: es lo que distingue una vetada de cualquier otro «no», y el panel la dice «vetada» por él (374).
     /// </remarks>
     /// <param name="objetivo">Lo que el tramo quiere conseguir.</param>
     /// <param name="ofrecidas">Las ids tal como se le ofrecieron al decisor, en su orden.</param>
-    /// <param name="decision">Lo que devolvió el decisor.</param>
+    /// <param name="decision">Lo que devolvió el decisor, ya con el veto.</param>
     /// <param name="msDecidir">Lo que tardó en decidir.</param>
     /// <param name="cajas">
-    /// La caja de cada ofrecida, en PARALELO y en el mismo orden (285), o <c>null</c> si no se sabe —el puente de
-    /// hoy—. <see cref="Rect.Empty"/> es «sin caja leída» (terreno, dynpro: 365), y esa candidata se ofrece pero no
-    /// se pinta.
+    /// La caja de cada ofrecida, en PARALELO y en el mismo orden (285), o <c>null</c> si no se sabe. <see cref="Rect.Empty"/>
+    /// es «sin caja leída» (terreno, dynpro: 365), y esa candidata se ofrece pero no se pinta.
     /// </param>
     /// <exception cref="ArgumentException">
-    /// Si hay cajas y no son tantas como las ofrecidas: emparejarlas a ojo pintaría la caja de una sobre el id de
-    /// otra, que es la caja que miente (aprendizaje nº4).
+    /// Si hay cajas y no son tantas como las ofrecidas: emparejarlas a ojo pintaría la caja de una sobre el id de otra,
+    /// que es la caja que miente (aprendizaje nº4).
     /// </exception>
     public static CicloDeJev CicloDe(string objetivo, IReadOnlyList<string> ofrecidas, DecisionDeUnPaso decision, long msDecidir, IReadOnlyList<Rect>? cajas)
     {
@@ -93,19 +148,11 @@ public static class ObservadorDelDecisor
                 $"llegaron {cajas.Count} caja(s) para {ofrecidas.Count} ofrecida(s): van en paralelo, una por id y en su orden, y no se emparejan a ojo",
                 nameof(cajas));
 
-        var candidatas = new List<CandidataDeJev>(ofrecidas.Count);
-        for (int i = 0; i < ofrecidas.Count; i++)
-        {
-            var (etiqueta, tipo) = EtiquetaYTipo(ofrecidas[i]);
-            Rect? caja = cajas != null && !cajas[i].IsEmpty ? cajas[i] : null;
-            candidatas.Add(new CandidataDeJev { Id = ofrecidas[i], Etiqueta = etiqueta, Tipo = tipo, Caja = caja, EsLeida = caja != null });
-        }
-
         bool conDistribucion = decision.Alternativas.Count > 0;
         return new CicloDeJev
         {
             Objetivo = objetivo ?? "",
-            Candidatas = candidatas,
+            Candidatas = Candidatas(ofrecidas, cajas),
             Decision = new DecisionDeJev
             {
                 Actuar = decision.Actuar,
@@ -117,10 +164,24 @@ public static class ObservadorDelDecisor
                 Ausente = null,
                 Peligro = decision.Peligro,
                 Porque = decision.Porque,
+                Veto = decision.Veto ?? "",
             },
             MsDecidir = msDecidir,
             Fase = FaseDelCiclo.Decidido,
         };
+    }
+
+    /// <summary>Las candidatas de las ids ofrecidas, con su caja si la hay; <paramref name="cajas"/> ya viene emparejada.</summary>
+    private static List<CandidataDeJev> Candidatas(IReadOnlyList<string> ofrecidas, IReadOnlyList<Rect>? cajas)
+    {
+        var candidatas = new List<CandidataDeJev>(ofrecidas.Count);
+        for (int i = 0; i < ofrecidas.Count; i++)
+        {
+            var (etiqueta, tipo) = EtiquetaYTipo(ofrecidas[i]);
+            Rect? caja = cajas != null && !cajas[i].IsEmpty ? cajas[i] : null;
+            candidatas.Add(new CandidataDeJev { Id = ofrecidas[i], Etiqueta = etiqueta, Tipo = tipo, Caja = caja, EsLeida = caja != null });
+        }
+        return candidatas;
     }
 
     /// <summary>
@@ -138,38 +199,5 @@ public static class ObservadorDelDecisor
         int abre = resto.LastIndexOf(" (", StringComparison.Ordinal);
         if (abre < 0 || !resto.EndsWith(')')) return (resto, "");
         return (resto.Substring(0, abre), resto.Substring(abre + 2, resto.Length - abre - 3));
-    }
-
-    /// <summary>El envoltorio: lo que el <c>Target</c> del delegado devuelto lleva dentro, y por eso se reconoce.</summary>
-    private sealed class Envoltorio
-    {
-        public Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso> Interno { get; }
-        public Action<CicloDeJev> AlDecidir { get; }
-
-        public Envoltorio(Func<string, string, IReadOnlyList<string>, DecisionDeUnPaso> interno, Action<CicloDeJev> alDecidir)
-        {
-            Interno = interno;
-            AlDecidir = alDecidir;
-        }
-
-        public DecisionDeUnPaso Decidir(string pantalla, string objetivo, IReadOnlyList<string> ofrecidas)
-        {
-            var reloj = Stopwatch.StartNew();
-            var decision = Interno(pantalla, objetivo, ofrecidas);   // si lanza, sale tal cual: no hay catch aquí
-            reloj.Stop();
-            try { AlDecidir(CicloDe(objetivo, ofrecidas, decision, reloj.ElapsedMilliseconds, cajas: null)); }
-            catch (Exception e)
-            {
-                // LA CADENA ENTERA (patrón nº3), y el paso que falló. Pintar no es decidir: la decisión ya está y
-                // sale igual; lo único que se pierde es el ciclo de la vista, y eso se dice.
-                string causa = "";
-                for (var x = e; x != null; x = x.InnerException)
-                    causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
-                // Cuentas y tiempos, NUNCA texto de pantalla (spec 049 §Con qué se juzga): ni la pantalla ni las ids.
-                LogBus.Log("jev-vista", $"✘ el observador no pudo publicar una decisión de {ofrecidas.Count} ofrecida(s) y {reloj.ElapsedMilliseconds} ms: {causa}. "
-                    + "La decisión sale intacta; la vista se queda con lo anterior.");
-            }
-            return decision;
-        }
     }
 }

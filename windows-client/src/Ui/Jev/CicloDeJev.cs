@@ -97,6 +97,14 @@ public sealed record DecisionDeJev
 
     /// <summary>El porqué del decisor, tal cual. Ya distingue sus causas (<c>ElDecisor.cs</c>); la vista no lo reescribe.</summary>
     public string Porque { get; init; } = "";
+
+    /// <summary>
+    /// Vacío si nada se vetó. Si no, POR QUÉ la elegida no se pulsa aunque Jev la quisiera: la lista de lo irreversible
+    /// mordió (390, <c>DecisionDeUnPaso.Veto</c>), y el panel lo dice «vetada» con este texto tal cual (374). Con algo
+    /// aquí, <see cref="Actuar"/> es falso. Es lo único que distingue una vetada de cualquier otro «no»: sin él, el panel
+    /// caía a la última compuerta de Jev y decía «No estoy seguro (0.99)» de una elegida que Jev sí quería (2026-09-24).
+    /// </summary>
+    public string Veto { get; init; } = "";
 }
 
 /// <summary>
@@ -104,9 +112,10 @@ public sealed record DecisionDeJev
 /// </summary>
 /// <remarks>
 /// LA PULSADA NO VIENE POR LA DECISIÓN, y por eso va aparte. <c>UnPasoDecidido</c> prueba la elegida y, si la
-/// mano dice «no está», la segunda mejor sin volver al decisor (<c>SurfaceMapTools.cs:304-309</c>): la costura
-/// del decisor solo ve <c>d.Puerta</c>. El número de la pulsada llega por la línea de progreso
-/// («paso k: «x» (n) …», <c>ElTramo.cs:204</c>) y su caja por <c>UiaSurface.Pulso</c>.
+/// mano dice «no está», la segunda mejor sin volver al decisor (<c>SurfaceMapTools.DecidirYPulsar</c>). El número de
+/// la pulsada llega con el paso del evento de la 048 (<c>Paso.Numero</c>, <see cref="ObservadorDelDecisor.CicloDe(Mcp.SurfaceMapTools.PasoDecidido)"/>)
+/// y su caja por <c>UiaSurface.Pulso</c>. Hasta el 2026-09-24 el número se sacaba de la línea de progreso, y dejó de
+/// casar en cuanto la 353 cambió sus palabras.
 /// </remarks>
 public sealed record CicloDeJev
 {
@@ -122,7 +131,10 @@ public sealed record CicloDeJev
     /// <summary>Lo que devolvió el decisor, o <c>null</c> si todavía no contestó.</summary>
     public DecisionDeJev? Decision { get; init; }
 
-    /// <summary>El número del id de lo que la mano pulsó —el «(n)» de la línea de progreso—, o <c>null</c> si no se sabe todavía.</summary>
+    /// <summary>
+    /// El número del id de lo que la mano pulsó —<c>Paso.Numero</c> del evento, solo si la mano terminó—, o <c>null</c> si
+    /// no se sabe o no se pulsó nada.
+    /// </summary>
     public string? Pulsada { get; init; }
 
     /// <summary>La caja de lo que la mano dice haber pulsado, en físicos (<c>UiaSurface.Pulso</c>), o <c>null</c>.</summary>
@@ -141,39 +153,25 @@ public sealed record CicloDeJev
     public string? Linea { get; init; }
 
     /// <summary>
-    /// «paso k: «etiqueta» (n) conf c · cambió» o «· no cambió»: la línea que <c>ElTramo.Cuenta</c> escribe cuando la
-    /// mano TERMINÓ de pulsar (<c>ElTramo.cs:204</c>). La etiqueta puede llevar paréntesis y comillas, así que el
-    /// número es el que va entre paréntesis justo antes de « conf». «· no pudo» es que la mano no terminó, y no casa.
+    /// EL CICLO QUE SE PINTA CUANDO LLEGA UNA LÍNEA DEL TRAMO: el último paso decidido con la línea puesta, y nada más.
+    /// La pulsada es la que trajo el paso (<see cref="ObservadorDelDecisor.CicloDe(Mcp.SurfaceMapTools.PasoDecidido)"/>):
+    /// la línea no la pone ni la quita.
     /// </summary>
-    private static readonly System.Text.RegularExpressions.Regex LineaDePaso = new(
-        @"^paso \d+: «.*» \((?<n>[^()]+)\) conf \S+ · (?:no )?cambió$",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-
-    /// <summary>
-    /// EL PUENTE POR LA LÍNEA DE PROGRESO (spec 049 §El puente provisional, 2; revisión del 2026-09-23): el ciclo que
-    /// se pinta cuando llega una línea del tramo. Es la última decisión con la línea puesta y, si la línea dice qué se
-    /// pulsó, con su número en <see cref="Pulsada"/>: la mano puede haber pulsado la segunda mejor sin volver al
-    /// decisor (<c>SurfaceMapTools.cs:304-331</c>), y solo la línea lo cuenta. Hasta el 2026-09-23 la vista no la
-    /// leía, así que la barra resaltada era siempre la elegida y el ticker nunca decía «la 1.ª no estaba».
-    /// </summary>
-    /// <param name="decidido">La última decisión del tramo, o <c>null</c> si todavía no hubo: el ciclo nace del objetivo, sin decisión inventada.</param>
+    /// <remarks>
+    /// HASTA EL 2026-09-24 LA LÍNEA ERA FUENTE: una regex sacaba la pulsada de «paso k: «x» (n) conf c · (no )?cambió»,
+    /// porque la costura del decisor no veía a cuál fue la mano (el puente provisional, spec 049). La 353 cambió las
+    /// palabras —«cambió de sitio», «cambió dentro», «cambió delante»— y desde entonces toda pulsación que cambió algo
+    /// dejaba la pulsada en null y la resaltada volvía a ser la elegida, con la 372 en verde porque sus líneas eran las de
+    /// antes. El evento de la 048 trae el paso con su número: una sola fuente (aprendizaje nº16), y la prosa vuelve a ser
+    /// solo lo que se enseña en el ticker.
+    /// </remarks>
+    /// <param name="decidido">El último paso decidido del tramo, o <c>null</c> si todavía no hubo: el ciclo nace del objetivo, sin decisión ni pulsada inventadas.</param>
     /// <param name="objetivo">El objetivo del tramo, para cuando no hay decisión.</param>
     /// <param name="linea">La línea tal cual llegó.</param>
     public static CicloDeJev ConLaLinea(CicloDeJev? decidido, string objetivo, string linea)
     {
         ArgumentNullException.ThrowIfNull(linea);
         var desde = decidido ?? new CicloDeJev { Objetivo = objetivo ?? "" };
-        return desde with { Fase = FaseDelCiclo.Linea, Linea = linea, Pulsada = PulsadaDeLaLinea(linea) };
-    }
-
-    /// <summary>
-    /// El número de lo que la mano pulsó según una línea de paso —el mismo texto que <see cref="CandidataDeJev.NumeroDelId"/>
-    /// saca del id, porque la línea lo escribe desde ahí—, o <c>null</c> si la línea no dice que se pulsó nada.
-    /// </summary>
-    public static string? PulsadaDeLaLinea(string? linea)
-    {
-        if (string.IsNullOrWhiteSpace(linea)) return null;
-        var m = LineaDePaso.Match(linea);
-        return m.Success ? m.Groups["n"].Value : null;
+        return desde with { Fase = FaseDelCiclo.Linea, Linea = linea };
     }
 }

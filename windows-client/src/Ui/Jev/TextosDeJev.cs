@@ -46,6 +46,12 @@ public static class TextosDeJev
     /// <summary>Jev dudó: {0} su confianza. Solo con distribución: sin ella Jev no llegó a dudar.</summary>
     public const string FormatoNoEstoySeguro = "No estoy seguro ({0:0.00}). Me detengo.";
 
+    /// <summary>
+    /// La elegida está vetada (390): {0} el veto TAL CUAL, que ya nombra la puerta y dice por qué («Grabar» no se puede
+    /// deshacer: te la dejo a ti.). Jev la quería; la frena la lista de lo irreversible, no una duda del modelo.
+    /// </summary>
+    public const string FormatoVetada = "Vetada: {0}";
+
     /// <summary>Cabecera: el paso.</summary>
     public const string FormatoCabeceraPaso = "paso {0}";
 
@@ -80,4 +86,7 @@ public static class TextosDeJev
 
     /// <summary>«No estoy seguro ({c}). Me detengo.».</summary>
     public static string NoEstoySeguro(double confianza) => string.Format(Invariante, FormatoNoEstoySeguro, confianza);
+
+    /// <summary>«Vetada: {veto}», con el veto sin reescribir.</summary>
+    public static string Vetada(string veto) => string.Format(Invariante, FormatoVetada, veto.Trim());
 }

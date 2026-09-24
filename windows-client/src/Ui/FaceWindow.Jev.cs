@@ -18,9 +18,12 @@ namespace U.WindowsClient.Ui;
 /// (<see cref="NacerLaVistaDeJev"/>, en el arranque), sincronizar con el botón (<see cref="SincronizarLaVistaDeJev"/>,
 /// en <c>PintarBotonJev</c>) y las dos de la regla de quién vuela (384). Todo lo demás vive aquí.
 ///
-/// EL PUENTE PROVISIONAL HASTA QUE C ENTRE (spec 049 §El puente): el <c>Decisor</c> del mapa se envuelve desde fuera
-/// con <see cref="ObservadorDelDecisor.Envolver"/>, y lo pulsado llega por <c>UiaSurface.Pulso</c>. Cuando C traiga
-/// su evento, esto se suscribe a él en vez de envolver; el modelo no cambia.
+/// LA VISTA OYE EL EVENTO DE C (spec 048, 368) desde el 2026-09-24, al juntar A, B, C y D: <see cref="NacerLaVistaDeJev"/>
+/// se suscribe una vez a <c>SurfaceMapTools.AlDecidir</c> con <see cref="ObservadorDelDecisor.Oir"/>, y el <c>Decisor</c>
+/// ya no se envuelve —el puente provisional de la 049 se fue: veía la decisión antes del veto de la 390, y con los dos a la
+/// vez cada paso se habría pintado dos veces—. El interruptor sigue siendo el único que escribe el <c>Decisor</c>. Lo
+/// pulsado sigue llegando además por <c>UiaSurface.Pulso</c>, que no es del puente: es el único aviso que llega AL
+/// pulsar, y la flecha vuela con él (381); el evento sale cuando el paso terminó, espera incluida.
 /// </remarks>
 public partial class FaceWindow
 {
@@ -33,7 +36,7 @@ public partial class FaceWindow
     /// <summary>La vista de Jev; <c>null</c> hasta <see cref="NacerLaVistaDeJev"/>. La lee la regla de quién vuela (384).</summary>
     private VistaDeJev? _vistaDeJev;
 
-    /// <summary>El mapa cuyo <c>Decisor</c> se envuelve: el mismo que reasigna el interruptor.</summary>
+    /// <summary>El mapa que la vista oye; al encender Jev se mira si su <c>Decisor</c> está puesto, para decirlo si no.</summary>
     private SurfaceMapTools? _mapaDeJev;
 
     /// <summary>
@@ -70,6 +73,12 @@ public partial class FaceWindow
         mapa.AlTerminarTramo = () => { terminar?.Invoke(); vista.AlTerminarTramo(); };
         mapa.Progreso = linea => { progreso?.Invoke(linea); vista.Progreso(linea); };
 
+        // CADA PASO DECIDIDO, POR EL EVENTO DE C (368), ya con el veto (390): la decisión, lo ofrecido con su caja y lo que
+        // hizo la mano. Una suscripción por mapa y para toda la vida de Ü: con Jev apagado la máquina no pinta nada (383),
+        // así que no hace falta quitarla al apagar.
+        if (!ObservadorDelDecisor.Oir(mapa, vista.Publicar))
+            LogBus.Log("jev-vista", "el mapa ya tenía a la vista oyendo AlDecidir: no se suscribe otra vez (cada paso se pintaría dos veces)");
+
         // LA MANO PULSÓ, en físicos y desde la tarea del tramo: la rosa, el panel que se aparta y la flecha (381). La
         // vista mira si Jev está encendido: la mano también pulsa cuando decide Luna.
         Action<double, double, double, double> alPulsar;
@@ -96,10 +105,9 @@ public partial class FaceWindow
 
     /// <summary>
     /// EL BOTÓN DE JEV LLEGA A LA VISTA. Lo llama <c>PintarBotonJev</c>, que corre DESPUÉS del interruptor —en el
-    /// arranque y en cada pulsación—, y por eso el envoltorio sobrevive: <c>InterruptorDelDecisor</c> reasigna el
-    /// <c>Decisor</c> en cada <c>Encender</c> y deja <c>null</c> en cada <c>Apagar</c> (spec 049 §El puente, 1).
-    /// Encendido: se envuelve el decisor (idempotente, 382) y se abren las ventanas; apagado: se desenvuelve lo que
-    /// quedara y se cierran las tres (383).
+    /// arranque y en cada pulsación—. Encendido: se abren las ventanas; apagado: se cierran las tres (383). El
+    /// <c>Decisor</c> no se toca: hasta el 2026-09-24 aquí se envolvía y desenvolvía (el puente provisional de la 049), y
+    /// desde que la vista oye el evento de C lo escribe solo el interruptor.
     /// </summary>
     private void SincronizarLaVistaDeJev(bool encendido)
     {
@@ -110,10 +118,10 @@ public partial class FaceWindow
             LogBus.Log("jev-vista", $"el botón de Jev ({(encendido ? "on" : "off")}) llegó antes de que naciera la vista: no hay ventanas que abrir ni cerrar");
             return;
         }
-        var decisor = mapa.Decisor;
-        if (encendido && decisor != null) mapa.Decisor = ObservadorDelDecisor.Envolver(decisor, vista.Publicar);
-        else if (!encendido && ObservadorDelDecisor.EstaEnvuelto(decisor)) mapa.Decisor = ObservadorDelDecisor.InternoDe(decisor);
-        else if (encendido) LogBus.Log("jev-vista", "Jev encendido con el Decisor del mapa en null: no hay nada que envolver, y el panel no recibirá decisiones");
+        // SE LEE, NO SE ESCRIBE: con Jev encendido y el Decisor en null no habrá pasos decididos, y el panel se quedaría
+        // mudo sin que nada lo dijera.
+        if (encendido && mapa.Decisor == null)
+            LogBus.Log("jev-vista", "Jev encendido con el Decisor del mapa en null: no habrá pasos decididos, y el panel no recibirá decisiones");
 
         // ABRIR LAS VENTANAS PUEDE LANZAR (la carita sin sitio, WPF cerrándose), y esto corre en el arranque y en el
         // clic del botón: lo que falle se dice entero y la carita sigue. Si lanza el ancla, la máquina no llega a

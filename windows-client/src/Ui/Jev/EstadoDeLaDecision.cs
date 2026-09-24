@@ -130,6 +130,12 @@ public static class EstadoDeLaDecision
         if (decision.Actuar)
             return (TextosDeJev.Pulsando(EtiquetaDe(decision.Puerta, candidatas), elegida), PuntoSigue);
 
+        // VETADA, ANTES QUE NINGUNA COMPUERTA DE JEV (374, al juntar A, C y D, 2026-09-24): Jev sí quería —la vetada llega con
+        // su confianza y su distribución intactas (ConVeto)—, y lo que la frena es la lista de lo irreversible (390). Por las
+        // compuertas de abajo caía en «No estoy seguro (0.99)», que es otra causa (aprendizaje nº2). El veto ya dice cuál y
+        // por qué, y se enseña tal cual.
+        if (!string.IsNullOrWhiteSpace(decision.Veto)) return (TextosDeJev.Vetada(decision.Veto), PuntoPara);
+
         // NO SE ACTÚA: las compuertas de Jev en el orden de ElDecisor.ConJev —ofrecida, cumplido, peligro, umbral— y
         // con sus mismos listones. SIN DISTRIBUCIÓN, O CON UNA PRIMERA QUE NO SE OFRECIÓ, Jev no llegó a ninguna: no
         // contestó, contestó vacío, decide Luna, o eligió fuera de la pantalla (que ElDecisor devuelve CON la

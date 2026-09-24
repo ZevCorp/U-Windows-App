@@ -23,9 +23,10 @@ public sealed record CajaDeJev(string Id, string Etiqueta, Rect Caja, bool EsLei
 /// LA ROSA ES LO PULSADO, NUNCA LO ELEGIDO. La elegida es la que devolvió el decisor; la pulsada, la que la mano
 /// pulsó, que puede ser la segunda mejor (<c>SurfaceMapTools.cs:304-309</c>). Por eso este modelo ni siquiera
 /// recibe la decisión: sin pulsada conocida no hay rosa, y la elegida se marca solo en el panel, como elegida
-/// (<see cref="EstadoDeLaDecision"/>). La rosa llega por dos caminos que ya existen: el id —su número viene en
-/// la línea de progreso, «paso k: «x» (n) …» (<c>ElTramo.cs:204</c>)— y la caja que la mano dice haber pulsado
-/// (<c>UiaSurface.Pulso</c>). Nunca por la etiqueta: en SAP hay dos «Buscar» en la misma pantalla.
+/// (<see cref="EstadoDeLaDecision"/>). La rosa llega por dos caminos que ya existen: el id —su número viene con
+/// el paso del evento de la 048, <c>Paso.Numero</c>; hasta el 2026-09-24 se leía de la línea de progreso— y la caja
+/// que la mano dice haber pulsado (<c>UiaSurface.Pulso</c>). Nunca por la etiqueta: en SAP hay dos «Buscar» en la
+/// misma pantalla.
 ///
 /// INMUTABLE Y PURO: cada operación devuelve un modelo nuevo. Sin reloj, sin pantalla y sin Windows, así que el
 /// contrato lo juzga entero en un segundo; el gancho que dispara <see cref="Caducar"/> (cambió la ventana de
@@ -98,12 +99,32 @@ public sealed class CajasDelOverlay
     }
 
     /// <summary>
+    /// Las cajas que pinta un ciclo, o <c>null</c> si el ciclo no toca el overlay. El decidido las pinta siempre —también
+    /// vacías: un paso sin nada accionable deja el overlay vacío—; una línea, solo si lleva un paso (su decisión o sus
+    /// candidatas), y entonces las mismas que su decidido; «Mirando», «Eligiendo» y una línea suelta, ninguna.
+    /// </summary>
+    /// <remarks>
+    /// LA LÍNEA PINTA PORQUE LLEGA PEGADA AL EVENTO (382, al juntar C y D, 2026-09-24). El evento de la 048 sale cuando el
+    /// paso terminó, y el tramo escribe su línea en el acto: el conector pinta solo el último ciclo encolado, y casi siempre
+    /// es la línea. Con el puente, el decidido salía al decidir y la línea cientos de ms después, y bastaba con que pintara
+    /// el decidido. Límite dicho: un decidido sin decisión ni candidatas cuya línea llega pegada deja el overlay como
+    /// estaba, porque su línea no lleva nada que diga que es de un paso.
+    /// </remarks>
+    public static CajasDelOverlay? DelCiclo(CicloDeJev ciclo)
+    {
+        ArgumentNullException.ThrowIfNull(ciclo);
+        bool llevaUnPaso = ciclo.Fase == FaseDelCiclo.Decidido
+            || (ciclo.Fase == FaseDelCiclo.Linea && (ciclo.Decision != null || (ciclo.Candidatas?.Count ?? 0) > 0));
+        return llevaUnPaso ? De(ciclo.Candidatas, ciclo.Pulsada) : null;
+    }
+
+    /// <summary>
     /// La mano dice haber pulsado esta caja (<c>UiaSurface.Pulso</c>, en físicos): la rosa pasa a la candidata
     /// que calza con ella y, si no calza ninguna, la caja de la mano se pinta sola. Siempre una rosa como mucho.
     /// </summary>
     /// <remarks>
-    /// Sin candidatas —el puente provisional, hasta que C traiga sus cajas (365, 368)— la caja de la mano es lo
-    /// único que se pinta, y es LEÍDA: la geometría es la del elemento que se pulsó. Una caja de la mano que no
+    /// Sin candidatas con caja —las del terreno o del dynpro (365), o las de un paso que cambió lo que se ve (382)— la
+    /// caja de la mano es lo único que se pinta, y es LEÍDA: la geometría es la del elemento que se pulsó. Una caja de la mano que no
     /// se puede pintar deja el overlay sin rosa: lo pulsado antes ya no es lo pulsado ahora.
     /// </remarks>
     public CajasDelOverlay ConPulsada(Rect caja)

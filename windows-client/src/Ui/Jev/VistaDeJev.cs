@@ -100,9 +100,9 @@ public sealed class VistaDeJev
     public bool EnTramo => Maquina.EnTramo;
 
     /// <summary>
-    /// Un ciclo del decisor, desde <see cref="ObservadorDelDecisor.Envolver"/> en la tarea del tramo. Numera el paso
-    /// —la costura del decisor no lo sabe (hallazgo (a) de la fase 6)—, lo guarda para las líneas que vengan detrás y
-    /// lo encola. Nunca lanza ni espera.
+    /// Un paso decidido, desde el evento del mapa (<see cref="ObservadorDelDecisor.Oir"/>) en la tarea del tramo. Numera el paso
+    /// —el evento no lo lleva; con un paso por evento, el número es el del tramo—, lo guarda para las líneas que vengan
+    /// detrás y lo encola. Nunca lanza ni espera.
     /// </summary>
     public void Publicar(CicloDeJev ciclo)
     {
@@ -131,9 +131,8 @@ public sealed class VistaDeJev
     }
 
     /// <summary>
-    /// Una línea de progreso del tramo: el último ciclo decidido con la línea puesta y, si la línea dice qué pulsó la
-    /// mano, con su número (<see cref="CicloDeJev.ConLaLinea"/>, 372): la mano puede haber pulsado la segunda mejor, y
-    /// solo la línea lo cuenta.
+    /// Una línea de progreso del tramo: el último paso decidido con la línea puesta (<see cref="CicloDeJev.ConLaLinea"/>,
+    /// 372). Lo que pulsó la mano ya viene en ese paso, por el evento; la línea es lo que se enseña en el ticker.
     /// </summary>
     public void Progreso(string linea)
     {
@@ -223,8 +222,8 @@ public sealed class VistaDeJev
     /// <summary>
     /// EL PINTOR DEL CONECTOR, en el hilo de la interfaz: pinta lo que la máquina dice que se pinta
     /// (<see cref="MaquinaDeLaVista.QueSePinta"/>, 383). El panel pinta lo que dice <see cref="EstadoDeLaDecision.De"/>
-    /// y, si el ciclo es una decisión, el overlay pinta lo que dice <see cref="CajasDelOverlay.De"/>. Aquí no se
-    /// decide nada: ni se ordena ni se filtra.
+    /// y, si el ciclo lleva un paso —el decidido, o la línea que lo lleva—, el overlay pinta lo que dice
+    /// <see cref="CajasDelOverlay.DelCiclo"/>. Aquí no se decide nada: ni se ordena ni se filtra.
     /// </summary>
     private void Pintar(CicloDeJev ciclo)
     {
@@ -236,7 +235,10 @@ public sealed class VistaDeJev
             return;
         }
         PintarPanel(EstadoDeLaDecision.De(aPintar, _coste));
-        if (aPintar.Fase == FaseDelCiclo.Decidido) PintarCajas(CajasDelOverlay.De(aPintar.Candidatas, aPintar.Pulsada));
+        // LA LÍNEA TAMBIÉN PINTA LAS CAJAS DE SU PASO (382, al juntar C y D): el evento sale al terminar el paso y el tramo
+        // escribe su línea en el acto, así que el conector casi siempre pinta la línea y no el decidido. Hasta el 2026-09-24
+        // solo el decidido tocaba el overlay, y con el evento las cajas de un paso casi nunca se habrían visto.
+        if (CajasDelOverlay.DelCiclo(aPintar) is { } cajas) PintarCajas(cajas);
     }
 
     /// <summary>

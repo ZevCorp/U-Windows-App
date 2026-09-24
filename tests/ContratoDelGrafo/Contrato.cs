@@ -17791,9 +17791,18 @@ internal static class Contrato
             int llamadas = adaptador == null ? 0 : LineasDeCodigo(adaptador, "BeginInvoke(");
             Debe(llamadas == 1, $"y en DespachadorDeWpf.cs esa aparición es una llamada, BeginInvoke( en una línea de código: hay {llamadas}");
             // Y NINGUNA PIEZA DE LA VISTA TOCA EL DECISOR (al juntar C y D): ni lo reasigna ni lo envuelve.
-            var tocan = fuentes.Where(x => LineasDeCodigo(x.Texto, ".Decisor =") > 0 || LineasDeCodigo(x.Texto, "Envolver(") > 0).Select(x => x.Archivo).ToList();
+            var tocan = fuentes.Where(x => AsignaElDecisor(x.Texto) > 0 || LineasDeCodigo(x.Texto, "Envolver(") > 0).Select(x => x.Archivo).ToList();
             Debe(tocan.Count == 0, $"bajo Ui/Jev ningún fuente reasigna el Decisor ni lo envuelve, en código: lo hacen [{string.Join(", ", tocan)}]");
         }
+        // UNA ASIGNACIÓN, NO UNA COMPARACIÓN: «.Decisor =» por subcadena casaba también con «mapa.Decisor == null», que es
+        // leerlo (visto en la primera corrida verde, 2026-09-24: 1 línea, la del aviso de Decisor en null). Lo de detrás
+        // de «//» no cuenta, como en LineasDeCodigo.
+        static int AsignaElDecisor(string fuente) => fuente.Split('\n').Count(l =>
+        {
+            int corte = l.IndexOf("//", StringComparison.Ordinal);
+            string codigo = corte >= 0 ? l.Substring(0, corte) : l;
+            return System.Text.RegularExpressions.Regex.IsMatch(codigo, @"\.Decisor\s*=(?!=)");
+        });
         // EL PARCIAL OYE EL EVENTO, NO DECORA EL DECISOR (al juntar C y D, 2026-09-24; hasta aquí exigía el
         // ObservadorDelDecisor.Envolver( del puente provisional). Lo que se oye tiene que llegar a Publicar de la vista, y
         // nada del parcial puede volver a ponerse en el camino del decisor: el interruptor lo reasigna en cada Encender, y
@@ -17803,8 +17812,8 @@ internal static class Contrato
         {
             Debe(GanchoLlevaA(parcial, "ObservadorDelDecisor.Oir(", "Publicar"),
                 "FaceWindow.Jev.cs oye el evento del mapa con ObservadorDelDecisor.Oir( en código, y lo que oye va a Publicar de la vista");
-            Debe(LineasDeCodigo(parcial, ".Decisor =") == 0 && LineasDeCodigo(parcial, "Envolver(") == 0,
-                $"y no reasigna ni envuelve el Decisor del mapa: «.Decisor =» en {LineasDeCodigo(parcial, ".Decisor =")} línea(s) de código, «Envolver(» en {LineasDeCodigo(parcial, "Envolver(")}");
+            Debe(AsignaElDecisor(parcial) == 0 && LineasDeCodigo(parcial, "Envolver(") == 0,
+                $"y no reasigna ni envuelve el Decisor del mapa: «.Decisor =» en {AsignaElDecisor(parcial)} línea(s) de código, «Envolver(» en {LineasDeCodigo(parcial, "Envolver(")}");
         }
     }
 

@@ -601,6 +601,14 @@ Es un cambio de lo que se promete y **lo tiene que mirar el dueño de la 049 ant
 | 3 | El evento sale cuando el paso **terminó**, espera incluida (368: `UnPasoDecidido` publica sobre el paso devuelto): si la mano cambió de sitio, las cajas leídas de sus candidatas son de la pantalla que se fue | lectura de `SurfaceMapTools.UnPasoDecidido` y `DecidirYPulsar` (L); la huella dice qué cambió en `Paso.QueCambio` | la caja de una candidata solo viaja al ciclo si `Paso.QueCambio == Nada`; si no, va sin caja —se ofrece, se cuenta y no se pinta, 375—. La 382 lo juzga con una mano que cambia de sitio y otra que no |
 | 4 | Con el puente, el ciclo decidido salía al decidir y la línea del paso cientos de ms después; con el evento salen **pegados** (el tramo escribe «paso k: …» en cuanto `UnPasoDecidido` vuelve), y el conector pinta solo el último ciclo encolado (382). La vista solo repintaba el overlay con un ciclo `Decidido`: las cajas de un paso casi nunca se habrían pintado | lectura de `ConectorDeLaVista.Publicar`/`Vaciar` y `VistaDeJev.Pintar` (L), y el orden evento → línea en `ElTramo.Bucle` (`_manos.Paso` y después `Cuenta`) | `CajasDelOverlay.DelCiclo(ciclo)`, pura: el decidido y la línea que lo lleva pintan las mismas cajas; un ciclo sin paso («Mirando», una línea sin decisión ni candidatas) no toca el overlay. `VistaDeJev.Pintar` la usa. **Lo mismo le pasará al coste** cuando haya tokens: hoy suma al pintar un `Decidido` (373), y ese ciclo puede no pintarse nunca; es lo que la fase 6 ya dejó escrito («hay que acumular en `Publicar`») y se hace con el «$» |
 
+**Medido (M), en la rama de pruebas:** rojo antes del código (`0d9fd6e`): `CONTRATO ROTO: 17 promesa(s) incumplida(s).
+El cambio no puede entrar así.` — 336 ✔, rojas exactamente 372, 374 y 382. Verde con el código: `CONTRATO INTACTO: el
+grafo se comporta como el día que se congeló.` — 339 ✔. Cinco sabotajes de una línea, en cadena (cada corrida enseña
+la saboteada roja y la anterior otra vez verde), verificados por diff contra copia y con el `.cs` anterior al `U.dll`
+juzgado: sin la línea del veto en el ticker → rojas 374 y 382 («No estoy seguro (0.99)»); cajas siempre, aunque el
+paso cambie → roja solo la 382; oír dos veces vuelve a suscribir → roja solo la 382 (dos ciclos por paso); la línea
+borra la pulsada —la forma del choque con B— → rojas 372 y 382; la línea no pinta cajas → roja solo la 382.
+
 **Lo que cuesta, y se dice:** el panel y las cajas se pintan al terminar el paso, no al decidir; la flecha sigue
 volando al pulsar por `UiaSurface.Pulso`. Una rosa «sola» de la mano (candidata sin caja leída) se va en cuanto llega
 el evento de ese paso, porque el ciclo decidido repinta el overlay desde sus candidatas. **Sin medir en el PC real**
