@@ -1,6 +1,6 @@
 # Sin Bluetooth, el collar lo dice una vez y espera
 
-Estado: **en curso** · Nace del log de una usuaria del 2026-09-23 · Rama: `jose/collar-sin-bluetooth`
+Estado: **implementado** (2026-09-24) · Nace del log de una usuaria del 2026-09-23 · Rama: `jose/collar-sin-bluetooth`
 
 > Spec 050 y promesa 411. Hasta la 049 y la 410 están tomadas en ramas abiertas.
 
@@ -51,7 +51,27 @@ adaptador) es de la máquina y se prueba a mano.
   dictado estaba conectado pero no llegó ni una palabra»). Es el micrófono de Windows, no el collar.
 - **Encender el Bluetooth por la persona.** Es configuración del sistema: se le dice, no se toca.
 
+## Hallazgos
+
+- **Sin emparejar, el collar se cae cada ~30 s, y NO es Windows (2026-09-24, medido).** Una sonda
+  de solo lectura sobre el collar ya conectado: `emparejado=False`, `CanMaintainConnection=True`,
+  `SessionStatus=Active`, `MaintainConnection=True` — y aun así `Disconnected` a los 30,4 s y a los
+  64,4 s, con `SessionStatus → Closed (error Success)`: un cierre limpio desde el collar. Cerrar la
+  app oficial de Omi no lo cambió (30,7-30,9 s). Tras emparejarlo en Configuración de Windows aguantó
+  4 min 28 s seguidos. Cada caída costaba ~10 s de audio: la fuente se reconstruye desde el rastreo,
+  y el micrófono local solo releva a los 30 s. **Queda fuera de esta spec**: emparejar desde la app
+  y reenganchar sin rastrear son el corte siguiente.
+- El collar puede guardar audio en su memoria durante una desconexión, pero `FuenteOmi` solo lee el
+  audio en vivo y el botón: ese audio no se recupera hoy. `Reposicion` rellena los huecos con
+  silencio para que el tiempo cuadre; no recupera lo dicho.
+
 ## Cierre
 
-- [ ] 411 verde, contrato intacto, sabotaje comprobado
-- [ ] A mano: estado de la radio leído en esta máquina
+- [x] 411 y 412 verdes, contrato intacto; sabotaje comprobado en cuatro sitios (el fallo no concluye,
+      apagada reintenta, el log repite, el menú calla): cada uno pone roja solo su promesa.
+- [x] A mano: la radio de esta máquina leída con las mismas APIs → adaptador MediaTek, estado `Off`.
+- [x] A mano, app completa con el Bluetooth apagado y el collar recordado: una sola línea
+      `omi: el Bluetooth de este equipo está apagado: enciéndelo y el collar se conecta solo` y
+      ninguna más en 50 s. Antes: `0x800710DF: sin mensaje` cada 6 s.
+- [ ] Sin probar a mano: la 412 (elegir «Collar Omi» en el menú) — obligaba a buscar un collar que
+      estaba en una consulta en otro PC. Juzgada por el contrato.
