@@ -149,8 +149,10 @@ public sealed class ClienteCardio
     /// <remarks>
     /// EL LOG NO LLEVA NI FOTOS NI TEXTO CLÍNICO: cuántas imágenes, cuántos bytes, qué status y cuánto
     /// tardó. El log de Ü se pega en los PR y vive en disco sin caducidad; estos datos caducan a las 24 h.
+    ///
+    /// La usa también <see cref="LectorDeLaHistoria"/> (spec 051): una sola puerta hacia OpenAI.
     /// </remarks>
-    private static async Task<string> EnviarAOpenAIAsync(string cuerpo, CancellationToken ct)
+    internal static async Task<string> EnviarAOpenAIAsync(string cuerpo, CancellationToken ct)
     {
         string clave = Credenciales.ClavesDelBackend.DeLaApp(Credenciales.ClavesDelBackend.Voz);
         if (string.IsNullOrWhiteSpace(clave) && Credenciales.ClavesDelBackend.Viva is { } viva)
