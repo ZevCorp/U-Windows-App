@@ -26,6 +26,13 @@ hasta que la persona encienda el Bluetooth, y el mensaje no dice que eso es lo q
 |---|---|---|
 | 411 | sin Bluetooth el collar lo dice una vez y deja de buscar: una radio apagada —o el fallo 0x800710DF, que es lo que Windows contesta cuando lo está— espera a que se encienda sin reintentar cada 6 s; un equipo sin adaptador no reintenta; el estado nombra cuál de las dos es y qué hacer; y el mismo estado repetido no vuelve al log | 1 |
 
+| 412 | con el collar elegido y sin conectar, el menú del micrófono enseña por qué —el estado del collar— aunque no haya ningún collar enlazado; conectado, sin elegirlo, o con su tarjeta de enlazado a la vista, no se añade nada | 2 |
+
+La 412 nace el 2026-09-24: el dueño eligió «Collar Omi» en su propia Ü con el Bluetooth apagado y
+el menú no enseñó nada. La tarjeta «Dispositivos enlazados» solo aparece tras una primera
+conexión (`collar.json` → `enlazado:false`), y el estado del collar vivía dentro de ella: sin
+collar enlazado, el motivo no salía en ninguna parte.
+
 Se juzga con `U.WindowsClient.Voice.ElBluetooth`, pura. La radio real (encendida, apagada, sin
 adaptador) es de la máquina y se prueba a mano.
 

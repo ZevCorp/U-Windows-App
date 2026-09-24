@@ -55,6 +55,21 @@ public static class ElBluetooth
         _ => "buscando el collar…",
     };
 
+    /// <summary>
+    /// LA LÍNEA QUE EL MENÚ DEL MICRÓFONO ENSEÑA BAJO «COLLAR OMI». Promesa 412 (spec 050).
+    /// </summary>
+    /// <remarks>
+    /// El 2026-09-24 el dueño eligió el collar con el Bluetooth apagado y el menú no dijo nada: el estado
+    /// vivía dentro de la tarjeta «Dispositivos enlazados», que solo aparece tras una primera conexión.
+    /// Sin collar enlazado —justo el caso de quien lo estrena— el motivo no salía en ninguna parte.
+    /// </remarks>
+    /// <returns>El estado, o null si no hay nada que explicar o ya se ve en la tarjeta.</returns>
+    public static string? LineaDelMenu(bool elegido, bool conectado, bool enlazado, string estado)
+    {
+        if (!elegido || conectado || enlazado || string.IsNullOrWhiteSpace(estado)) return null;
+        return estado.Trim();
+    }
+
     /// <summary>¿Va al log? Solo si cambió: doce líneas iguales en 42 s no dicen más que una.</summary>
     public static bool SeDice(string? antes, string ahora) => !string.Equals(antes, ahora, System.StringComparison.Ordinal);
 

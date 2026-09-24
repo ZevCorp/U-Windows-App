@@ -770,6 +770,7 @@ internal static class Contrato
         // collar fallar 12 veces en 42 s con «0x800710DF: sin mensaje», y el estado le decía «no se
         // encontró el collar». 411 y no 350: hasta la 410 están tomadas en ramas abiertas.
         Prueba("411. sin Bluetooth el collar lo dice una vez y deja de buscar: una radio apagada —o el fallo 0x800710DF, que es lo que Windows contesta cuando lo está— espera a que se encienda sin reintentar cada 6 s; un equipo sin adaptador no reintenta; el estado nombra cuál de las dos es y qué hacer; y el mismo estado repetido no vuelve al log", SinBluetoothElCollarLoDiceYEspera);
+        Prueba("412. con el collar elegido y sin conectar, el menú del micrófono enseña por qué —el estado del collar— aunque no haya ningún collar enlazado; conectado, sin elegirlo, o con su tarjeta de enlazado a la vista, no se añade nada", ElMenuDicePorQueNoConectaElCollar);
         // UN ASISTENTE POR ESCRITORIO (spec 031, 2026-09-17). El dueño: «quiero dejar un asistente en cada
         // escritorio virtual; incrustar la carita en el centro de la consulta, con las dimensiones del pantallazo;
         // y un botón debajo para llevarla a otro escritorio, con la aplicación quedándose enfrente mío». Todo lo
@@ -10132,6 +10133,27 @@ internal static class Contrato
 
         Debe(Se(null, apagada) && !Se(apagada, apagada) && Se(apagada, sinAdaptador),
             "el mismo estado repetido no vuelve al log: doce líneas iguales en 42 s no dicen más que una");
+    }
+
+    private static void ElMenuDicePorQueNoConectaElCollar()
+    {
+        // 2026-09-24, el dueño con su propia Ü: «hago clic en el collar Omi y no veo los dispositivos». El
+        // Bluetooth estaba apagado, el collar fallaba cada 6 s, y el menú no decía nada: la tarjeta de
+        // «Dispositivos enlazados» solo aparece tras una primera conexión, y el estado vivía allí dentro.
+        var linea = Cap004("U.WindowsClient.Voice.ElBluetooth")?.GetMethod("LineaDelMenu");
+        Debe(linea != null, "todavía no existe «ElBluetooth.LineaDelMenu» (spec 050, promesa 412). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (linea == null) return;
+        string? L(bool elegido, bool conectado, bool enlazado, string estado)
+            => (string?)linea.Invoke(null, new object[] { elegido, conectado, enlazado, estado });
+
+        const string apagado = "el Bluetooth de este equipo está apagado: enciéndelo y el collar se conecta solo";
+        Debe(L(true, false, false, apagado) == apagado,
+            "elegido, sin conectar y sin collar enlazado: el menú dice POR QUÉ, que es lo que faltaba");
+        Debe(L(true, true, false, "enlazado") == null, "conectado no hay nada que explicar");
+        Debe(L(false, false, false, apagado) == null, "si el collar no es lo elegido, su estado es ruido en un menú de tres");
+        Debe(L(true, false, true, apagado) == null, "con la tarjeta de enlazado a la vista, el estado ya sale en ella: no se repite");
+        Debe(L(true, false, false, "") == null && L(true, false, false, "   ") == null, "un estado vacío no es una línea");
     }
 
     private static void TrasEscribirHayTresRespuestas()
