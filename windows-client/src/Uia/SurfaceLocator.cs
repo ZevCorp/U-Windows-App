@@ -273,8 +273,11 @@ public sealed class SurfaceLocator : IDisposable
     /// ¿El proceso en primer plano es SAP GUI? Mismo criterio que el resto del cliente
     /// (<c>UiInspector.IsSapForeground</c>, <c>SurfaceDetector</c>): basta el prefijo «sap», que cubre
     /// <c>saplogon</c> y las variantes históricas <c>sapgui</c>/<c>saplgpad</c> sin listar versiones.
+    /// INTERNAL desde el 2026-09-22 (spec 046): la política de lo que viaja a Jev reconoce SAP visto por UIA
+    /// («uia://saplogon.exe/…», lo que este localizador acuña cuando el Scripting no da identidad) con ESTE criterio, el
+    /// mismo que decidió acuñarlo, y no con una copia (aprendizaje nº16).
     /// </summary>
-    private static bool IsSap(string proc) =>
+    internal static bool IsSap(string proc) =>
         proc.StartsWith("sap", StringComparison.OrdinalIgnoreCase);
 
     private SurfaceLocation? Compute(IntPtr hwnd, string proc, string title)

@@ -20,7 +20,7 @@ namespace U.WindowsClient.Navigation;
 ///
 /// UN TRAMO A LA VEZ: dos bucles pulsando la misma pantalla es un desastre garantizado.
 ///
-/// PARA SOLO, Y DICE POR CUÁL (292): objetivo cumplido, tope, el decisor no se atreve, la mano no pudo, el
+/// PARA SOLO, Y DICE POR CUÁL (292): Jev cree que ya está (386), tope, el decisor no se atreve, la mano no pudo, el
 /// freno, o la misma puerta tres veces sin que cambie la pantalla —el detector de bucle que el diagnóstico
 /// pide desde los 80 taps en (330,222)—. Cada paso cuenta, hecho o no (patrón nº10).
 ///
@@ -153,9 +153,13 @@ public sealed class ElTramo
 
                 if (!p.Actuo)
                 {
-                    // CUMPLIDO O NO SE ATREVE: las dos vienen del decisor, y se distinguen.
+                    // JEV CREE QUE YA ESTÁ, O NO SE ATREVE: las dos vienen del decisor, y se distinguen (386, spec 046).
+                    // Hasta el 2026-09-22 la primera decía «el objetivo ya está cumplido:», y eso lo concluía un número
+                    // que el modelo da sobre sí mismo (patrón nº2). El tramo no tiene destino esperado —map_tramo solo
+                    // recibe el objetivo—, así que no puede declarar éxito: dice lo que Jev cree, con su porqué detrás,
+                    // y la cuenta devuelve el turno con lo que hay delante para que lo compruebe la llegada o la persona.
                     motivo = p.Cumplido
-                        ? $"el objetivo ya está cumplido: {p.Porque}"
+                        ? $"Jev cree que ya está: {p.Porque}"
                         : $"el decisor no se atrevió: {p.Porque}";
                     Cuenta(k, p, hecho: false);
                     break;

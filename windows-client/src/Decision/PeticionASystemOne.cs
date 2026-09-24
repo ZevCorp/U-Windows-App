@@ -47,6 +47,16 @@ public static class PeticionASystemOne
     public const string IdPeligro = "peligro";
 
     /// <summary>
+    /// LA OPCIÓN «NINGUNA» del choice (promesa 391, spec 046): viaja junto a TODAS las puertas ofrecidas para que
+    /// Jev pueda decir que nada de esta pantalla avanza hacia el objetivo, en vez de tener que elegir una puerta a
+    /// la fuerza. La añade quien pregunta (<see cref="ElDecisor"/>), no <see cref="CuerpoDeEleccion"/>: la 282 exige
+    /// que el cuerpo lleve exactamente las opciones que se le dan. El «0)» no choca con la numeración «1)…» de las
+    /// puertas del inventario. El texto es el que el contrato manda en sus fixtures: si difiere, la 388 rechaza la
+    /// respuesta por una clave que no viajó (2026-09-22).
+    /// </summary>
+    public const string IdNinguna = "0) ninguna: nada de esta pantalla avanza hacia el objetivo";
+
+    /// <summary>
     /// El cuerpo de una pregunta de tipo <c>choice</c>.
     /// </summary>
     /// <param name="modelo">El alias o la versión: <c>jev-latest</c>, <c>jev-1.13.0</c>.</param>
@@ -120,9 +130,10 @@ public static class PeticionASystemOne
     /// El estado que se le manda: dónde estamos, qué se busca y qué puertas hay.
     /// </summary>
     /// <remarks>
-    /// SOLO ETIQUETAS Y TIPOS, NUNCA VALORES. El terreno es SAP de un hospital: las etiquetas son
-    /// cromo de la aplicación («Presión Arterial», «Crear Triage Administrativo») y se pueden
-    /// mandar; lo que un campo CONTIENE es un dato de un paciente y no sale de la máquina.
+    /// NUNCA VALORES DE CAMPOS, pero decir «solo etiquetas, que son cromo» era falso (hasta el 2026-09-22): la
+    /// ubicación viajaba entera —en uia:// el pathname es el título vivo de la ventana—, el objetivo va tal cual y las
+    /// etiquetas de una fila de rejilla son datos. Qué viaja lo decide <see cref="PoliticaDeLoQueViaja"/> (393), y
+    /// <see cref="ElDecisor"/> ya le pasa aquí solo el ORIGIN de la ubicación.
     /// </remarks>
     public static string EstadoDeLaPantalla(string pantalla, string objetivo, IReadOnlyList<string> puertas)
     {
@@ -136,7 +147,12 @@ public static class PeticionASystemOne
     }
 
     /// <summary>Las instrucciones de la pregunta, en el idioma del terreno.</summary>
+    /// <remarks>
+    /// YA NO PIDE «LA QUE MENOS DAÑO HAGA» (promesa 390, spec 046): era el «clicking best guess» del vídeo de Jev, en
+    /// español, y obligaba a elegir una puerta aunque ninguna avanzara. Desde la 391 viaja «0) ninguna», y lo honesto
+    /// es pedir esa. Lo irreversible lo veta la lista determinista al pulsar, no esta frase (2026-09-22).
+    /// </remarks>
     public static string InstruccionesDeLaPuerta(string objetivo) =>
         $"¿Qué puerta de esta pantalla hay que accionar AHORA para avanzar hacia «{objetivo}»? "
-      + "Elige solo entre las puertas listadas. Si ninguna avanza hacia el objetivo, elige la que menos daño haga.";
+      + "Elige solo entre las opciones listadas. Si ninguna puerta avanza hacia el objetivo, elige «0) ninguna»: no adivines.";
 }
