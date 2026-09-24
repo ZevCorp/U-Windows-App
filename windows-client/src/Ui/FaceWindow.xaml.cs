@@ -4449,7 +4449,12 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 0, "no respondió en 5 s");
         }
         catch (GraphException) { /* ya lo anotó SendAsync, con su causa distinguida */ }
-        catch (Exception ex) { LogBus.Log("backend", $"sonda de vida falló de forma inesperada: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            // Al panel el tipo; el mensaje, en el log local (spec 051, P14).
+            LogBus.Publico("backend", $"sonda de vida falló de forma inesperada: {ex.GetType().Name}");
+            LogBus.Log("backend", $"el motivo de la sonda de vida: {ex.Message}");
+        }
     }
 
 

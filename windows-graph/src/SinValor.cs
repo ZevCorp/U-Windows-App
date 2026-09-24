@@ -57,6 +57,34 @@ public static class SinValor
     }
 
     /// <summary>
+    /// Una excepción por lo que es y por dónde nació, sin lo que dice: los tipos de la cadena, de fuera
+    /// adentro (<c>A ← B</c>), y el método del primer marco de la pila de la más honda. Ningún
+    /// <c>Message</c>.
+    /// </summary>
+    /// <remarks>
+    /// Para lo que SALE del equipo (spec 051, P1–P3). El <c>Message</c> es texto ajeno cuyo contenido no
+    /// está en el código: el de <c>BackendClient</c> lleva el cuerpo entero de la respuesta, y un
+    /// <c>ex.ToString()</c> lo arrastra con él —es lo que <c>App.xaml.cs</c> subía en cada «fatal»—.
+    /// El mensaje sigue en el log local, en su propia línea. El marco se da por el método y no por la
+    /// línea del archivo: la ruta del archivo es la de la máquina que compiló, y no dice nada que el
+    /// método no diga ya.
+    /// </remarks>
+    public static string Excepcion(Exception? e)
+    {
+        if (e == null) return "‹sin excepción›";
+        var tipos = new List<string>();
+        Exception honda = e;
+        for (var x = e; x != null; x = x.InnerException)
+        {
+            tipos.Add(x.GetType().Name);
+            honda = x;
+        }
+        var metodo = new System.Diagnostics.StackTrace(honda, false).GetFrame(0)?.GetMethod();
+        string donde = metodo == null ? "sin marco" : $"{metodo.DeclaringType?.FullName ?? "?"}.{metodo.Name}";
+        return $"{string.Join(" ← ", tipos)} · en {donde}";
+    }
+
+    /// <summary>
     /// El texto sin ningún espacio, en cualquier sitio: SAP rellena por la derecha los campos de ancho
     /// fijo y colapsa los de en medio, y ninguna de las dos cosas cambia lo que el campo dice.
     /// </summary>

@@ -3,7 +3,8 @@
 Estado: **en construcción** (spec y fases revisadas tras el crítico: 9 refutaciones, las 9
 comprobadas ciertas y aplicadas) · **fase 0 hecha**: las seis promesas en `Contrato.cs`, rojas por sus
 razones, con los censos como datos y un lector de fuentes que corrigió tres medidas de esta spec
-(el ancla de E17, la quinta ruta `/agent/` y un sitio que la 399(b) encuentra fuera del censo) · Spec 051 · 2026-09-23 ·
+(el ancla de E17, la quinta ruta `/agent/` y un sitio que la 399(b) encuentra fuera del censo) ·
+**fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–399**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -440,9 +441,11 @@ regla de la decisión 1, con su lectura.
 
   Propuesta: una spec **053, «lo que viaja a los modelos y a la enseñanza»**, que empiece por el vídeo
   de enseñanza guardado «para que lo veamos».
-- **El `catch { }` mudo de `LogBus.Log`** alrededor de `Anotado` (`LogBus.cs:57`): patrón nº3, pero
-  cambiarlo cambia a todos los oyentes del log; se anota como hallazgo, y los jueces de esta spec se
-  protegen de él (§*Con qué se juzga*).
+- ~~**El `catch { }` mudo de `LogBus.Log`** alrededor de `Anotado` (`LogBus.cs:57`)~~ — **lo tomó la
+  fase 2**, porque reescribía esa misma línea y añadía otra igual para `AnotadoConMarca`: el oyente
+  que revienta deja una línea `logbus:` en el anillo y el archivo, sin repartirla (repartirla a quien
+  acaba de reventar es un bucle). No cambia a ningún oyente; los jueces de esta spec siguen
+  protegiéndose igual (§*Con qué se juzga*).
 - **La 012**: su fase 3 (el log del rellenador) la absorbe esta spec como 396. Sus 168, 169 y 171
   siguen sin contrato y **sin número**: los cuatro se reciclaron el 2026-09-07. Se le dice al dueño
   en el PR; esta spec no la renumera.
@@ -539,6 +542,28 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   caso de vacío, y la 399(a) de 2 a **1 de 35** nombrando E1. De paso, el `catch { }` de
   `Deshacer` —la sentencia que la costura tocó— deja de ser mudo: anota la cadena de tipos y
   mensajes con la etiqueta del campo, nunca el valor que se restauraba; la 399(b) no cambia (10).
+- **2026-09-24 · Fase 2: la 394 en verde a la primera, y lo único que cambia de veredicto es ella.**
+  `LogBus.Log` y `LogBus.Publico` pasan por un solo `Anotar(tag, mensaje, publica)` —así el `Publico`
+  no es un `Log(` pelado, y el recuento de la 399(b) sigue en **147** (el hallazgo del embudo `Log`
+  sin ámbito no se dispara)—; `AnotadoConMarca` lo oye el espejo, que emite **un** `Emit` (el S1 del
+  censo, que la 395(b) ya encuentra); `TelemetryBus.Emitido` serializa con `BackendClient.Json`, que
+  pasa de privado a interno para ser una sola fuente. Los 26 `Publico` del censo: **23** que eran
+  `Log` y **3** nuevos (P1–P3, con `SinValor.Excepcion`: tipos de la cadena y método del primer
+  marco de la más honda —el método y no la línea del archivo: la ruta es la de quien compiló—). En
+  **6** de ellos el `Message` salía entero y ahora se queda en una línea `Log` aparte (P5, P9, P14,
+  P15, P23 y el `result.Error` de P25); en P1–P3 el `ex.ToString()` sigue en local. P25 escribe «sin
+  paso fallido: se paró antes o fuera de los pasos» cuando `fallo` es nulo, para no imprimir «se paró
+  en el paso ()» (una rama literal: no añade hueco). Contrato: 299 → **300** cumplidas; rojas solo
+  395, 397, 398 y 399; la 399(a) pasa de 2 a **3 de 35** (E11) y la 399(b) sigue en 10; la 395(c)
+  deja de nombrar canales y la 397(e) deja de fallar **(M)**. Sabotajes, cada uno visto por `diff`
+  contra una copia (una sola línea), juzgado y restaurado con `diff` vacío **(M)**: (función)
+  `publica = true;` antes del `Emit` del espejo → la 394 roja con **70** líneas: cada línea de (a)
+  sube entera, con los valores inventados en `label` y en `detail.text` (escapados como
+  `«` en el JSON: el juez los ve porque deserializa); (cableado) `LogBus.Anotado += (e, t) =>
+  TelemetryBus.Emit("log", phase: e, label: t);` en `Encender` → la 394 roja con **21**: «produjo 2»
+  en cada línea, una con el valor; y la 395 nombra `EspejoDelLog.cs:56` dos veces (un `Emit` fuera
+  del censo y un `Anotado +=` que no es canal). En los dos, ningún otro veredicto cambió. Y el
+  `catch { }` de `LogBus.cs:57`, que la spec dejaba fuera, lo tomó esta fase (§*Lo que queda fuera*).
 
 ## Revisiones
 

@@ -33,7 +33,13 @@ public sealed class BackendClient
     private readonly string _apiPrefix;
     private readonly bool _legacy;
 
-    private static readonly JsonSerializerOptions Json = new()
+    /// <summary>
+    /// Las opciones con que sale TODO lo que se manda al backend. Internas, y no privadas, para que
+    /// <c>TelemetryBus.Emitido</c> serialice con estas mismas y no con una copia: el juez de lo que sale
+    /// del equipo (spec 051) tiene que ver los bytes que viajan, y dos juegos de opciones serían dos
+    /// criterios que se separan en silencio (aprendizaje nº16).
+    /// </summary>
+    internal static readonly JsonSerializerOptions Json = new()
     {
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };

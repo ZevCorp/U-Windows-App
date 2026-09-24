@@ -127,7 +127,7 @@ public sealed class EjecutorDeExportaciones : IDisposable
     public void Arrancar()
     {
         if (Encendido) return;
-        if (!_config.IsConfigured) { LogBus.Log("exportar", "sin clave de Graph: el ejecutor no arranca"); return; }
+        if (!_config.IsConfigured) { LogBus.Publico("exportar", "sin clave de Graph: el ejecutor no arranca"); return; }
 
         _vida = new CancellationTokenSource();
         _bucle = Task.Run(() => BucleAsync(_vida.Token));
@@ -139,7 +139,7 @@ public sealed class EjecutorDeExportaciones : IDisposable
         try { _vida?.Cancel(); } catch { }
         _vida = null;
         _bucle = null;
-        LogBus.Log("exportar", "ejecutor de exportaciones parado");
+        LogBus.Publico("exportar", "ejecutor de exportaciones parado");
     }
 
     private async Task BucleAsync(CancellationToken ct)
@@ -191,7 +191,7 @@ public sealed class EjecutorDeExportaciones : IDisposable
         string nota = Ruta(trabajo, "payload", "context");
         if (nota.Length == 0) nota = Ruta(trabajo, "payload", "rendered_text");
 
-        LogBus.Log("exportar", $"trabajo {id} reclamado · workflow {workflow} · nota de {nota.Length} caracteres");
+        LogBus.Publico("exportar", $"trabajo {id} reclamado · workflow {workflow} · nota de {nota.Length} caracteres");
         Cuenta?.Invoke("Exportando a la historia clínica…");
 
         if (nota.Trim().Length == 0)
@@ -236,7 +236,7 @@ public sealed class EjecutorDeExportaciones : IDisposable
         }
 
         var (escritos, sinLlenar) = (hecho.Escritos, hecho.SinLlenar);
-        LogBus.Log("exportar", $"trabajo {id}: {escritos.Count} campo(s) escritos, {sinLlenar.Count} sin llenar");
+        LogBus.Publico("exportar", $"trabajo {id}: {escritos.Count} campo(s) escritos, {sinLlenar.Count} sin llenar");
 
         if (escritos.Count == 0)
         {
@@ -302,18 +302,20 @@ public sealed class EjecutorDeExportaciones : IDisposable
                 if (res.IsSuccessStatusCode)
                 {
                     bool exportada = texto.Contains("\"consultation_exported\":true", StringComparison.Ordinal);
-                    LogBus.Log("exportar", $"trabajo {id}: reportado «{desenlace}»"
+                    LogBus.Publico("exportar", $"trabajo {id}: reportado «{desenlace}»"
                         + (exportada ? " · la consulta queda EXPORTADA" : ""));
                     return;
                 }
                 // Un rechazo del servidor no se reintenta: reintentar algo que ya se rechazó por
                 // ser inválido solo hace ruido. Los cortes de red sí, que son los de arriba.
-                LogBus.Log("exportar", $"trabajo {id}: el servidor rechazó el resultado (HTTP {(int)res.StatusCode})");
+                LogBus.Publico("exportar", $"trabajo {id}: el servidor rechazó el resultado (HTTP {(int)res.StatusCode})");
                 return;
             }
             catch (Exception e) when (intento < 5)
             {
-                LogBus.Log("exportar", $"trabajo {id}: no pude reportar (intento {intento}): {e.Message}");
+                // Al panel el tipo; el mensaje, en el log local (spec 051, P23).
+                LogBus.Publico("exportar", $"trabajo {id}: no pude reportar (intento {intento}): {e.GetType().Name}");
+                LogBus.Log("exportar", $"trabajo {id}: el motivo del intento {intento}: {e.Message}");
                 try { await Task.Delay(TimeSpan.FromSeconds(intento * 2), ct); } catch { return; }
             }
             catch (Exception e)

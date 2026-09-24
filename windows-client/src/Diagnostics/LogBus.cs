@@ -42,7 +42,35 @@ public static class LogBus
     /// </summary>
     public static event Action<string, string>? Anotado;
 
-    public static void Log(string tag, string message)
+    /// <summary>
+    /// Lo mismo que <see cref="Anotado"/> y además SI LA LÍNEA ESTÁ MARCADA para salir entera del
+    /// equipo: <c>true</c> si vino por <see cref="Publico"/>, <c>false</c> si vino por <see cref="Log"/>.
+    ///
+    /// Es a lo que se engancha el espejo (<see cref="U.WindowsClient.Telemetry.EspejoDelLog"/>) desde
+    /// la spec 051. Hasta el 2026-09-24 el espejo oía <see cref="Anotado"/> y subía TODA línea, así
+    /// que lo que Ü escribía en SAP (««Talla» = «38,5»») salía del equipo del médico hacia el backend.
+    /// La marca viaja con la línea, y no en una lista de etiquetas del espejo, porque una etiqueta no
+    /// decide por la línea: bajo «exportar» conviven «3 campo(s) escritos» y el cuerpo de un error.
+    /// </summary>
+    public static event Action<string, string, bool>? AnotadoConMarca;
+
+    /// <summary>Anota una línea. Del equipo sale solo como cadencia: su etiqueta y su longitud.</summary>
+    public static void Log(string tag, string message) => Anotar(tag, message, publica: false);
+
+    /// <summary>
+    /// Anota una línea igual que <see cref="Log"/> —anillo, archivo, <see cref="Logged"/>,
+    /// <see cref="Anotado"/>— y además la MARCA: el espejo la sube entera al panel.
+    ///
+    /// Marcar es decidir que el texto sale de la máquina del médico. Cada llamada está congelada en el
+    /// censo de la promesa 394 (docs/specs/051-el-espejo-no-sube-lo-escrito.md, P1–P26) con su
+    /// etiqueta, su ancla y sus huecos, y un hueco solo puede ser una cifra, un identificador, el tipo
+    /// de una excepción o una llamada a <c>SinValor</c>: nunca un <c>Message</c>, un cuerpo HTTP ni la
+    /// etiqueta de un paso. Añadir una, o cambiarle un hueco, pone el contrato rojo — y ese es el
+    /// momento de leerla.
+    /// </summary>
+    public static void Publico(string tag, string message) => Anotar(tag, message, publica: true);
+
+    private static void Anotar(string tag, string message, bool publica)
     {
         string line = $"[{DateTime.Now:HH:mm:ss}] [{_instanceId}] {tag}: {message}";
         lock (_lock)
@@ -53,8 +81,33 @@ public static class LogBus
         }
         Logged?.Invoke(null, line);
         // Nunca puede tumbar a quien está logueando: escribir una línea no es hacerse cargo de lo que
-        // otros hagan con ella.
-        try { Anotado?.Invoke(tag, message); } catch { }
+        // otros hagan con ella. Pero tampoco se calla: el oyente que revienta deja su rastro.
+        try { Anotado?.Invoke(tag, message); }
+        catch (Exception e) { OyenteReventado(nameof(Anotado), e); }
+        try { AnotadoConMarca?.Invoke(tag, message, publica); }
+        catch (Exception e) { OyenteReventado(nameof(AnotadoConMarca), e); }
+    }
+
+    /// <summary>
+    /// Un oyente del log lanzó: se escribe en el anillo y en el archivo, y NO se reparte a los oyentes.
+    /// </summary>
+    /// <remarks>
+    /// Repartirla sería pedirle al oyente que acaba de reventar que lea su propio fallo, y un oyente
+    /// que revienta en cada línea lo haría en esta también: un bucle. Hasta el 2026-09-24 esto era un
+    /// <c>catch { }</c> (patrón nº3), y la spec 051 lo tuvo que esquivar en sus jueces: un fallo del
+    /// oyente se leía como «no llegó ningún evento».
+    /// </remarks>
+    private static void OyenteReventado(string evento, Exception e)
+    {
+        var cadena = new List<string>();
+        for (var x = e; x != null; x = x.InnerException) cadena.Add($"{x.GetType().Name}: {x.Message}");
+        string line = $"[{DateTime.Now:HH:mm:ss}] [{_instanceId}] logbus: un oyente de {evento} lanzó · {string.Join(" ← ", cadena)}";
+        lock (_lock)
+        {
+            _entries.Add(line);
+            if (_entries.Count > MaxEntries) _entries.RemoveAt(0);
+            AppendToFile(line);
+        }
     }
 
     public static IReadOnlyList<string> Snapshot()
