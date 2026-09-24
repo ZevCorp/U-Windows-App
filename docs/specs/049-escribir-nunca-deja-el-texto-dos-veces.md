@@ -1,6 +1,6 @@
 # Escribir nunca deja el texto dos veces
 
-Estado: **en curso** · Nace del log del 2026-09-23 · Rama: `jose/no-escribe-doble`
+Estado: **implementado** (2026-09-24) · Nace del log del 2026-09-23 · Rama: `jose/no-escribe-doble`
 
 > Spec 049 y promesa 410. La 046 a la 048 y las promesas hasta la 407 ya están tomadas en ramas
 > abiertas (`jose/ensenar-por-voz`, `jero/jev-*`); los números no se reciclan.
@@ -65,8 +65,22 @@ Mapa a mano en la propia prueba: `ComoSeEscribe` es pura. Los casos son los del 
 
 ## Hallazgos
 
+- **Había un segundo camino al doble, y la corrida a mano lo encontró (2026-09-24).** Sobre un
+  `<input>` de Chrome, justo después de `SetValue` el campo se lee VACÍO (`MudoNoSeSabe`): Chrome
+  actualiza el valor que expone por accesibilidad un instante después. El código viejo tecleaba en
+  ese instante, y el texto que SetValue sí había dejado quedaba duplicado. Con la 410, el respaldo
+  vuelve a leer antes de teclear, ve el texto y no teclea:
+  `el campo no enseña el texto (MudoNoSeSabe) → se teclea` seguido de
+  `→ el campo ya tiene el texto: NO se teclea, que sería escribirlo dos veces`.
+- La promesa ganó durante la implementación un caso más, del mismo enunciado: un campo con el texto
+  ya REPETIDO no «lo tiene» (`AntesDeTeclear("hola", "holahola") == Reemplazando`).
+
 ## Cierre
 
-- [ ] Promesa 410 verde (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
-- [ ] Sabotaje comprobado: la 410 se pone roja
-- [ ] Corrida a mano sobre ≥2 campos reales
+- [x] Promesa 410 verde (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO)
+- [x] Sabotaje comprobado en tres sitios: comparar colapsando, teclear siempre encima, juez ciego al
+      doble. La 410 se pone roja en los tres.
+- [x] Corrida a mano, app completa por MCP (`map_type`), sobre 2 campos de una página en Chrome: un
+      `<input>` de una línea —el caso del Asunto de Gmail— y un `<textarea>`. Texto con dos saltos
+      dobles. Leído después por UIA: el `<input>` tiene el texto UNA vez y sin saltos; el `<textarea>`
+      una vez y con sus saltos; y repetir la misma escritura en el `<input>` lo deja igual.
