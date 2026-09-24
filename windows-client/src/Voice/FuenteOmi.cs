@@ -118,6 +118,12 @@ public sealed class FuenteOmi : IDisposable
 
     public bool Viva { get; private set; }
 
+    /// <summary>
+    /// El HRESULT del último fallo al abrir, 0 si no lo hubo. Lo lee <see cref="CollarPermanente"/> para
+    /// distinguir «no hay radio» de «no hay collar» (promesa 411): se reintentan de forma distinta.
+    /// </summary>
+    public int UltimoFallo { get; private set; }
+
     private volatile bool _conectado;
 
     /// <summary>
@@ -223,6 +229,7 @@ public sealed class FuenteOmi : IDisposable
         {
             // La cadena entera: un catch mudo aquí convertiría «no hay adaptador Bluetooth» en
             // indistinguible de «el collar está apagado» (aprendizaje nº3).
+            UltimoFallo = e.HResult;
             for (var x = e; x != null; x = x.InnerException)
                 // CON SU HRESULT: el 2026-09-03 esta línea salió como «COMException:» con el
                 // mensaje VACÍO, que no distingue «no hay Bluetooth» de «el collar está apagado»

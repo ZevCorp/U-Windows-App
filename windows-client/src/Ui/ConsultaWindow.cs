@@ -566,6 +566,20 @@ public sealed partial class ConsultaWindow : Window
         var real = FuenteReal();
         lista.Children.Add(FilaDeMicrofono(Origen.MicrofonoDelPc, GlifoMicrofono, "Computador", real));
         lista.Children.Add(FilaDeMicrofono(Origen.CollarPorBluetooth, GlifoBluetooth, "Collar Omi", real));
+        // POR QUÉ NO CONECTA, bajo su fila (promesa 412): sin collar enlazado todavía, la tarjeta de
+        // abajo no existe y el motivo —«el Bluetooth está apagado»— no salía en ninguna parte (2026-09-24).
+        string? porQue = Voice.ElBluetooth.LineaDelMenu(
+            _selector.Preferida == Origen.CollarPorBluetooth, CollarPermanente.Conectado,
+            CollarPermanente.Enlazado, CollarPermanente.Estado);
+        if (porQue != null)
+            lista.Children.Add(new TextBlock
+            {
+                Text = porQue,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Foreground = Estudio.TintaMedia,
+                Margin = new Thickness(44, 0, 12, 8),
+            });
         lista.Children.Add(FilaDeMicrofono(Origen.CollarPorTelefono, GlifoTelefono, "Teléfono", real));
 
         // El enlace SÓLO cuando el teléfono es lo elegido: hasta entonces no significa nada y sería

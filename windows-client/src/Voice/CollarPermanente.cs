@@ -149,6 +149,16 @@ public static class CollarPermanente
 
         try
         {
+            // PRIMERO LA RADIO (promesa 411). Sin ella no hay collar que buscar, y rastrear igual solo
+            // produce «0x800710DF: sin mensaje» cada 6 s — doce veces en 42 s a una usuaria, 2026-09-23.
+            var (radio, objetoRadio) = await LeerRadioAsync();
+            if (radio != ElBluetooth.Radio.Encendida)
+            {
+                SinRadio(radio, objetoRadio);
+                return false;
+            }
+            _sinRadio = false;
+
             var f = new FuenteOmi();
             _cts = new CancellationTokenSource();
             Estado = "buscando el collar…";
@@ -157,6 +167,13 @@ public static class CollarPermanente
             if (!await f.AbrirAsync(_cts.Token))
             {
                 f.Dispose();
+                // La radio decía «encendida» y el rastreo contestó que no está: se apagó entre medias,
+                // o el adaptador miente. El fallo manda sobre la lectura.
+                if (ElBluetooth.DelFallo(f.UltimoFallo) is ElBluetooth.Radio porElFallo)
+                {
+                    SinRadio(porElFallo, objetoRadio);
+                    return false;
+                }
                 Estado = "no se encontró el collar";
                 Cambio?.Invoke();
                 ProgramarReintento();
@@ -223,6 +240,64 @@ public static class CollarPermanente
 
     private static bool _esperando;
 
+    /// <summary>No hay radio encendida: el bucle de 6 s no corre, porque reintentar no la enciende.</summary>
+    private static volatile bool _sinRadio;
+
+    /// <summary>Lo último que se dijo de la radio, para no repetirlo en el log (promesa 411).</summary>
+    private static string? _ultimoAviso;
+
+    /// <summary>Radio de la que ya se escucha el encendido. Una sola suscripción, no una por intento.</summary>
+    private static Windows.Devices.Radios.Radio? _radioVigilada;
+
+    private static async Task<(ElBluetooth.Radio, Windows.Devices.Radios.Radio?)> LeerRadioAsync()
+    {
+        try { return await ElBluetooth.LeerAsync(); }
+        catch (Exception e)
+        {
+            // No se pudo LEER la radio: eso no dice que esté apagada. Se sigue como siempre y que el
+            // rastreo conteste; decir «apagada» aquí sería inventar la causa.
+            LogBus.Log("omi", $"no pude leer el estado del Bluetooth ({e.GetType().Name} 0x{e.HResult:X8}): se busca igual");
+            return (ElBluetooth.Radio.Encendida, null);
+        }
+    }
+
+    /// <summary>
+    /// SIN RADIO SE DICE, UNA VEZ, Y SE ESPERA (promesa 411). Con la radio apagada se escucha su
+    /// encendido y se conecta en ese momento; sin adaptador no hay nada que escuchar.
+    /// </summary>
+    private static void SinRadio(ElBluetooth.Radio radio, Windows.Devices.Radios.Radio? objeto)
+    {
+        _sinRadio = true;
+        string aviso = ElBluetooth.QueDecir(radio);
+        if (ElBluetooth.SeDice(_ultimoAviso, aviso)) LogBus.Log("omi", aviso);
+        _ultimoAviso = aviso;
+        Estado = aviso;
+        Cambio?.Invoke();
+
+        if (ElBluetooth.QueHacer(radio) != ElBluetooth.TrasFallar.EsperarAQueSeEncienda || objeto == null) return;
+        lock (Candado)
+        {
+            if (_radioVigilada != null) return;
+            _radioVigilada = objeto;
+        }
+        objeto.StateChanged += AlCambiarLaRadio;
+    }
+
+    private static void AlCambiarLaRadio(Windows.Devices.Radios.Radio radio, object _)
+    {
+        if (radio.State != Windows.Devices.Radios.RadioState.On) return;
+        lock (Candado)
+        {
+            if (_radioVigilada == null) return;
+            _radioVigilada = null;
+        }
+        radio.StateChanged -= AlCambiarLaRadio;
+        _sinRadio = false;
+        _ultimoAviso = null;
+        LogBus.Log("omi", "el Bluetooth se encendió: busco el collar");
+        if (Permanente && _fuente == null) _ = Task.Run(ConectarAsync);
+    }
+
     /// <summary>
     /// SE QUEDA ESPERANDO AL COLLAR, indefinidamente, mientras el usuario lo quiera enlazado.
     ///
@@ -236,17 +311,19 @@ public static class CollarPermanente
     /// </summary>
     private static void ProgramarReintento()
     {
-        if (!Permanente) return;
+        if (!Permanente || _sinRadio) return;
         lock (Candado) { if (_esperando) return; _esperando = true; }
 
         _ = Task.Run(async () =>
         {
             try
             {
-                while (Permanente && _fuente == null)
+                // Y SE PARA SI DESAPARECE LA RADIO (promesa 411): a partir de ahí despierta el encendido
+                // de la radio, no un reloj de 6 s que no puede encenderla.
+                while (Permanente && _fuente == null && !_sinRadio)
                 {
                     await Task.Delay(6000);
-                    if (!Permanente || _fuente != null) break;
+                    if (!Permanente || _fuente != null || _sinRadio) break;
                     await ConectarAsync();
                 }
             }
