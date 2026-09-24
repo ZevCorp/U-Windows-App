@@ -933,6 +933,12 @@ internal static class Contrato
         // locales atendían a cualquier página del navegador (8792 con CORS abierto sirviendo el rastro de batches).
         Prueba("400. el juez de la comprobación dice etiqueta, longitud y si coincide, nunca el valor: la línea que anota al juzgar un campo tecleado es exactamente el evento, su veredicto, la etiqueta del campo, la longitud de lo que dice y si es lo que tecleó la demo —igual, con otro formato, o distinto con la longitud de lo tecleado—, o por qué no se pudo leer; el relato de su veredicto final no lleva ni lo leído ni lo tecleado; la línea con que el mapa anota la respuesta de una llegada o de un plan del piloto va por su longitud; y lo que el juez le dice al piloto sigue nombrando los dos valores, como exige la 175", ElJuezDeLaComprobacionDiceLaForma);
         Prueba("401. los servidores locales no son una puerta abierta: ninguna respuesta del servidor del núcleo ni del MCP lleva Access-Control-Allow-Origin; una petición con un Origin que no es la página del propio servidor, o con un Host que no es esta máquina en su puerto, se rechaza sin tocar nada —ni escribir, ni despachar una herramienta—; la que llega sin Origin o desde la propia página se atiende, y lo que el núcleo escribe se anota por su longitud; y los servidores locales, sus prefijos y sus rutas son exactamente los censados: uno nuevo pone el contrato rojo nombrando archivo y línea", LosServidoresLocalesNoSonUnaPuertaAbierta);
+        // ── Spec 052: lo leído tampoco sale por otro camino ──────────────────────────────────────────
+        // La 393 decide QUIÉN decide, y su juez la mira donde se aplica. Lo que la política le niega a Jev volvía en
+        // crudo a Luna un paso después (402), y lo que se le ofrecía podía ser de otra ventana que la juzgada (403).
+        // Y la ubicación entera subía con cada «analyze»: eso es la fila S5 del censo de la 395, que cambia de dato.
+        Prueba("402. lo que la política no deja viajar a Jev tampoco vuelve en crudo con su respuesta: cuando el decisor no decide porque la política no deja salir el texto de la pantalla —SAP sin U_DECISOR_SAP_TEXTO=si—, el inventario que vuelve pegado a map_decidir y el que lleva la cuenta del tramo —la que llega a la voz y la de map_tramo_estado— nombran cada fila por número y tipo, «fila N (GuiGridFila)», nunca por su texto, y tampoco la línea de su respuesta en el log; el control sigue volviendo con el inventario, y lo que no es una fila se lista igual", LoQueLaPoliticaNiegaNoVuelveEnCrudo);
+        Prueba("403. lo que se le ofrece al decisor es de la ventana y del dónde que se juzgaron: si la ventana que se leyó no es la de la ubicación juzgada, o es de SAP y la ubicación juzgada no lo es —SAP en tránsito sostiene la ubicación anterior—, map_decidir no decide: el transporte no se toca, no se pulsa nada y dice cuál de las dos no cuadró; con la misma ventana y el mismo mundo decide como siempre; y los campos del dynpro se leen para la ubicación ya juzgada, que se les pasa, sin volver a preguntar dónde se está", LoQueSeOfreceEsDeLaVentanaQueSeJuzgo);
         Console.WriteLine();
         if (_fallos == 0 && _sinJuzgar > 0)
         {
@@ -19333,6 +19339,214 @@ internal static class Contrato
         }
     }
 
+    // ── Spec 052: lo leído tampoco sale por otro camino ──────────────────────────────────────────
+
+    /// <summary>La cola de una respuesta, que es donde va el inventario: <see cref="Recorte"/> enseña la cabeza.</summary>
+    private static string Cola052(string s) => (s.Length > 220 ? "…" + s[^220..] : s).Replace("\n", " ");
+
+    /// <summary>
+    /// 402. En SAP sin habilitar, la 393 no deja que el texto viaje a Jev. Aquí se juzga que tampoco vuelve en crudo a Luna
+    /// con la respuesta del decisor que no decidió: el inventario pegado a map_decidir (263, 286) y el de la cuenta del tramo,
+    /// que va entera a la voz (295) y queda para map_tramo_estado. Hasta el 2026-09-24 los dos listaban cada fila por su
+    /// texto —el nombre y el documento del paciente— justo después de que la política se negara a mandarlo.
+    /// </summary>
+    private static void LoQueLaPoliticaNiegaNoVuelveEnCrudo()
+    {
+        var tPol = Capacidad("U.WindowsClient.Decision.PoliticaDeLoQueViaja");
+        var leer = tPol?.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static);
+        var elegirConModelo = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("ElegirConModelo");
+        var pPuertas = typeof(SurfaceMapTools).GetProperty("Puertas");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var pAvisar = typeof(SurfaceMapTools).GetProperty("AvisarALaVoz");
+        var pParar = typeof(SurfaceMapTools).GetProperty("HayQueParar");
+        var pProgreso = typeof(SurfaceMapTools).GetProperty("Progreso");
+        var pFreno = typeof(SurfaceMapTools).GetProperty("PedirFreno");
+        if (leer == null || elegirConModelo == null || pPuertas == null || pDecisor == null || pAvisar == null || pParar == null || pProgreso == null || pFreno == null)
+        {
+            Pendiente("PoliticaDeLoQueViaja.Leer + ElDecisor.ElegirConModelo + SurfaceMapTools (Puertas, Decisor, AvisarALaVoz, HayQueParar)", "402", "052");
+            return;
+        }
+
+        // LAS TRES CLASES DE FILA Y UN BOTÓN, con textos que no pueden salir por casualidad en ninguna otra frase.
+        const string Fila = "fila de prueba · 402", Hoja = "hoja de prueba · 402", Carpeta = "carpeta de prueba · 402";
+        var puertas = new[] { ("Nuevo", "Button"), (Fila, "GuiGridFila"), (Hoja, "GuiTreeFila"), (Carpeta, "GuiTreeCarpeta") };
+        bool LlevaTexto(string s) => s.Contains(Fila, StringComparison.Ordinal) || s.Contains(Hoja, StringComparison.Ordinal) || s.Contains(Carpeta, StringComparison.Ordinal);
+        bool PorNumero(string s) => s.Contains("fila 2 (GuiGridFila)", StringComparison.Ordinal) && s.Contains("fila 3 (GuiTreeFila)", StringComparison.Ordinal)
+                                    && s.Contains("fila 4 (GuiTreeCarpeta)", StringComparison.Ordinal);
+        const string Sap = "sapgui://QAS/NWP1/SAPLN1_PATIENT_LIST/0100";
+
+        string modelo = (string)Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor")!.GetField("ModeloPorDefecto")!.GetValue(null)!;
+        object politica = leer.Invoke(null, new object[] { (Func<string, string?>)(_ => null) })!;
+        int llamadas = 0, pulsos = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", "1) Nuevo (Button)", 0.9, "1) Nuevo (Button)"); });
+
+        // UN MAPA SOBRE SAP CON EL DECISOR DE VERDAD —la política leída de un entorno vacío, como la máquina del hospital— y
+        // el LoQueVeo de verdad: sin InventarioParaLosActos, que es justo lo que los jueces de la 263, la 286 y la 390 sustituyen.
+        SurfaceMapTools Mapa()
+        {
+            var mapa = new SurfaceMapTools(() => new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(Sap, "sapgui://QAS", "/NWP1/SAPLN1_PATIENT_LIST/0100"));
+            var conSelector = puertas.Select(p => ($"uia:name={p.Item1};ct={p.Item2}", p.Item1, p.Item2)).ToArray();
+            pPuertas.SetValue(mapa, (Func<string, IReadOnlyList<(string, string, string)>>)(_ => conSelector));
+            mapa.RecorrerPorElNucleo = pasos => { pulsos++; return new RecorrerSegunElNucleo.Resultado(1, 1, Sap, true, "hice los 1 paso(s).", true); };
+            pDecisor.SetValue(mapa, Decide((pantalla, objetivo, ofrecidas) => (U.WindowsClient.Decision.DecisionDeUnPaso)elegirConModelo.Invoke(null,
+                new object[] { "jev", pantalla, objetivo, ofrecidas, 0.7, transporte, modelo, politica })!));
+            return mapa;
+        }
+
+        // 1. map_decidir: la 393 no deja preguntar, y el control vuelve con el inventario (286) — sin el texto de ninguna fila.
+        var m = Mapa();
+        string r = "";
+        var lineas = LineasDelLog(() => r = m.Call("map_decidir", Args(("objetivo", "abrir la historia del paciente"))));
+        Debe(llamadas == 0 && pulsos == 0, $"en SAP sin U_DECISOR_SAP_TEXTO no se pregunta a Jev ni se pulsa (393): llamadas={llamadas}, pulsos={pulsos}");
+        Debe(r.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), $"el control sigue volviendo con el inventario detrás (286) («{Cola052(r)}»)");
+        Debe(!LlevaTexto(r), $"y la respuesta de map_decidir no lleva el texto de ninguna fila —ni de rejilla, ni de árbol, ni de carpeta— («{Cola052(r)}»)");
+        Debe(PorNumero(r), $"sino cada fila por número y tipo, con el número de la lista que numera el decisor (285) («{Cola052(r)}»)");
+        Debe(r.Contains("«Nuevo» (Button)", StringComparison.Ordinal), $"y lo que no es una fila se lista igual que siempre («{Cola052(r)}»)");
+        string? enElLog = lineas.FirstOrDefault(LlevaTexto);
+        Debe(enElLog == null, $"y ninguna línea del log de esa llamada lleva el texto de una fila, tampoco «mapa-mcp ←» («{Cola052(enElLog ?? "")}»)");
+
+        // 2. EL TRAMO: el primer paso sale vetado por la política y el tramo para. Su cuenta va entera a la voz (295) y queda
+        // para map_tramo_estado, con el inventario detrás: ni la una ni la otra llevan el texto de una fila.
+        var t = Mapa();
+        var avisos = new List<string>();
+        pAvisar.SetValue(t, (Action<string>)(l => { lock (avisos) avisos.Add(l); }));
+        pParar.SetValue(t, (Func<bool>)(() => false));
+        pProgreso.SetValue(t, (Action<string>)(_ => { }));
+        pFreno.SetValue(t, (Action<string>)(_ => { }));
+        llamadas = 0; pulsos = 0;
+        t.Call("map_tramo", Args(("objetivo", "abrir la historia del paciente"), ("tope", "2")));
+        EsperarTramo(t, 8000);
+        string aviso = "";
+        for (int i = 0; i < 40 && aviso.Length == 0; i++)
+        {
+            lock (avisos) aviso = avisos.Count > 0 ? avisos[0] : "";
+            if (aviso.Length == 0) Thread.Sleep(50);
+        }
+        string estado = t.Call("map_tramo_estado", new Dictionary<string, string>());
+        Debe(llamadas == 0 && pulsos == 0, $"el tramo tampoco pregunta a Jev ni pulsa (llamadas={llamadas}, pulsos={pulsos})");
+        Debe(aviso.Contains("EN PANTALLA AHORA", StringComparison.Ordinal), $"la cuenta del tramo llega a la voz con el inventario detrás (295) («{Cola052(aviso)}»)");
+        Debe(!LlevaTexto(aviso), $"y lo que llega a la voz no lleva el texto de ninguna fila («{Cola052(aviso)}»)");
+        Debe(!LlevaTexto(estado), $"ni map_tramo_estado («{Cola052(estado)}»)");
+        Debe(PorNumero(aviso) && PorNumero(estado), $"sino las filas por número y tipo (voz: «{Cola052(aviso)}»; estado: «{Cola052(estado)}»)");
+    }
+
+    /// <summary>
+    /// 403. Lo que se le ofrece al decisor es de la ventana y del dónde que se juzgaron. La 046 (fase 10, (a)) dejó
+    /// CamposDeSap como vía abierta y «sin juez posible sin leer UIA de verdad»; desde la 048 el lector se inyecta (Lee,
+    /// VentanaQueLeeria) y el juez es posible. La lectura UIA era un segundo sitio de la misma clase que no nombraba nadie.
+    /// </summary>
+    private static void LoQueSeOfreceEsDeLaVentanaQueSeJuzgo()
+    {
+        var tipos = TiposDeLaObservacion();
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pVentana = typeof(SurfaceMapTools).GetProperty("VentanaQueLeeria");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var leer = Capacidad("U.WindowsClient.Decision.PoliticaDeLoQueViaja")?.GetMethod("Leer", BindingFlags.Public | BindingFlags.Static);
+        var elegirConModelo = Capacidad("U.WindowsClient.Decision.ElDecisor")?.GetMethod("ElegirConModelo");
+        var mInvalida = tipos?.Observatorio.GetMethod("Invalida", BindingFlags.Public | BindingFlags.Static);
+        if (tipos == null || pLee == null || pVentana == null || pDecisor == null || leer == null || elegirConModelo == null || mInvalida == null)
+        {
+            Pendiente("Uia.Observacion/Observatorio + SurfaceMapTools.Lee/VentanaQueLeeria/Decisor + ElDecisor.ElegirConModelo", "403", "052");
+            return;
+        }
+        var (tObs, tEl, _) = tipos.Value;
+        // LA COSTURA NUEVA: de qué proceso es la ventana que se leyó. Null en el mapa = AppAligner.ProcesoDe, el de siempre.
+        var pProceso = typeof(SurfaceMapTools).GetProperty("ProcesoDeLaVentana");
+
+        string modelo = (string)Capacidad("U.WindowsClient.Decision.ConfiguracionDelDecisor")!.GetField("ModeloPorDefecto")!.GetValue(null)!;
+        object politica = leer.Invoke(null, new object[] { (Func<string, string?>)(_ => null) })!;
+        var ofrecidas = new[] { "1) Abrir (Button)", "2) Detalles (Button)" };
+        int llamadas = 0, pulsos = 0;
+        var transporte = (Func<string, string>)(_ => { llamadas++; return RespuestaChoice("puerta", ofrecidas[0], 0.9, ofrecidas); });
+        var abrir = ElementoVisto(tEl, "uia:name=Abrir;ct=Button", "Abrir", "Button", new System.Windows.Rect(10, 10, 60, 20), "403.1");
+        var detalles = ElementoVisto(tEl, "uia:name=Detalles;ct=Button", "Detalles", "Button", new System.Windows.Rect(80, 10, 60, 20), "403.2");
+        const string Aqui = "uia://explorer.exe/Documentos";
+
+        // UN MAPA CON LA UBICACIÓN JUZGADA —y su ventana— y el lector de la 048 —la ventana que se lee—, el decisor de verdad con
+        // la política por defecto (uia://explorer.exe viaja: 1 llamada si nada frena), y una mano que cuenta.
+        string Decidir(IntPtr deAqui, IntPtr leida, string proceso, out List<string> log)
+        {
+            llamadas = 0; pulsos = 0;
+            mInvalida.Invoke(null, new object[] { "el juez de la 403 lee cada caso de nuevo" });
+            var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(Aqui, "uia://explorer.exe", "/Documentos") { Hwnd = deAqui };
+            var mapa = new SurfaceMapTools(() => loc);
+            pVentana.SetValue(mapa, (Func<IntPtr>)(() => leida));
+            pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, leida, "", 0, true, abrir, detalles)));
+            pProceso?.SetValue(mapa, (Func<IntPtr, string>)(_ => proceso));
+            mapa.RecorrerPorElNucleo = pasos => { pulsos++; return new RecorrerSegunElNucleo.Resultado(1, 1, Aqui, true, "hice los 1 paso(s): pulsé «Abrir».", false); };
+            mapa.InventarioParaLosActos = () => "";
+            pDecisor.SetValue(mapa, Decide((p, o, ps) => (U.WindowsClient.Decision.DecisionDeUnPaso)elegirConModelo.Invoke(null,
+                new object[] { "jev", p, o, ps, 0.7, transporte, modelo, politica })!));
+            string r = "";
+            log = LineasDelLog(() => r = mapa.Call("map_decidir", Args(("objetivo", "abrir la carpeta"))));
+            return r;
+        }
+
+        // 1. OTRA VENTANA: la ubicación se juzgó en la 111 y lo que se leyó es de la 222 —SAP pasó al frente entre juzgar y leer—.
+        string r1 = Decidir((IntPtr)111, (IntPtr)222, "explorer", out var log1);
+        Debe(llamadas == 0 && pulsos == 0, $"si la ventana que se leyó no es la de la ubicación juzgada, no se pregunta a Jev ni se pulsa (llamadas={llamadas}, pulsos={pulsos})");
+        Debe(r1.StartsWith("no se acciona", StringComparison.Ordinal) && r1.Contains("otra ventana", StringComparison.Ordinal)
+             && !r1.Contains("es de SAP", StringComparison.Ordinal) && r1.Contains("Decide Luna", StringComparison.Ordinal),
+            $"y dice que lo leído es de otra ventana, no que sea de SAP, y que decide Luna («{Recorte(r1)}»)");
+        Debe(log1.Any(l => l.Contains("lo leído no es de aquí", StringComparison.Ordinal)), $"y el log lo dice: «lo leído no es de aquí» ({log1.Count} línea(s))");
+
+        // 2. LA MISMA VENTANA, PERO DE SAP, bajo una ubicación que no es SAP: el Busy. SurfaceLocator.Compute sostiene la
+        // ubicación anterior (Current) y ConVentana le pone el hwnd de SAP, así que comparar ventanas no basta.
+        if (pProceso == null) Pendiente("SurfaceMapTools.ProcesoDeLaVentana (de qué proceso es la ventana que se leyó)", "403", "052");
+        else
+        {
+            string r2 = Decidir((IntPtr)333, (IntPtr)333, "saplogon", out _);
+            Debe(llamadas == 0 && pulsos == 0, $"si la ventana leída es de SAP y la ubicación juzgada no, no se pregunta a Jev ni se pulsa (llamadas={llamadas}, pulsos={pulsos})");
+            Debe(r2.StartsWith("no se acciona", StringComparison.Ordinal) && r2.Contains("es de SAP", StringComparison.Ordinal)
+                 && !r2.Contains("otra ventana", StringComparison.Ordinal) && r2.Contains("Decide Luna", StringComparison.Ordinal),
+                $"y dice que lo leído es de SAP, no que sea otra ventana, y que decide Luna («{Recorte(r2)}»)");
+        }
+
+        // 3. EL CONTROL: con la misma ventana y el mismo mundo decide como siempre. Un juez que dijera siempre que no, no
+        // juzgaría nada (aprendizaje nº18). Y un hwnd que no vino no es «otra ventana» (patrón nº9).
+        string r3 = Decidir((IntPtr)444, (IntPtr)444, "explorer", out _);
+        Debe(llamadas == 1 && pulsos == 1, $"con la misma ventana y el mismo mundo se pregunta a Jev y se pulsa, como siempre (llamadas={llamadas}, pulsos={pulsos}: «{Recorte(r3)}»)");
+        Decidir(IntPtr.Zero, (IntPtr)555, "explorer", out _);
+        Debe(llamadas == 1, $"y una ubicación sin ventana conocida no es «otra ventana»: se decide (llamadas={llamadas})");
+
+        // 4. LOS CAMPOS DEL DYNPRO SE LEEN PARA EL DÓNDE YA JUZGADO: se les pasa, en vez de que vuelvan a preguntar.
+        var pCampos = typeof(SurfaceMapTools).GetProperty("CamposDeSap");
+        var tCampos = pCampos?.PropertyType;
+        var gCampos = tCampos != null && tCampos.IsGenericType ? tCampos.GetGenericArguments() : Array.Empty<Type>();
+        bool recibeElDonde = gCampos.Length == 2 && gCampos[0] == typeof(string);
+        Debe(recibeElDonde, $"CamposDeSap recibe la ubicación ya juzgada: es Func<string, …> (es {tCampos?.ToString() ?? "(no existe)"})");
+        if (recibeElDonde)
+        {
+            mInvalida.Invoke(null, new object[] { "el juez de la 403 lee los campos" });
+            var locSap = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation("sapgui://QAS/NV2000/SAPMNV2000/0100", "sapgui://QAS", "/NV2000/SAPMNV2000/0100") { Hwnd = (IntPtr)666 };
+            var mapa = new SurfaceMapTools(() => locSap);
+            pVentana.SetValue(mapa, (Func<IntPtr>)(() => (IntPtr)666));
+            pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)666, "", 0, true)));
+            pProceso?.SetValue(mapa, (Func<IntPtr, string>)(_ => "saplogon"));
+            var tCampo = gCampos[1].IsGenericType ? gCampos[1].GetGenericArguments()[0] : typeof(object);
+            var pasados = new List<string>();
+            pCampos!.SetValue(mapa, Devuelve(tCampos!, a => { pasados.Add(a[0] as string ?? "(null)"); return Array.CreateInstance(tCampo, 0); }));
+            mapa.Call("map_what_i_see", new Dictionary<string, string>());
+            Debe(pasados.Count >= 1 && pasados.All(p => p == locSap.Id),
+                $"y lo que recibe es la ubicación que se juzgó, «{locSap.Id}» (recibió [{string.Join(" · ", pasados)}])");
+        }
+
+        // 5. Y QUIEN LOS LEE DE VERDAD NO VUELVE A PREGUNTAR: la lambda de FaceWindow leía DondeEstoy() por su cuenta.
+        var face = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "403");
+        if (face != null)
+        {
+            int ini = face.IndexOf("mcp.Map.CamposDeSap =", StringComparison.Ordinal);
+            int fin = ini >= 0 ? face.IndexOf("};", ini, StringComparison.Ordinal) : -1;
+            Debe(ini >= 0 && fin > ini, "FaceWindow.xaml.cs sigue cableando mcp.Map.CamposDeSap");
+            if (ini >= 0 && fin > ini)
+            {
+                string cuerpo = face.Substring(ini, fin - ini);
+                Debe(!cuerpo.Contains("DondeEstoy", StringComparison.Ordinal) && !cuerpo.Contains(".Current", StringComparison.Ordinal),
+                    $"y la lambda de CamposDeSap lee para el dónde que recibe, sin volver a preguntar dónde se está («{Recorte(cuerpo)}»)");
+            }
+        }
+    }
+
     private static void Debe(bool condicion, string promesa)
     {
         if (condicion) return;
@@ -20558,8 +20772,11 @@ internal static class Fuentes051
             new("S2", C + "Agent/AgentLoop.cs", "\"conscious_run_start\"", ("runId", "runId"), ("label", "SinValor.Forma(goal)")),
             new("S3", C + "Agent/AgentLoop.cs", "\"conscious_run_end\"", ("phase", "\"error\""), ("runId", "runId"), ("label", "e.GetType().Name")),
             new("S4", C + "Agent/AgentLoop.cs", "\"conscious_run_end\"", ("runId", "runId"), ("label", "SinValor.Forma(summary)")),
+            // S5 CAMBIA DE DATO CON LA 052 (2026-09-24): de la ubicación sube solo el origin, con el recorte que ya se le
+            // aplica a Jev (393). Hasta hoy subía loc?.Id entero: en uia:// el título de la ventana —también el de SAP visto
+            // por UIA— y en web:// la ruta. El enunciado de la 395 no cambia; volver a loc?.Id la pone roja.
             new("S5", C + "Agent/AgentLoop.cs", "\"analyze\"", ("runId", "runId"),
-                ("appId", "loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : \"\""), ("surfaceUrl", "loc?.Id ?? \"\"")),
+                ("appId", "loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : \"\""), ("surfaceUrl", "PoliticaDeLoQueViaja.UbicacionQueViaja(loc?.Id ?? \"\")")),
             new("S6", C + "Agent/AgentLoop.cs", "\"mcp\"", ("runId", "runId"), ("label", "a.Tool ?? \"\"")),
             new("S7", C + "Agent/AgentLoop.cs", "\"action\"", ("runId", "runId"), ("label", "a.Kind"), ("detail", "new { x = a.X, y = a.Y }")),
             new("S8", C + "Mcp/WorkflowMcpRunner.cs", "\"workflow_start\"", ("workflowId", "workflowId"), ("runId", "runId"), ("label", "SinValor.Forma(context)")),
