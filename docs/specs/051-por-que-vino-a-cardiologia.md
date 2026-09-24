@@ -76,6 +76,20 @@ se prueba a mano sobre `U.exe`.
 
 ## Hallazgos
 
+- **2026-09-24, contra el modelo real** (`gpt-5.6-luna`, sonda en el scratchpad, sin tocar la Ü del
+  dueño). Historia INVENTADA de tres documentos: remisión de EPS en foto, laboratorios en foto y nota
+  de urgencias en PDF hecho a mano. Dos corridas: 10,9 s y 8,3 s. Los tres documentos transcritos (8, 5
+  y 4 párrafos). Titular: «Remitido por medicina general por dolor torácico opresivo de esfuerzo y
+  ondas T invertidas en V4-V6, para estudiar enfermedad coronaria.», sostenido por 2 y 3 párrafos de
+  la remisión según la corrida, **todos idénticos al texto del documento**. El PDF viajó como
+  `input_file` y se leyó. El panel, dibujado por la app a PNG, enseña titular, citas y fichas.
+- **La promesa del panel de estudios que prohíbe los textos al pasar el ratón** en todo el cliente
+  cazó un `ToolTip` en las fichas de documento. El motivo de un documento sin leer pasa a una línea
+  visible.
+- **Sabotaje, 4 de 4**: extensión con mayúsculas (420), PDF como imagen (421), id inventado aceptado
+  (422), releer todo al soltar uno más (423). Cada uno pone roja su promesa. El juez de la 421
+  reventaba con `First()` cuando no había PDF: pasa a `FirstOrDefault`.
+
 ## Cierre
 
 - [ ] 420-423 verdes, contrato intacto, sabotaje comprobado
