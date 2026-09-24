@@ -10478,10 +10478,16 @@ internal static class Contrato
         string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
         string fuente = Path.Combine(repo, "windows-client", "src", "Ui", "FaceWindow.xaml.cs");
         string fuenteVoz = Path.Combine(repo, "windows-client", "src", "Voice", "ConversacionEnVivo.cs");
+        // SIN U_REPO, «NO PUDE» Y NO «CULPABLE» (aprendizaje nº17, 2026-09-24): aquí se sumaba a _fallos y la 337 salía ✘
+        // sin haber leído nada. Con U_REPO y sin los archivos sí es ✘: son parte de lo prometido, como en FuenteDelRepo.
+        if (repo.Length == 0)
+        {
+            NoPudeJuzgar("sin U_REPO no puedo leer FaceWindow.xaml.cs ni ConversacionEnVivo.cs para comprobar el apagado inmediato del notch", "337");
+            return;
+        }
         if (!File.Exists(fuente) || !File.Exists(fuenteVoz))
         {
-            _fallos++;
-            Console.WriteLine("   ⚠ NO PUDE JUZGARLA: faltan las fuentes del cambio de voz para comprobar el apagado inmediato del notch.");
+            Debe(false, "faltan las fuentes del cambio de voz (FaceWindow.xaml.cs y ConversacionEnVivo.cs), que son parte de lo prometido");
             return;
         }
 
@@ -14573,11 +14579,11 @@ internal static class Contrato
             $"y otra ventana al frente, aunque tenga el mismo título, es «Delante» con la parte «Delante»: {C(gmail3, otraVentana)}");
 
         // Y QUE LA COMPUERTA LO USE DE VERDAD: se lee el código, como la 341 de la voz. Sin U_REPO no se adivina
-        // (aprendizaje nº17: «no pude» no es «culpable»).
-        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
-        string archivo = Path.Combine(repo, "windows-client", "src", "Navigation", "RecorrerSegunElNucleo.cs");
-        if (!File.Exists(archivo)) { Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer RecorrerSegunElNucleo.cs"); return; }
-        string fuente = File.ReadAllText(archivo);
+        // (aprendizaje nº17: «no pude» no es «culpable»). NI INOCENTE: hasta el 2026-09-24 esto imprimía «NO PUDE JUZGARLA»
+        // y volvía, y la 352 salía ✔ sin haber leído nada —medido sin U_REPO al juntar B con D—. FuenteDelRepo dice «SIN
+        // JUZGAR» sin U_REPO y ✘ si con U_REPO falta el archivo, que es lo que hace el resto de la 049.
+        string? fuente = FuenteDelRepo("windows-client/src/Navigation/RecorrerSegunElNucleo.cs", "352");
+        if (fuente == null) return;
         Debe(fuente.Contains("HuellaDeLoQueSeVe", StringComparison.Ordinal) && !fuente.Contains("string Huella(", StringComparison.Ordinal),
             "la compuerta de vida (299) construye y compara su huella por HuellaDeLoQueSeVe y ya no define su propio «string Huella(»");
         // El inventario pegado de la 044/335 de Jose (ComoSeContesta.InventarioAsentado) queda FUERA de esta promesa por
@@ -14762,7 +14768,7 @@ internal static class Contrato
         try { tVivo.GetMethod("Tomar")!.Invoke(vivo, null); }
         catch (TargetInvocationException e) { porQueLanzo = e.InnerException?.Message ?? e.Message; }
         if (!porQueLanzo.Contains("no hay ventana de trabajo"))
-        { Console.WriteLine($"   ⚠ NO PUDE JUZGAR la primera toma de HuellaEnVivo: sin ventana de trabajo esperaba «no hay ventana de trabajo» y fue «{porQueLanzo}»"); return; }
+        { NoPudeJuzgar($"la primera toma de HuellaEnVivo: sin ventana de trabajo esperaba «no hay ventana de trabajo» y fue «{porQueLanzo}»", "355"); return; }
         Debe(lecturas == 1, $"la primera huella de una sesión ya lee el sitio de trabajo (si no, la línea diría que el sitio cambió sin haber cambiado): {lecturas} lectura(s)");
     }
 
@@ -14985,11 +14991,10 @@ internal static class Contrato
         Debe(!volvio && msLlego < Techo047 + 150,
             $"comprobar la vuelta tras un Enter deshecho gasta del mismo reloj: con un «dónde» de 500 ms que nunca llega se rinde al agotar el techo, sin dormir una vuelta de más: {msLlego} ms (techo {Techo047}; con la vuelta de cortesía, ≥ {Techo047 + 200}); volvió={volvio}");
 
-        // Y QUE LAS HERRAMIENTAS DEL MAPA LO USEN: se lee el código (mismo camino que la 341 de la voz).
-        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
-        string archivo = Path.Combine(repo, "windows-client", "src", "Mcp", "SurfaceMapTools.cs");
-        if (!File.Exists(archivo)) { Console.WriteLine("   ⚠ NO PUDE JUZGARLA: falta U_REPO para leer SurfaceMapTools.cs"); return; }
-        string fuente = File.ReadAllText(archivo);
+        // Y QUE LAS HERRAMIENTAS DEL MAPA LO USEN: se lee el código por FuenteDelRepo —sin U_REPO, SIN JUZGAR; hasta el
+        // 2026-09-24 imprimía «NO PUDE JUZGARLA» y la 358 salía ✔ sin haber leído nada—.
+        string? fuente = FuenteDelRepo("windows-client/src/Mcp/SurfaceMapTools.cs", "358");
+        if (fuente == null) return;
         Debe(!fuente.Contains("EsperarCambio(", StringComparison.Ordinal), "la espera de un cambio que nadie llamaba (EsperarCambio, 0 llamadores el 22-09) deja de existir");
         Debe(!fuente.Contains("CuantosAccionables(", StringComparison.Ordinal), "ya no se cuentan botones de la ventana de delante (CuantosAccionables: tres FindAll sobre el primer plano)");
         Debe(fuente.Contains("EsperaAsentada", StringComparison.Ordinal), "EsperarPantallaLista decide «lista» con EsperaAsentada, la misma huella de lo que se ve");
@@ -14998,7 +15003,7 @@ internal static class Contrato
         int ini = fuente.IndexOf("private void EsperarPantallaLista(", StringComparison.Ordinal);
         int fin = ini < 0 ? -1 : fuente.IndexOf("private bool Llego(", ini, StringComparison.Ordinal);
         string cuerpo = ini >= 0 && fin > ini ? fuente[ini..fin] : "";
-        if (cuerpo.Length == 0) Console.WriteLine("   ⚠ NO PUDE JUZGAR el comparador de EsperarPantallaLista: no encontré su cuerpo entre su firma y la de Llego");
+        if (cuerpo.Length == 0) NoPudeJuzgar("el comparador de EsperarPantallaLista: no encontré su cuerpo entre su firma y la de Llego", "358");
         else Debe(cuerpo.Contains("Superficies.MismaPantalla", StringComparison.Ordinal),
             "EsperarPantallaLista le pasa a la espera el mismo comparador de sitios con el que Type juzga el Enter (Superficies.MismaPantalla)");
     }
@@ -16073,6 +16078,15 @@ internal static class Contrato
     /// tercero —ni INTACTO ni ROTO— con código 99, que los scripts ya rotulan como «no se pudo
     /// juzgar» (contrato-del-grafo.ps1:119, verificar.ps1:135, contrato.yml:81). Los tres sitios de
     /// antes pasan por aquí en la fase 0 de la 049. (2026-09-22)
+    ///
+    /// Y AL JUNTAR B CON D (2026-09-24) SALIERON CINCO MÁS, que esta regla no alcanzaba porque B y main
+    /// no la tenían: cuatro de la 047 —352, 355 y dos de la 358— imprimían «NO PUDE JUZGAR» y hacían
+    /// <c>return</c>, y la promesa salía ✔ sin haber probado nada (medido sin U_REPO: la 352 y la 358
+    /// salían ✔); y uno de main, la 337, sumaba a <c>_fallos</c>. Los cinco pasan por aquí o por
+    /// <see cref="FuenteDelRepo"/>, y ninguna línea de código escribe ya «NO PUDE JUZGAR» (grep, 0).
+    /// QUEDAN NUEVE DE LA MISMA CLASE, contados y sin tocar porque son de la voz de main (Felipe): 338,
+    /// 339, 340, 341, 342, 343, 344, 345 y 349 hacen <c>Debe(File.Exists(…))</c> con la ruta de U_REPO,
+    /// y sin él salen ✘ en vez de ⚠ —culpables, no inocentes: no dan un verde falso—.
     /// </summary>
     private static void NoPudeJuzgar(string que, string promesa)
     {
