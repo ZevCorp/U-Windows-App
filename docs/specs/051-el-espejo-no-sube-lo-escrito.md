@@ -524,6 +524,21 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   con archivo y línea—, nunca hacia el verde. Si la fase 2 escribe `Publico` con un `Log(` pelado, el
   148 no es una sentencia nueva. Se anota, no se arregla aquí: acotarlo al tipo del inicializador es
   cambiar el juez, y va con la fase que lo necesite.
+- **2026-09-24 · Fase 1: la 396 en verde, y los dos sabotajes de la tabla de jueces dan exactamente
+  lo previsto.** `SinValor` (`Forma`, `Contraste`) en `windows-graph/src/SinValor.cs`; en
+  `RellenadorSap.cs`, la costura `(GraphConfig, ejecutar, leer)` —el constructor público pasa por
+  ella con `Execute` y `ValorActual`, así que lo que se juzga es la escritura que corre con el médico
+  delante— y E1/E2 anotan por `LineaDeVacio`/`LineaDeEscrito`. Contrato: 298 → **299** cumplidas;
+  rojas solo 394, 395, 397, 398 y 399, las de las fases 2–5; la 399(a) pasa de 0 a **2 de 35** y la
+  399(b) de 12 a **10** sitios con un hueco entero (se van `RellenadorSap.cs:405` y `:409`) **(M)**.
+  Sabotajes, cada uno aplicado con edición que conserva la CRLF, visto por `diff` contra una copia
+  (una sola línea cambiada), juzgado y restaurado por copia con `diff` vacío **(M)**: (función)
+  `LineaDeEscrito` devuelve `«{etiqueta}» = «{leido}»` → la 396 roja en sus tres casos de escrito,
+  con «anotó 1: ««Talla» = «170»»», y el de vacío verde porque no pasa por ella; (cableado)
+  `var v = valor;` y la línea vieja en `:405` en vez de `LineaDeVacio` → la 396 roja solo en el
+  caso de vacío, y la 399(a) de 2 a **1 de 35** nombrando E1. De paso, el `catch { }` de
+  `Deshacer` —la sentencia que la costura tocó— deja de ser mudo: anota la cadena de tipos y
+  mensajes con la etiqueta del campo, nunca el valor que se restauraba; la 399(b) no cambia (10).
 
 ## Revisiones
 

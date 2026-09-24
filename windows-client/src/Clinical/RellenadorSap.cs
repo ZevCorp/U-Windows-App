@@ -37,7 +37,19 @@ public sealed record LoEscrito(DetectedField Campo, string Antes, string Ahora);
 public sealed class RellenadorSap
 {
     private readonly GraphConfig _config;
-    private readonly SapGuiSurface _sap;
+
+    /// <summary>
+    /// SAP entero: nulo solo en un rellenador construido por su costura de prueba, que escribe y lee
+    /// por <see cref="_ejecutar"/> y <see cref="_leer"/> y no tiene pantalla que recorrer.
+    /// </summary>
+    private readonly SapGuiSurface? _sap;
+
+    /// <summary>Escribir un paso: (escribió, por qué no). Es <c>SapGuiSurface.Execute(paso, out err)</c>.</summary>
+    private readonly Func<PlanStep, (bool Ok, string Error)> _ejecutar;
+
+    /// <summary>Releer un campo por su selector. Es <c>SapGuiSurface.ValorActual(selector)</c>.</summary>
+    private readonly Func<string, string?> _leer;
+
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(45) };
 
     /// <summary>
@@ -61,7 +73,7 @@ public sealed class RellenadorSap
     /// que no necesita el foco; la comprobación tiene que ir por el mismo canal que la escritura,
     /// o vigila una cosa distinta de la que protege.
     /// </remarks>
-    public string DondeEstaSap() => _sap.Identity().Url;
+    public string DondeEstaSap() => Sap("preguntar qué pantalla muestra").Identity().Url;
 
     private readonly StringBuilder _dicho = new();
     private string _nota = "";
@@ -79,10 +91,37 @@ public sealed class RellenadorSap
     private bool _otraVuelta;
 
     public RellenadorSap(GraphConfig config, SapGuiSurface sap)
+        : this(config, paso => { bool ok = sap.Execute(paso, out string err); return (ok, err); }, sap.ValorActual)
     {
-        _config = config;
         _sap = sap;
     }
+
+    /// <summary>
+    /// LA COSTURA DE PRUEBA: el rellenador sin SAP, con «escribir» y «releer» de fuera. Existe para
+    /// que el contrato juzgue la línea que <see cref="Escribir"/> DE VERDAD anota (promesa 396), y no
+    /// una función aparte que nadie llama — un guardia que se cree puesto (aprendizaje nº18).
+    /// </summary>
+    /// <remarks>
+    /// El constructor público pasa por aquí con <c>Execute</c> y <c>ValorActual</c> de SAP, así que la
+    /// escritura y la relectura que se juzgan son las mismas que corren con el médico delante. Lo que
+    /// esta costura no tiene es pantalla: <see cref="DondeEstaSap"/> y la lectura de campos lanzan
+    /// diciendo qué se pidió (<see cref="Sap"/>).
+    /// </remarks>
+    internal RellenadorSap(GraphConfig config, Func<PlanStep, (bool Ok, string Error)> ejecutar,
+        Func<string, string?> leer)
+    {
+        _config = config;
+        _ejecutar = ejecutar;
+        _leer = leer;
+    }
+
+    /// <summary>
+    /// SAP entero, para lo que solo SAP sabe hacer. Un rellenador de la costura de prueba no lo tiene,
+    /// y lo dice nombrando el paso en vez de un «Object reference not set» sin sitio (patrón nº2).
+    /// </summary>
+    private SapGuiSurface Sap(string para) => _sap
+        ?? throw new InvalidOperationException(
+            $"RellenadorSap de la costura de prueba: no tiene SAP para {para} (solo escribe y relee por fuera).");
 
     /// <summary>Qué está pasando, en castellano, para pintarlo en la carita.</summary>
     public event Action<string>? Cuenta;
@@ -299,7 +338,7 @@ public sealed class RellenadorSap
 
     private List<DetectedField> CamposQueFaltan()
     {
-        var todos = _sap.ReadFields().Where(f => f.Selector.Length > 0).ToList();
+        var todos = Sap("leer los campos de la pantalla").ReadFields().Where(f => f.Selector.Length > 0).ToList();
 
         // QUIÉN NOMBRA A LA CASILLA DE AL LADO. Se recorre la pantalla EN ORDEN y cada campo se
         // queda con la última etiqueta que de verdad nombraba algo: así «/» sabe que va con
@@ -380,7 +419,8 @@ public sealed class RellenadorSap
 
         try
         {
-            if (!_sap.Execute(paso, out string err))
+            var (escribio, err) = _ejecutar(paso);
+            if (!escribio)
             {
                 LogBus.Log("dictado", $"«{campo.Label}» no se pudo escribir: {err}");
                 return null;
@@ -402,13 +442,33 @@ public sealed class RellenadorSap
         string despues = LeerAhora(campo);
         if (despues.Trim().Length == 0 && valor.Trim().Length > 0 && campo.ActionType == "input")
         {
-            LogBus.Log("dictado", $"«{campo.Label}» aceptó «{valor}» pero quedó vacío: no se cuenta");
+            LogBus.Log("dictado", LineaDeVacio(campo.Label, valor));
             return null;
         }
 
-        LogBus.Log("dictado", $"«{campo.Label}» = «{despues}» (pedido «{valor}»)");
+        LogBus.Log("dictado", LineaDeEscrito(campo.Label, valor, despues));
         return new LoEscrito(campo, antes, despues);
     }
+
+    /// <summary>
+    /// La línea de un campo escrito: su etiqueta, la forma de lo releído y si coincide con lo pedido.
+    /// NUNCA el valor (spec 051, promesa 396).
+    /// </summary>
+    /// <remarks>
+    /// Esto anotaba «= «38,5» (pedido «38.5»)»: el signo vital del paciente, en el log local — y el log
+    /// entero salía del equipo hacia el backend por el espejo. Lo que aquella línea servía para ver
+    /// era si SAP aceptó el valor tal cual, lo recortó o lo convirtió; eso lo dice
+    /// <see cref="SinValor.Contraste"/> con las dos longitudes, sin ninguno de los dos valores.
+    /// </remarks>
+    internal static string LineaDeEscrito(string etiqueta, string pedido, string leido) =>
+        $"«{etiqueta}» = {SinValor.Contraste(pedido, leido)}";
+
+    /// <summary>
+    /// La línea de un campo que aceptó la escritura y al releerlo estaba vacío: su etiqueta y la forma
+    /// de lo pedido. NUNCA el valor (spec 051, promesa 396).
+    /// </summary>
+    internal static string LineaDeVacio(string etiqueta, string pedido) =>
+        $"«{etiqueta}» aceptó {SinValor.Forma(pedido)} pero quedó vacío: no se cuenta";
 
     /// <summary>
     /// El valor de un campo, releído de SAP en este instante — YENDO AL NODO, no recorriendo todo.
@@ -419,7 +479,7 @@ public sealed class RellenadorSap
     /// hasta 14 segundos entre uno y otro; el mismo trabajo por VBS, yendo directo al nodo, tardaba
     /// dos segundos (2026-08-14, lo sufrió el usuario mirando la pantalla).
     /// </remarks>
-    private string LeerAhora(DetectedField campo) => _sap.ValorActual(campo.Selector) ?? "";
+    private string LeerAhora(DetectedField campo) => _leer(campo.Selector) ?? "";
 
     /// <summary>
     /// Deshacer el último llenado. Existe porque esto escribe SIN pedir permiso: la salida de
@@ -432,8 +492,17 @@ public sealed class RellenadorSap
         {
             var paso = PlanStep.ForAutofill(e.Campo,
                 new FieldMatch { StepOrder = e.Campo.StepOrder, Value = e.Antes });
-            try { if (_sap.Execute(paso, out _)) { n++; _yaPuesto.Remove(e.Campo.StepOrder); } }
-            catch { }
+            try { if (_ejecutar(paso).Ok) { n++; _yaPuesto.Remove(e.Campo.StepOrder); } }
+            catch (Exception ex)
+            {
+                // Era un «catch { }»: un deshacer que fallaba solo se notaba en que el recuento salía
+                // corto, sin decir qué campo ni por qué (patrón nº3). La cadena de tipos y mensajes, como
+                // en Escribir; nunca e.Antes, que es el valor que había en el campo (spec 051).
+                var porque = new System.Text.StringBuilder();
+                for (var x = ex; x != null; x = x.InnerException)
+                    porque.Append(porque.Length > 0 ? " ← " : "").Append($"{x.GetType().Name}: {x.Message}");
+                LogBus.Log("dictado", $"«{e.Campo.Label}» lanzó al deshacer: {porque}");
+            }
         }
         _ultimoLote.Clear();
         if (n > 0) Cuenta?.Invoke($"Deshecho: {n} campo(s) volvieron a su valor anterior.");
