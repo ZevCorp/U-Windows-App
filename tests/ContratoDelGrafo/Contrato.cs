@@ -847,13 +847,13 @@ internal static class Contrato
         Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
 
         // ── Spec 049: se ve como TipTour (bloque 371-385) ────────────────────────────────────────
-        Prueba("371. la paleta de Jev es la del plano y se juzga sin pincel: cada token guarda su ARGB exacto, su significado y si es cromático —saturación HSL de 0,25 o más—, dos tokens cromáticos con distinto significado distan al menos 30° de tono salvo los tres pares aceptados por escrito —los azules entre sí—, los neutros y los acromáticos se juzgan solo por su valor, no hay token para lo que no existe —el cian del OCR—, y el overlay de Jev y el inspector no se encienden a la vez: la regla es pura y el inspector la consulta, que se lee en su fuente", LaPaletaDeJevEsLaDelPlano);
+        Prueba("371. la paleta de Jev es la del plano y se juzga sin pincel: cada token guarda su ARGB exacto, su significado y si es cromático —saturación HSL de 0,25 o más—, dos tokens cromáticos con distinto significado distan al menos 30° de tono salvo los tres pares aceptados por escrito —los azules entre sí—, los neutros y los acromáticos se juzgan solo por su valor, no hay token para lo que no existe —el cian del OCR—, y el overlay de Jev y el inspector no se encienden a la vez: la regla es pura, el inspector y la vista de Jev la consultan antes de encenderse y ponen su bandera, que se lee en sus fuentes, y un overlay impedido no se da por visible", LaPaletaDeJevEsLaDelPlano);
         Prueba("372. el panel de Jev sale de un modelo puro: dado un ciclo —objetivo, paso, candidatas, decisión, lo pulsado y tiempos— produce exactamente lo que se pinta: la cabecera «paso k» «· N detectados» «{ms}ms», los medidores cumplido y ausente, y cinco barras como mucho ordenadas de mayor a menor probabilidad con su valor a dos decimales y la etiqueta sola —numerada solo si dos de las cinco la comparten—; la resaltada es la pulsada por su id —la elegida solo mientras no se conozca la pulsada—, nunca una por parecido de texto; y si la mano pulsó otra que la elegida, el ticker lo dice", ElPanelDeJevSaleDeUnModeloPuro);
         Prueba("373. sin distribución no hay gráfico: con Luna, con la regla local o con una respuesta sin probabilidades no se pintan cabecera, medidores ni barras; el coste es el acumulado de la tarea a partir de los tokens facturados que devuelva el cliente, con cinco decimales, y sin tokens se enseña «—» y no crece; el ms de la cabecera es el de decidir; y un medidor sin dato enseña «—», nunca 0", SinDistribucionNoHayGrafico);
         Prueba("374. los textos del panel describen el paso y no concluyen: cada estado tiene su cadena exacta, el motivo con que el tramo para se enseña tal cual llega —sin reescribirlo—, «Jev cree que ya está» nunca se convierte en «listo» ni en «terminado», pulsar la segunda mejor se dice como lo que es, y el punto del ticker va a 0,82 mientras el tramo sigue y a 0,42 cuando para", LosTextosDelPanelDescribenElPasoYNoConcluyen);
         Prueba("375. el overlay pinta exactamente la lista que se ofreció al decisor: una caja por candidata con caja leída y ninguna más, en su orden, con su etiqueta sola; una candidata sin caja se ofrece pero no se pinta y se cuenta; la rosa es la de lo pulsado —por su id, o por la caja que la mano dice haber pulsado— y nunca la elegida antes de pulsar ni una por etiqueta —dos «Buscar» dan una sola rosa—; y las cajas caducan al cambiar la ventana de delante: la caducidad es pura y el gancho que la dispara se lee en el fuente del overlay", ElOverlayPintaExactamenteLoQueSeOfrecio);
         Prueba("376. el panel de Jev mide lo que dice el plano y su alto sale de sus partes y de un mínimo declarado, no del contenido: 340 de ancho, 64 sin resultados —el mínimo, que calca los 63,7 del vídeo; las partes suman 57,6— y 198,6 con cinco barras; el XAML medido sin pantalla da lo mismo y la zona de resultados recibe sus 314 enteros porque el borde no ocupa sitio; y si WPF no mide en el arnés, la promesa queda SIN JUZGAR, ni verde ni roja", ElPanelDeJevMideLoQueDiceElPlano);
-        Prueba("377. el panel se pone donde no estorba, y se calcula sin pantalla: junto al ancla a (56, 32) por la escala, probando las cuatro esquinas en orden, sin tapar el cuadrado de 44 alrededor del ancla, a 12 del borde del área de trabajo, sin cruzar el notch ni ningún obstáculo ni la caja de lo pulsado si alguna esquina cabe, y si ninguna cabe se va a la esquina opuesta; nunca se sale del área de trabajo", ElPanelSePoneDondeNoEstorba);
+        Prueba("377. el panel se pone donde no estorba, y se calcula sin pantalla: junto a la carita a (56, 32) de su borde por la escala —un ancla-punto es una carita de 0×0—, probando las cuatro esquinas en orden, sin tapar la carita ni los 22 de alrededor —el cuadrado de 44 de un ancla-punto—, a 12 del borde del área de trabajo, sin cruzar el notch ni ningún obstáculo ni la caja de lo pulsado si alguna esquina cabe, y si ninguna cabe se va a la esquina opuesta; nunca se sale del área de trabajo", ElPanelSePoneDondeNoEstorba);
         Prueba("378. un solo vigilante sube las capas de Ü en un orden fijo —overlays de cada monitor, carita, notch, panel de Jev, flecha— con un solo reloj, reordena en el acto cuando una del grupo se muestra, y ninguna vigila por su cuenta: el muelle y el notch entran al grupo y dejan de hacerlo, que se lee en sus fuentes", UnSoloVigilanteSubeLasCapasEnOrden);
         Prueba("379. el overlay de Jev es una ventana por monitor en píxeles físicos, transparente, click-through, no activable, de herramienta y excluida de la captura —las máscaras son puras y el overlay las aplica, que se lee en su fuente—, y por defecto está apagado: lo enciende U_JEV_OVERLAY=si al encender Jev, la configuración es pura y dice por qué quedó como quedó, y el estado de la vista lo nombra", ElOverlayDeJevEsUnaVentanaPorMonitorYPorDefectoApagado);
         Prueba("380. todo lo de Jev se dibuja por Pantallas: la inversa —de físicos a la unidad de un monitor concreto, restando su origen— existe y con la ida da la identidad, un monitor secundario con otra escala convierte bien, no hay ninguna conversión a mano nueva bajo Ui/Jev, y al cambiar el DPI el overlay vuelve a aplicar el rect calculado y no el sugerido: la regla es pura y su llamada desde OnDpiChanged se lee en el fuente", TodoLoDeJevSeDibujaPorPantallas);
@@ -861,7 +861,7 @@ internal static class Contrato
         Prueba("382. nada de la vista bloquea el ciclo: la decisión pasa por el observador intacta —el mismo objeto, y una excepción del decisor sale tal cual—, envolver dos veces envuelve una, publicar un ciclo solo encola y nunca ejecuta en el acto —con un despachador que lanza si se le pide ejecutar ya, publicar no lanza—, con la cola sin vaciar se pinta solo el último ciclo, una excepción al pintar no sale al ciclo y queda en el log con su tipo y su mensaje, y el único BeginInvoke de la vista vive en su adaptador a WPF", NadaDeLaVistaBloqueaElCiclo);
         Prueba("383. apagar Jev cierra las tres ventanas —overlay, panel y flecha— y Escape o soltar lo señalado vacían el overlay, esconden la flecha y dejan el panel sin corrida: la máquina es pura y sus dos ganchos se leen en el parcial; el interruptor del decisor sigue apagando el catálogo byte a byte", ApagarJevCierraLasTresVentanas);
         Prueba("384. una sola cosa vuela por clic: mientras corre un tramo con Jev la carita ni viaja al clic ni sigue al cursor sintético, fuera de tramo sigue haciéndolo, y la carita no cambia de tamaño: la regla es pura y sus dos llamadas en FaceWindow se cuentan en el fuente", UnaSolaCosaVuelaPorClic);
-        Prueba("385. el panel de Jev nunca toma el ratón ni el foco —click-through y no activable siempre—, nace al encender Jev sin tocar el atajo de invocar a Ü —InvocarPorAtajo sigue abriendo el globo y no sabe de Jev, que se lee en su fuente—, y se aparta de lo pulsado en cuanto lo conoce", ElPanelDeJevNuncaTomaElRatonNiElFoco);
+        Prueba("385. el panel de Jev nunca toma el ratón ni el foco ni sale en las capturas —click-through, no activable y excluido de la captura siempre—, nace al encender Jev sin tocar el atajo de invocar a Ü —InvocarPorAtajo sigue abriendo el globo y no sabe de Jev, que se lee en su fuente—, y se aparta de lo pulsado en cuanto lo conoce, con el alto que pinta", ElPanelDeJevNuncaTomaElRatonNiElFoco);
         Console.WriteLine();
         if (_fallos == 0 && _sinJuzgar > 0)
         {
@@ -13854,6 +13854,48 @@ internal static class Contrato
         var fuente = FuenteDelRepo("windows-client/src/Uia/UiInspector.cs", "371");
         if (fuente != null)
             Debe(fuente.Contains("ExclusionConElInspector.", StringComparison.Ordinal), "Uia/UiInspector.cs consulta ExclusionConElInspector antes de encender");
+
+        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. Lo de arriba se cumplía con el
+        // inspector NOMBRANDO la clase, y nadie en la app ponía OverlayActivo (grep: 0 asignaciones en
+        // windows-client/src): la regla solo funcionaba en el contrato, y el inspector se encendía encima de las
+        // cajas de Jev con la 371 en verde (aprendizaje nº18). Las dos superficies la consultan y ponen su bandera,
+        // en CÓDIGO; y la máquina, con el overlay impedido, no dice que lo enseña (aprendizaje nº4).
+        if (fuente != null)
+        {
+            Debe(LineasDeCodigo(fuente, "ExclusionConElInspector.PuedeEncender(ExclusionConElInspector.Cual.Inspector)") >= 1,
+                "Uia/UiInspector.cs pregunta PuedeEncender(Cual.Inspector) en una línea de código, no en un comentario");
+            Debe(LineasDeCodigo(fuente, "ExclusionConElInspector.InspectorActivo = true") >= 1 && LineasDeCodigo(fuente, "ExclusionConElInspector.InspectorActivo = false") >= 1,
+                "y pone y quita InspectorActivo al arrancar y al parar");
+        }
+        var vistaDeJev = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "371");
+        if (vistaDeJev != null)
+        {
+            Debe(LineasDeCodigo(vistaDeJev, "ExclusionConElInspector.PuedeEncender(ExclusionConElInspector.Cual.Overlay)") >= 1,
+                "Ui/Jev/VistaDeJev.cs pregunta PuedeEncender(Cual.Overlay) antes de abrir los overlays, en una línea de código");
+            Debe(LineasDeCodigo(vistaDeJev, "ExclusionConElInspector.OverlayActivo = true") >= 1,
+                "y pone OverlayActivo = true cuando los enseña: sin eso el inspector nunca se entera de que están");
+            Debe(LineasDeCodigo(vistaDeJev, "ExclusionConElInspector.OverlayActivo = false") >= 1,
+                "y lo quita al cerrarlos: con la bandera pegada, el inspector no volvería a encenderse");
+        }
+        var tMaq = Jev("MaquinaDeLaVista"); var leer = Jev("ConfiguracionDeLaVista")?.GetMethod("Leer");
+        if (tMaq?.GetMethod("ImpedirElOverlay") == null || leer == null)
+            Pendiente("Ui.Jev.MaquinaDeLaVista.ImpedirElOverlay(porque): el overlay que la exclusión no deja encender no se da por visible", "371", "049");
+        else
+        {
+            var conOverlay = leer.Invoke(null, new object[] { (Func<string, string?>)(n => n == "U_JEV_OVERLAY" ? "si" : null) })!;
+            var maq = Activator.CreateInstance(tMaq, new[] { conOverlay })!;
+            Llamar(maq, "Encender");
+            Llamar(maq, "ImpedirElOverlay", "el inspector está encendido");
+            Llamar(maq, "AlPintarCajas", 3);
+            Debe(!Cierto(maq, "OverlayVisible") && Convert.ToInt32(PropDe(maq, "CajasVisibles")) == 0,
+                $"con el overlay impedido por el inspector, la máquina no lo da por visible ni cuenta cajas: {PropDe(maq, "OverlayVisible")} / {PropDe(maq, "CajasVisibles")}");
+            string estado = Texto(maq, "Estado");
+            Debe(estado.Contains("impedido", StringComparison.Ordinal) && estado.Contains("el inspector está encendido", StringComparison.Ordinal),
+                $"y su estado dice que está impedido y por qué: «{estado}»");
+            Llamar(maq, "Apagar");
+            Llamar(maq, "Encender");
+            Debe(Cierto(maq, "OverlayVisible"), "y lo impedido no se queda pegado: encender otra vez vuelve a preguntar");
+        }
     }
 
     /// <summary>Promesa 372.</summary>
@@ -13918,6 +13960,45 @@ internal static class Contrato
         Debe(Texto(PropDe(PropDe(lento, "Resultados")!, "Cabecera")!, "Ms") == "1,450ms",
             $"los milisegundos van con separador de miles invariante: «{Texto(PropDe(PropDe(lento, "Resultados")!, "Cabecera")!, "Ms")}»");
         Debe(Texto(r, "Objetivo") == "abrir detalles", "y el objetivo del tramo se pinta tal cual");
+
+        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. Lo de arriba juzga el modelo con la
+        // pulsada puesta a mano, y en la app nadie la ponía: el puente no la leía de la línea de progreso (spec 049
+        // §El puente, 2), así que la resaltada era siempre la elegida y el ticker nunca decía «la 1.ª no estaba»,
+        // con la 372 en verde. El puente es puro, se juzga aquí, y la vista lo usa (por fuente).
+        var conLaLinea = t.Ciclo.GetMethod("ConLaLinea");
+        if (conLaLinea == null)
+            Pendiente("Ui.Jev.CicloDeJev.ConLaLinea(decidido, objetivo, linea): la pulsada sale de «paso k: «x» (n)»", "372", "049");
+        else
+        {
+            object Linea(object? decidido, string linea) => conLaLinea.Invoke(null, new[] { decidido, "abrir detalles", linea })!;
+            var decidido = c.Construir(t.Ciclo, t.Candidata, t.Decision);
+            const string laSegunda = "paso 2: «Buscar» (3) conf 0.40 · cambió";
+            var conSegunda = Linea(decidido, laSegunda);
+            Debe(Texto(conSegunda, "Pulsada") == "3" && PropDe(conSegunda, "Fase")?.ToString() == "Linea" && Texto(conSegunda, "Linea") == laSegunda,
+                $"la línea «{laSegunda}» da un ciclo de línea con la pulsada «3» y la línea tal cual: pulsada «{Texto(conSegunda, "Pulsada")}», fase {PropDe(conSegunda, "Fase")}");
+            var pintado = t.De.Invoke(null, new[] { conSegunda, Activator.CreateInstance(t.Coste)! })!;
+            var resaltadasL = Elementos(PropDe(PropDe(pintado, "Resultados")!, "Barras")).Where(b => Cierto(b, "Resaltada")).ToList();
+            Debe(resaltadasL.Count == 1 && Texto(resaltadasL[0], "Id") == "3) Buscar (Button)" && Cierto(resaltadasL[0], "PorPulsada"),
+                "y pintado, la resaltada es la 3 por pulsada, no la 6 elegida: la mano pulsó la segunda mejor");
+            Debe(Texto(pintado, "Ticker") == "la 1.ª no estaba: pulsé la 2.ª «Buscar» (3)",
+                $"y el ticker lo dice como lo que es: «{Texto(pintado, "Ticker")}»");
+            Debe(Texto(Linea(decidido, "paso 2: «Guardar (F5)» (3) conf 0.40 · cambió"), "Pulsada") == "3",
+                "una etiqueta con paréntesis no confunde el número: es el que va delante de « conf»");
+            Debe(PropDe(Linea(decidido, "paso 3: sin acción · no se acciona"), "Pulsada") == null,
+                "una línea sin acción no trae pulsada, y no se inventa una");
+            // «no pudo» es que la mano no terminó (ElTramo.cs:204, p.Termino falso): marcarla como pulsada haría decir
+            // al ticker «pulsé la 2.ª» de algo que no se pulsó.
+            Debe(PropDe(Linea(decidido, "paso 2: «Buscar» (3) conf 0.40 · no pudo"), "Pulsada") == null,
+                "ni una en la que la mano no pudo: «pulsé» sería mentira");
+            Debe(PropDe(Linea(decidido, "tramo: 3 paso(s) · se agotó el tope de 4 paso(s)."), "Pulsada") == null,
+                "ni la línea con que el tramo para");
+            var sinDecision = Linea(null, "paso 1: «Detalles» (2) conf 0.91 · no cambió");
+            Debe(Texto(sinDecision, "Objetivo") == "abrir detalles" && Texto(sinDecision, "Pulsada") == "2" && PropDe(sinDecision, "Decision") == null,
+                "sin decisión todavía, el ciclo nace del objetivo con la línea y su pulsada, sin decisión inventada");
+        }
+        var vista = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "372");
+        if (vista != null)
+            Debe(LineasDeCodigo(vista, "CicloDeJev.ConLaLinea(") >= 1, "Ui/Jev/VistaDeJev.cs pasa cada línea de progreso por CicloDeJev.ConLaLinea(, en una línea de código");
     }
 
     /// <summary>Promesa 373.</summary>
@@ -14375,6 +14456,55 @@ internal static class Contrato
         if (ventana != null)
             Debe(ventana.Contains("DondeVaElPanel.NotchEnFisicos(", StringComparison.Ordinal),
                 "y la ventana del panel da ese notch como obstáculo: PanelDeJev.cs llama DondeVaElPanel.NotchEnFisicos(");
+
+        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. El ancla era el CENTRO de la ventana de
+        // la carita (GetWindowRect), y esa ventana lleva la barra de 150 DIP y, abierto, el menú de 292: a 56 del
+        // centro el panel caía siempre encima de ella, y opaco y por encima en Z, tapaba el botón de apagar Jev. Lo
+        // que el panel no tapa es la carita ENTERA: se pone a (56, 32) de su BORDE, y un ancla-punto es una carita
+        // de 0×0, con la que todo lo de arriba sale igual.
+        var junto = t?.GetMethods().FirstOrDefault(m => m.Name == "JuntoALaCarita" && m.GetParameters().Length == 6);
+        if (junto == null)
+        {
+            Pendiente("Ui.Jev.DondeVaElPanel.JuntoALaCarita(carita, tamaño, rcWork, escala, obstáculos, objetivo)", "377", "049");
+            return;
+        }
+        (WRect R, string Esquina, bool Junto) J(WRect carita, WSize tam, double escala, WRect? objetivo)
+        {
+            var r = junto.Invoke(null, new object?[] { carita, tam, rcWork, escala, sin, objetivo })!;
+            var rect = (WRect)PropDe(r, "Rect")!;
+            Debe(rcWork.Contains(rect), $"junto a la carita {carita} tampoco se sale del área de trabajo: {rect}");
+            Debe(!rect.IntersectsWith(WRect.Inflate(carita, 22 * escala, 22 * escala)),
+                $"y no tapa la carita ni los {22 * escala} de alrededor: carita {carita}, panel en {rect}");
+            return (rect, PropDe(r, "Esquina")?.ToString() ?? "", PropDe(r, "JuntoAlAncla") is true);
+        }
+        var punto = J(new WRect(600, 400, 0, 0), panel, 1, null);
+        Debe(punto.R == a.R && punto.Esquina == a.Esquina, $"una carita de 0×0 en (600, 400) es el ancla-punto de siempre: {punto.R} · {punto.Esquina}, y el punto dio {a.R}");
+        // La carita con el menú abierto, 292×400 abajo a la derecha: a la derecha no cabe y abajo tampoco; arriba a
+        // la izquierda, a 56 de su borde izquierdo y 32 por encima de su borde de arriba.
+        var conMenu = J(new WRect(1500, 500, 292, 400), panel, 1, null);
+        Debe(conMenu.R == new WRect(1104, 269, 340, 199) && conMenu.Esquina == "ArribaIzquierda" && conMenu.Junto,
+            $"con la carita de 292×400 en (1500, 500), arriba a la izquierda de su borde: {conMenu.R} · {conMenu.Esquina}");
+        var aEscala = J(new WRect(1500, 500, 292, 400), grande, 1.5, null);
+        Debe(aEscala.R.Right == 1500 - 84 && aEscala.R.Bottom == 500 - 48, $"a escala 1,5, a 84 de su borde y 48 por encima: {aEscala.R}");
+        // Una carita que no deja esquina: a la esquina del área de trabajo más lejos de ella, y sin taparla.
+        var sinSitio = J(new WRect(400, 200, 1100, 700), panel, 1, null);
+        Debe(!sinSitio.Junto, $"con la carita ocupando el centro, ninguna esquina junto a ella cabe: {sinSitio.R} · {sinSitio.Esquina}");
+
+        // Y LA MÁQUINA LA USA: con la carita puesta, el panel nace fuera de ella.
+        var tMaq = Jev("MaquinaDeLaVista"); var leer = Jev("ConfiguracionDeLaVista")?.GetMethod("Leer");
+        if (tMaq?.GetProperty("Carita") == null || leer == null)
+        {
+            Pendiente("Ui.Jev.MaquinaDeLaVista.Carita: el rect que el panel no tapa", "377", "049");
+            return;
+        }
+        var maq = MaquinaConPantalla(tMaq, leer.Invoke(null, new object[] { (Func<string, string?>)(_ => null) })!);
+        Poner(maq, "Carita", new WRect(1500, 500, 292, 400));
+        Llamar(maq, "Encender");
+        var alNacer = PropDe(maq, "RectDelPanel") as WRect?;
+        Debe(alNacer == new WRect(1104, 269, 340, 199), $"con la carita de 292×400 puesta, la máquina pone el panel fuera de ella: {(alNacer.HasValue ? alNacer.Value.ToString() : "sin rect")}");
+        var vistaDeJev = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "377");
+        if (vistaDeJev != null)
+            Debe(LineasDeCodigo(vistaDeJev, "Maquina.Carita = ") >= 1, "y la vista le da la carita entera, Maquina.Carita = …, en una línea de código");
     }
 
     /// <summary>Promesa 378.</summary>
@@ -15036,6 +15166,8 @@ internal static class Contrato
             $"con Jev apagado, un tramo, tres cajas y una pulsación no encienden nada de Jev: {PropDe(dormida, "OverlayVisible")} / {PropDe(dormida, "PanelVisible")} / {PropDe(dormida, "FlechaVisible")} / {PropDe(dormida, "CajasVisibles")} / {PropDe(dormida, "PanelEnCorrida")}");
         var detras = MaquinaConPantalla(tMaq, encendida);
         Llamar(detras, "Encender");
+        // En un tramo: una pulsación fuera de tramo es de Luna y no aparta nada (384, revisión del 2026-09-23).
+        Llamar(detras, "AlEmpezarTramo", "abrir detalles");
         Llamar(detras, "AlConocerPulsada", new WRect(700, 450, 200, 40), false);
         var rectDetras = PropDe(detras, "RectDelPanel") as WRect?;
         Debe(!Cierto(detras, "FlechaVisible"), "con la ventana de trabajo detrás, la flecha no vuela ni se enseña");
@@ -15076,6 +15208,40 @@ internal static class Contrato
                 cuerpo.Length == 0 ? "no encontré el cuerpo de private void PintarBotonJev() en FaceWindow.xaml.cs"
                                    : "el cuerpo de PintarBotonJev sincroniza la vista en una línea de código: no hay ninguna con «Sincronizar»");
         }
+
+        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. La máquina decía «sin corrida» y la
+        // vista pintaba igual: la línea con que el tramo para llega DESPUÉS de Escape (ElTramo.cs:191) y se construía
+        // sobre la última decisión, así que el panel volvía a enseñar objetivo, ticker y cinco barras unos
+        // milisegundos después de vaciarse, con la 383 en verde. Lo que se pinta lo decide la máquina: en corrida,
+        // el ciclo tal cual; sin corrida, solo el motivo, sin objetivo ni barras (plano, «Parado a mano»: se borran).
+        var tipos = TiposDelPanel();
+        if (tMaq.GetMethod("QueSePinta") == null || tipos == null)
+            Pendiente("Ui.Jev.MaquinaDeLaVista.QueSePinta(ciclo): sin corrida, solo el motivo", "383", "049");
+        else
+        {
+            var tp = tipos.Value;
+            var decidido = new CicloDeMentira().Construir(tp.Ciclo, tp.Candidata, tp.Decision);
+            var parada = new CicloDeMentira { Fase = "linea", Linea = "tramo: 2 paso(s) · paraste tú con Escape; no sigo." }.Construir(tp.Ciclo, tp.Candidata, tp.Decision);
+            var corrida = MaquinaConPantalla(tMaq, encendida);
+            Llamar(corrida, "Encender");
+            Llamar(corrida, "AlEmpezarTramo", "abrir detalles");
+            Debe(ReferenceEquals(Llamar(corrida, "QueSePinta", decidido), decidido), "en corrida se pinta el ciclo tal cual, el mismo objeto");
+            Llamar(corrida, "Suelta");
+            var trasEscape = Llamar(corrida, "QueSePinta", parada);
+            Debe(trasEscape != null, "tras Escape, la línea con que el tramo para sí se pinta: es el motivo");
+            if (trasEscape != null)
+            {
+                var pintado = tp.De.Invoke(null, new[] { trasEscape, Activator.CreateInstance(tp.Coste)! })!;
+                Debe(PropDe(pintado, "Resultados") == null && Texto(pintado, "Objetivo") == "" && Texto(pintado, "Ticker") == "paraste tú con Escape; no sigo.",
+                    $"pero sin objetivo ni barras: solo el motivo tal cual («{Texto(pintado, "Objetivo")}» · «{Texto(pintado, "Ticker")}» · resultados {(PropDe(pintado, "Resultados") == null ? "ninguno" : "PINTADOS")})");
+            }
+            Debe(Llamar(corrida, "QueSePinta", decidido) == null, "y una decisión que llega después de Escape no vuelve a pintar la corrida");
+            Llamar(corrida, "Apagar");
+            Debe(Llamar(corrida, "QueSePinta", parada) == null, "con Jev apagado no se pinta nada, ni el motivo");
+        }
+        var vistaDeJev = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "383");
+        if (vistaDeJev != null)
+            Debe(LineasDeCodigo(vistaDeJev, "Maquina.QueSePinta(") >= 1, "y la vista pinta lo que dice Maquina.QueSePinta(, en una línea de código");
     }
 
     /// <summary>Promesa 384.</summary>
@@ -15115,7 +15281,30 @@ internal static class Contrato
             bool trasApagar = Cierto(maq, "EnTramo");
             Debe(!sinJev && conJev && trasSoltar && !trasTerminar && otroTramo && !trasApagar,
                 $"EnTramo: con Jev apagado {sinJev} (falso), encendido a mitad {conJev} (cierto), tras soltar {trasSoltar} (cierto), tras terminar {trasTerminar} (falso), otro tramo {otroTramo} (cierto), tras apagar {trasApagar} (falso)");
+
+            // AÑADIDA AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. La carita mira «en tramo» y la
+            // flecha miraba «encendido»: con Jev encendido y SIN tramo —Luna hace map_take, o el player pulsa—
+            // UiaSurface.Pulso avisa, la carita viaja al clic y la flecha vuela al mismo clic. Dos cuerpos cruzando la
+            // pantalla hacia la misma caja, y la flecha atribuyéndole a Jev un clic que no decidió. Las dos leen lo
+            // mismo: una pulsación fuera de tramo no hace volar la flecha.
+            var conf = leer.Invoke(null, new object[] { (Func<string, string?>)(_ => null) })!;
+            var caja = new WRect(700, 450, 200, 40);
+            var fuera = MaquinaConPantalla(tMaq, conf);
+            Llamar(fuera, "Encender");
+            Llamar(fuera, "AlConocerPulsada", caja, true);
+            bool flechaFuera = Cierto(fuera, "FlechaVisible"), caritaFuera = (bool)viaja.Invoke(null, new object[] { Cierto(fuera, "EnTramo") })!;
+            Debe(!flechaFuera && caritaFuera, $"con Jev encendido y sin tramo, una pulsación hace viajar a la carita y NO a la flecha: flecha {flechaFuera}, carita {caritaFuera}");
+            var dentro = MaquinaConPantalla(tMaq, conf);
+            Llamar(dentro, "Encender");
+            Llamar(dentro, "AlEmpezarTramo", "abrir detalles");
+            Llamar(dentro, "AlConocerPulsada", caja, true);
+            bool flechaDentro = Cierto(dentro, "FlechaVisible"), caritaDentro = (bool)viaja.Invoke(null, new object[] { Cierto(dentro, "EnTramo") })!;
+            Debe(flechaDentro && !caritaDentro, $"y en un tramo con Jev, vuela la flecha y la carita no: flecha {flechaDentro}, carita {caritaDentro}");
         }
+        var vistaDeJev = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "384");
+        if (vistaDeJev != null)
+            Debe(LineasDeCodigo(vistaDeJev, "if (!Maquina.EnTramo) return;") >= 1,
+                "y la vista no pinta la rosa, ni aparta el panel, ni hace volar la flecha fuera de un tramo con Jev: if (!Maquina.EnTramo) return; en una línea de código");
 
         // (b) LAS DOS LLAMADAS EN FaceWindow SE CUENTAN EN EL FUENTE: OnAutomationCursorMoved e IrJuntoA con alClic.
         var fuente = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "384");
@@ -15171,11 +15360,59 @@ internal static class Contrato
         Debe(Cierto(aCiegas, "PanelVisible") && PropDe(aCiegas, "RectDelPanel") == null,
             $"sin área de trabajo ni tamaño, encender enseña el panel pero no le inventa sitio: {PropDe(aCiegas, "RectDelPanel") ?? "null"}");
         var caja = new WRect(700, 450, 200, 40);
+        // En un tramo: una pulsación fuera de tramo es de Luna y no aparta nada (384, revisión del 2026-09-23).
+        Llamar(maq, "AlEmpezarTramo", "abrir detalles");
         Llamar(maq, "AlConocerPulsada", caja, true);
         var rect = PropDe(maq, "RectDelPanel") as WRect?;
         Debe(rect != null && !rect.Value.IntersectsWith(WRect.Inflate(caja, 8, 8)),
             $"conocida la caja de lo pulsado, el panel se recoloca con DondeVaElPanel y no la cruza: {(rect.HasValue ? rect.Value.ToString() : "sin rect")}");
         Debe(rect != null && new WRect(0, 0, 1920, 1040).Contains(rect.Value), "y sigue dentro del área de trabajo");
+
+        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. El sitio se calculaba SIEMPRE con el
+        // alto del panel vacío (64: una sola asignación de TamanoDelPanel en toda la app) y el panel crece a 198,6
+        // con cinco barras, hacia abajo: puesto encima del ancla, al crecer la tapaba, se salía del área de trabajo o
+        // caía sobre lo pulsado que había esquivado con 64. El tamaño con que se calcula es el del contenido pintado,
+        // y al cambiar se recoloca con lo pulsado que ya se conocía.
+        if (tMaq.GetMethod("AlPintarBarras") == null)
+            Pendiente("Ui.Jev.MaquinaDeLaVista.AlPintarBarras(barras): el sitio se calcula con el alto que se pinta", "385", "049");
+        else
+        {
+            var alPie = Activator.CreateInstance(tMaq, new[] { encendida })!;
+            Poner(alPie, "RcWork", new WRect(0, 0, 1920, 1040));
+            Poner(alPie, "Escala", 1.0);
+            Poner(alPie, "TamanoDelPanel", new WSize(340, 64));
+            Poner(alPie, "Ancla", new WPoint(600, 950));
+            Llamar(alPie, "Encender");
+            Llamar(alPie, "AlEmpezarTramo", "abrir detalles");
+            Llamar(alPie, "AlPintarBarras", 5);
+            var tam = (WSize)PropDe(alPie, "TamanoDelPanel")!;
+            var lleno = PropDe(alPie, "RectDelPanel") as WRect?;
+            var cuadrado = new WRect(578, 928, 44, 44);
+            Debe(Math.Abs(tam.Width - 340) < 0.05 && Math.Abs(tam.Height - 198.6) < 0.05, $"con cinco barras, el tamaño con que se calcula es 340×198,6: {tam}");
+            Debe(lleno is { } l && Math.Abs(l.Height - 198.6) < 0.05 && new WRect(0, 0, 1920, 1040).Contains(l) && !l.IntersectsWith(cuadrado),
+                $"y el sitio es para ese alto: dentro del área de trabajo y sin tapar el ancla junto al borde de abajo: {(lleno.HasValue ? lleno.Value.ToString() : "sin rect")}");
+            // Lo pulsado que se esquivó con 64 se sigue esquivando con 198,6: con 64 cabe arriba a la derecha (854..918)
+            // sin cruzarlo (792..848); con 198,6, arriba a la derecha (719,4..918) lo cruzaría.
+            var pulsado = new WRect(700, 800, 200, 40);
+            Llamar(alPie, "AlPintarBarras", 0);
+            Llamar(alPie, "AlConocerPulsada", pulsado, true);
+            Llamar(alPie, "AlPintarBarras", 5);
+            var trasCrecer = PropDe(alPie, "RectDelPanel") as WRect?;
+            Debe(trasCrecer is { } g && Math.Abs(g.Height - 198.6) < 0.05 && !g.IntersectsWith(WRect.Inflate(pulsado, 8, 8)),
+                $"y al crecer se recoloca sin cruzar lo pulsado que ya conocía: {(trasCrecer.HasValue ? trasCrecer.Value.ToString() : "sin rect")}");
+            var aEscala = Activator.CreateInstance(tMaq, new[] { encendida })!;
+            Poner(aEscala, "RcWork", new WRect(0, 0, 2880, 1560));
+            Poner(aEscala, "Escala", 1.5);
+            Poner(aEscala, "TamanoDelPanel", new WSize(510, 96));
+            Poner(aEscala, "Ancla", new WPoint(900, 600));
+            Llamar(aEscala, "Encender");
+            Llamar(aEscala, "AlPintarBarras", 5);
+            var tam15 = (WSize)PropDe(aEscala, "TamanoDelPanel")!;
+            Debe(Math.Abs(tam15.Width - 510) < 0.05 && Math.Abs(tam15.Height - 297.9) < 0.05, $"a escala 1,5 el tamaño va en físicos, 510×297,9: {tam15}");
+        }
+        var vistaDeJev = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "385");
+        if (vistaDeJev != null)
+            Debe(LineasDeCodigo(vistaDeJev, "Maquina.AlPintarBarras(") >= 1, "y la vista le dice a la máquina cuántas barras pinta, Maquina.AlPintarBarras(, en una línea de código");
 
         // (b) EL ATAJO DE INVOCAR A Ü NO SABE DE JEV: sigue abriendo el globo con el foco en el campo.
         var fuente = FuenteDelRepo("windows-client/src/Ui/FaceWindow.xaml.cs", "385");
@@ -15207,6 +15444,11 @@ internal static class Contrato
             Debe(veces == 1, $"PanelDeJev.cs aplica EstilosDeVentana.ExtendidosDelPanel, nombrada una vez, en la línea que la toma: la nombra {veces} vez/veces");
             Debe(ventana.Contains("ShowActivated = false", StringComparison.Ordinal) && ventana.Contains("Focusable = false", StringComparison.Ordinal),
                 "y la ventana nace sin activarse ni tomar el foco: ShowActivated = false y Focusable = false");
+            // AÑADIDA AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO: el overlay y la flecha se excluían de
+            // la captura y el panel no, y es opaco, siempre encima y dentro del área de trabajo: la foto que Luna manda
+            // al modelo (CopyFromScreen sobre la ventana de trabajo) llevaba 340×199 de panel tapando el formulario.
+            Debe(LineasDeCodigo(ventana, "SetWindowDisplayAffinity(_handle, EstilosDeVentana.Afinidad)") >= 1,
+                "y se excluye de la captura como el overlay y la flecha: SetWindowDisplayAffinity(_handle, EstilosDeVentana.Afinidad) en una línea de código");
         }
     }
 
