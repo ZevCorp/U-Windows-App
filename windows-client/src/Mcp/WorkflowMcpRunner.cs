@@ -38,7 +38,7 @@ public sealed class WorkflowMcpRunner
         LogBus.Publico("workflow", $"MCP invoca workflow_id='{workflowId}' context={SinValor.Forma(context)}");
         // Telemetría "Windows Live": corrida de workflow (subconsciente). runId correlaciona sus pasos.
         string runId = TelemetryBus.NewRunId();
-        TelemetryBus.Emit("workflow_start", workflowId: workflowId, runId: runId, label: context);
+        TelemetryBus.Emit("workflow_start", workflowId: workflowId, runId: runId, label: SinValor.Forma(context));
         if (string.IsNullOrWhiteSpace(workflowId))
             return "la llamada al workflow no trajo workflow_id";
         if (!_graphConfig.IsConfigured)
@@ -54,8 +54,10 @@ public sealed class WorkflowMcpRunner
         player.StepDone += (_, outcome) =>
         {
             _voice.Narrate(outcome.Ok ? $"✓ {outcome.Label}" : $"✗ {outcome.Label}: {outcome.Error}");
+            // Al panel, el NÚMERO y el TIPO del paso, nunca su etiqueta: la de un select es la opción
+            // elegida y la de una fila de ALV, lo que dice la fila (spec 051, S9).
             TelemetryBus.Emit("workflow_step", workflowId: workflowId, runId: runId,
-                phase: outcome.Ok ? "ok" : "error", label: outcome.Label);
+                phase: outcome.Ok ? "ok" : "error", label: $"paso {outcome.StepOrder} · {outcome.ActionType}");
         };
 
         var variables = string.IsNullOrWhiteSpace(context)
@@ -75,9 +77,13 @@ public sealed class WorkflowMcpRunner
             + (result.Ok ? "" : fallo == null ? " · sin paso fallido: se paró antes o fuera de los pasos"
                 : $" · se paró en el paso {fallo?.StepOrder} ({fallo?.ActionType})"));
         if (!result.Ok) LogBus.Log("workflow", $"el motivo: {result.Error}");
+        // Al panel, lo mismo que la línea pública de arriba y SIN result.Error (spec 051, S10). La
+        // expresión la congela el censo de la 395 tal cual: si falló sin paso fallido (se paró antes
+        // de los pasos) el label sale con el paso vacío, «se paró en el paso  ()», y lo que lo
+        // distingue es la línea «resultado:» de arriba, que el espejo también sube entera.
         TelemetryBus.Emit("workflow_end", workflowId: workflowId, runId: runId,
             phase: result.Ok ? "ok" : "error",
-            label: result.Ok ? $"completado ({result.Tally})" : result.Error,
+            label: result.Ok ? $"completado ({result.Tally})" : $"se paró en el paso {fallo?.StepOrder} ({fallo?.ActionType})",
             detail: new { completed = result.Completed, omitted = result.Omitted, steps = result.Total, aligned = result.AlignedConsciously });
         if (result.Ok && result.AlignedConsciously)
         {

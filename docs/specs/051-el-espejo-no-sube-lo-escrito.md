@@ -4,7 +4,8 @@ Estado: **en construcción** (spec y fases revisadas tras el crítico: 9 refutac
 comprobadas ciertas y aplicadas) · **fase 0 hecha**: las seis promesas en `Contrato.cs`, rojas por sus
 razones, con los censos como datos y un lector de fuentes que corrigió tres medidas de esta spec
 (el ancla de E17, la quinta ruta `/agent/` y un sitio que la 399(b) encuentra fuera del censo) ·
-**fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) · Spec 051 · 2026-09-23 ·
+**fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) ·
+**fase 3 hecha** (395 verde: las salidas directas suben por forma, tipo y número) · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–399**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -564,6 +565,41 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   en cada línea, una con el valor; y la 395 nombra `EspejoDelLog.cs:56` dos veces (un `Emit` fuera
   del censo y un `Anotado +=` que no es canal). En los dos, ningún otro veredicto cambió. Y el
   `catch { }` de `LogBus.cs:57`, que la spec dejaba fuera, lo tomó esta fase (§*Lo que queda fuera*).
+- **2026-09-24 · Fase 3: la 395 en verde a la primera, con la tabla de §*Decisión 3* tal cual.**
+  De los **10** `TelemetryBus.Emit` del código (`grep`, igual que el censo de la 395(b)), **7**
+  llevaban texto libre (S1, S2, S3, S4, S8, S9, S10): S1 lo cerró la fase 2 y los **6** restantes
+  esta —`AgentLoop.cs:99, 139, 188` y `WorkflowMcpRunner.cs:41, 59, 84`—; S5, S6 y S7 quedan como
+  estaban, congelados. `AgentLoop.cs` gana `using U.Graph;` para `SinValor`. Contrato: 300 →
+  **301** cumplidas; rojas solo 397, 398 y 399, las de las fases 4–5; la 399(a) sigue en **3 de 35**
+  y la 399(b) en **10** (esta fase no toca ninguna línea de log) **(M)**. Sabotajes, cada uno visto
+  por `diff` contra una copia (una sola línea, CRLF conservada), juzgado y restaurado con `diff` vacío
+  **(M)**: (función) `label: SinValor.Forma(context)` → `label: context` en `WorkflowMcpRunner.cs:41`
+  → la 395 roja por (b), `:41` fuera del censo y «falta S8», y por (a), `label` con el contexto entero
+  y los tres valores inventados dentro; ningún otro veredicto cambió (la 397(e) sigue verde: la línea
+  «MCP invoca» es P24, no S8); (cableado) `LogBus.Logged += (_, l) => TelemetryBus.Emit("log", label:
+  l);` en `Encender` → la 395 roja por (b), `EspejoDelLog.cs:56` fuera del censo (11 en el código),
+  por (c), `:56: Logged += no es un canal censado`, y además por (a′): la línea `▶ objetivo:` de O1
+  —que hasta la fase 5 lleva el objetivo entero en el log local— salió por ese oyente con
+  «ZZ-INVENTADO-051» dentro.
+- **2026-09-24 · El juez dinámico de la 394 no ve un evento con otra `phase`.** Visto en el sabotaje
+  de cableado de la fase 3: con `LogBus.Logged += (_, l) => TelemetryBus.Emit("log", label: l)`
+  activo —`Encender` lo suscribe dentro del propio juez de la 394— cada línea de la 394(a) salió
+  **dos** veces, una con el texto entero y `phase` vacía, y la 394 siguió **verde**: filtra los
+  eventos por `x.Phase == etiqueta` antes de contarlos y de buscar el valor **(M)**. Lo atrapan la
+  395(b) y (c) por las fuentes, así que hoy no hay agujero; pero el enunciado de la 394 dice «solo
+  sale del equipo su etiqueta y su longitud», y su juez dinámico solo lo comprueba para los eventos
+  que ya llevan la etiqueta. El arreglo es de juez, no de enunciado —contar y buscar el valor en
+  **todos** los eventos emitidos durante la línea, sea cual sea su `phase`—; se anota y no se hace
+  aquí: cambiar el juez de otra promesa no es de esta fase. Tras la fase 5 la 395(a′) deja de verlo
+  también (O1 ya no lleva el objetivo), y la red queda solo en las fuentes.
+- **2026-09-24 · S10 con el paso vacío.** El censo congela el `label` de `workflow_end` como
+  `result.Ok ? $"completado ({result.Tally})" : $"se paró en el paso {fallo?.StepOrder}
+  ({fallo?.ActionType})"`. Cuando falla **sin** paso fallido (`fallo` nulo: se paró antes de los pasos
+  o fuera de ellos) sale «se paró en el paso  ()» —no miente, pero no dice dónde—. P25 ya lo distingue
+  («sin paso fallido: se paró antes o fuera de los pasos») y sube entera por el espejo, pero como
+  evento `log` **sin** `runId` (S1 no lo lleva): en el panel se casa con el `workflow_end` por la
+  hora, no por la corrida. El diagnóstico no se pierde; se deja escrito en el código y aquí.
+  Distinguirlo también en S10 es cambiar una fila del censo de la 395: decisión del dueño.
 
 ## Revisiones
 
