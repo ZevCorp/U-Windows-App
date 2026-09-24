@@ -12,7 +12,8 @@ del 2026-09-24** (fase 6: diez hallazgos de un crítico sobre la fase 5, los die
 repetidos): ocho sitios más en el censo (35 → **43**), la cuenta del recorrido por lotes y el juez de
 la comprobación arreglados donde nacen, los dos servidores locales cerrados a otros orígenes, y dos
 promesas nuevas, **400** (el juez de la comprobación) y **401** (los servidores locales), **las ocho
-en verde** (306 cumplidas, 0 rojas) · falta la compuerta (`verificar.ps1`) y el nivel 4 · Spec 051 · 2026-09-23 ·
+en verde** (306 cumplidas, 0 rojas) · **compuerta automática pasada** (`verificar.ps1`, 2026-09-24
+12:19: compila, 306/306 y 46/46) · falta el nivel 4, que es del dueño · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–401**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -902,6 +903,6 @@ al 5). Los números de línea son los de `00dcd42`.
 - [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), y el de la voz intacto — 2026-09-24, fase 5: 304 cumplidas, 0 rojas; VOZ ÍNTEGRA
 - [x] Dos sabotajes por promesa —función y cableado—, vistos rojos y verificados por diff — fases 1–5, uno de cada por promesa (394–399), en §*Hallazgos*
 - [x] Revisión del 2026-09-24 (fase 6): 394–401 verdes, un sabotaje por promesa tocada visto rojo — 306 cumplidas, 0 rojas; los cinco sabotajes en §*Hallazgos*
-- [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
+- [x] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md` — 2026-09-24 12:19 sobre `1e034c9`: rama, árbol limpio, nada colado (35 archivos), compila, contrato **306/306**, voz **46/46**; escenarios **NO CORRIDO** (abren `U.exe` sobre el escritorio, y esta rama no lo ejecuta); la tabla, entera en el PR
 - [ ] Nivel 4 en ≥2 pantallas, con nombre: triage (`SAPLY000`) y admisión (`NV2000`)
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)
