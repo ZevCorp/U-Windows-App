@@ -6,34 +6,34 @@ import UMac
 
 struct Face: View {
     @ObservedObject var model: AppModel
+    @AppStorage("faceDark") private var dark = false
+    @State private var blink = false
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.08)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 16, paused: model.mode != .speaking)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
-            let blinking = Int(time * 10) % 47 == 0
-            ZStack {
-                Circle().fill(.black.opacity(0.10)).blur(radius: 4).offset(y: 4)
-                Circle().fill(LinearGradient(colors: [Color(red: 0.98, green: 0.97, blue: 1), Color(red: 0.87, green: 0.82, blue: 1)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                Circle().strokeBorder(color.opacity(0.65), lineWidth: model.busy ? 3 : 1.5)
-                VStack(spacing: 11) {
-                    HStack(spacing: 17) {
-                        Capsule().fill(Color(red: 0.25, green: 0.16, blue: 0.40)).frame(width: 7, height: blinking ? 2 : 12)
-                        Capsule().fill(Color(red: 0.25, green: 0.16, blue: 0.40)).frame(width: 7, height: blinking ? 2 : 12)
-                    }
-                    Capsule().fill(Color(red: 0.25, green: 0.16, blue: 0.40))
-                        .frame(width: model.mode == .error ? 14 : 21, height: model.mode == .speaking ? 5 + 8 * abs(sin(time * 9)) : 4)
-                }
-                if model.busy { Circle().trim(from: 0, to: 0.22).stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round)).rotationEffect(.degrees(time * 150)) }
-                VStack { Spacer(); HStack { Spacer(); Circle().fill(model.microphone ? .green : .gray).frame(width: 11, height: 11).overlay(Circle().stroke(.white, lineWidth: 2)) }.padding(4) }
-            }
+            FaceArtwork(mode: model.mode, dark: dark, blink: blink, eyeShift: model.faceEyeShift,
+                        mouthOpen: model.mode == .speaking ? 0.25 + 0.65 * abs(sin(time * 9)) : 0,
+                        mouthRound: (sin(time * 3.7) + 1) / 2)
         }
-        .frame(width: 70, height: 70)
-        .padding(9)
-        .contentShape(Circle())
+        .frame(width: 66, height: 66)
+        .padding(11)
+        .contentShape(Rectangle())
+        .task {
+            do {
+                while !Task.isCancelled {
+                    try await Task.sleep(for: .seconds(Double.random(in: 8...18)))
+                    blink = true
+                    try await Task.sleep(for: .milliseconds(110))
+                    blink = false
+                }
+            } catch { blink = false }
+        }
         .onTapGesture(count: 2) { model.toggleMicrophone() }
         .onTapGesture { model.showWindow?() }
         .contextMenu {
             Button("Hablar / silenciar") { model.toggleMicrophone() }
             Button("Detener tarea") { model.stop() }
+            Toggle("Carita oscura", isOn: $dark)
             Button("Configuración") { model.selectedTab = 1; model.showWindow?() }
             Divider()
             Button("Salir de Ü") { NSApp.terminate(nil) }
@@ -43,7 +43,6 @@ struct Face: View {
         .accessibilityLabel("Ü, \(model.mode.rawValue)")
         .accessibilityAddTraits(.isButton)
     }
-    var color: Color { model.mode == .error ? .orange : model.busy ? .purple : .indigo }
 }
 
 struct MainView: View {

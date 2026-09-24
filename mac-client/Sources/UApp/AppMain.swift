@@ -49,7 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         face.orderFrontRegardless()
         model.showWindow = { [weak self] in self?.show() }
         model.hideWindow = { [weak self] in self?.window.orderOut(nil) }
-        model.desktop.onHighlight = { [weak self] frame in self?.showHighlight(frame) }
+        model.desktop.onHighlight = { [weak self] frame in self?.showHighlight(frame); self?.moveFace(beside: frame) }
+        model.desktop.onAction = { [weak self] frame in self?.moveFace(beside: frame) }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "Ü"
         let menu = NSMenu()
@@ -101,6 +102,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let observation { NSWorkspace.shared.notificationCenter.removeObserver(observation) }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    private func moveFace(beside quartzFrame: CGRect) {
+        guard !window.isVisible else { return }
+        let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height
+        let target = CGRect(x: quartzFrame.minX, y: primaryHeight - quartzFrame.maxY, width: quartzFrame.width, height: quartzFrame.height)
+        let screen = NSScreen.screens.first { $0.frame.contains(CGPoint(x: target.midX, y: target.midY)) } ?? NSScreen.main
+        guard let bounds = screen?.visibleFrame else { return }
+        let size = face.frame.size, gap = 10.0
+        var x = target.maxX + gap, y = target.midY - size.height / 2
+        if x + size.width > bounds.maxX { x = target.minX - size.width - gap }
+        if x < bounds.minX { x = target.midX - size.width / 2; y = target.minY - size.height - gap }
+        x = max(bounds.minX, min(x, bounds.maxX - size.width))
+        y = max(bounds.minY, min(y, bounds.maxY - size.height))
+        model.faceEyeShift = target.midX < x + size.width / 2 ? -3.5 : 3.5
+        // Never wait for a visual transition before issuing the AX or CGEvent action.
+        face.setFrameOrigin(CGPoint(x: x, y: y))
+    }
     func showHighlight(_ quartzFrame: CGRect) {
         highlight?.close()
         let primaryHeight = CGDisplayBounds(CGMainDisplayID()).height

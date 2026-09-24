@@ -5,15 +5,24 @@ import UCore
 public final class Desktop {
     public let gate = ActionGate()
     public let reader = AccessibilityReader()
-    private lazy var input = InputDriver(gate: gate)
+    private lazy var input: InputDriver = {
+        let driver = InputDriver(gate: gate)
+        driver.onClick = { [weak self] point in self?.onAction?(CGRect(x: point.x, y: point.y, width: 1, height: 1)) }
+        return driver
+    }()
     public private(set) var snapshot: DesktopSnapshot?
     public private(set) var geometry = ScreenCapture.geometry(CGMainDisplayID())
     private var screenshotRequested = false
     private var displayID = CGMainDisplayID()
     public private(set) var generation: UInt64 = 0
     public var onHighlight: ((CGRect) -> Void)?
+    public var onAction: ((CGRect) -> Void)?
     public private(set) var lastJevTiming: [String: Double] = [:]
-    public init() {}
+    public init() {
+        reader.onPress = { [weak self] frame in
+            Task { @MainActor in self?.onAction?(frame) }
+        }
+    }
     public func begin() { generation = gate.begin(); snapshot = nil; screenshotRequested = false }
     public func stop() { gate.stop() }
 

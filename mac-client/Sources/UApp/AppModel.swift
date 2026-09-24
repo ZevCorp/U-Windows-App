@@ -9,6 +9,7 @@ struct ChatMessage: Identifiable { let id = UUID(); var text: String; let user: 
 final class AppModel: ObservableObject {
     enum Mode: String { case ready = "Lista", listening = "Te escucho", working = "Trabajando", speaking = "Hablando", question = "Necesito un dato", error = "Necesito atención" }
     @Published var mode: Mode = .ready
+    @Published var faceEyeShift = 0.0
     @Published var jevStatus = "Jev · pendiente de conexión"
     private var jev: JevClient?
     @Published var status = "Dime qué necesitas hacer."

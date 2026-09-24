@@ -23,6 +23,7 @@ public struct DesktopSnapshot: @unchecked Sendable {
 
 /// AX is synchronous IPC. All reads and actions run on one background queue with a time budget.
 public final class AccessibilityReader: @unchecked Sendable {
+    public var onPress: (@Sendable (CGRect) -> Void)?
     private let queue = DispatchQueue(label: "com.zevcorp.u.mac.accessibility", qos: .userInitiated)
     public init() {}
     public static var trusted: Bool { AXIsProcessTrusted() }
@@ -112,6 +113,7 @@ public final class AccessibilityReader: @unchecked Sendable {
             let target = try TargetResolver.resolve(query, in: snapshot.controls.map(\.target))
             guard let element = snapshot.elements[target.id] else { throw AgentError.staleFocus }
             guard Self.attribute(element, kAXEnabledAttribute) as? Bool != false else { throw AgentError.unavailable("El control está deshabilitado.") }
+            if let frame = Self.frame(element) { self.onPress?(frame) }
             let error = AXUIElementPerformAction(element, kAXPressAction as CFString)
             guard error == .success else { throw AgentError.unavailable("AXPress no está disponible para este control (\(error.rawValue)). Usa la captura para localizarlo.") }
         }

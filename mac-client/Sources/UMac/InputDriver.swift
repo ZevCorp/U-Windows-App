@@ -6,6 +6,7 @@ import UCore
 public final class InputDriver {
     public static let syntheticEventTag: Int64 = 0x554D4143
     private let gate: ActionGate
+    public var onClick: ((CGPoint) -> Void)?
     public init(gate: ActionGate) { self.gate = gate }
     public func check(_ generation: UInt64, pid: pid_t? = nil) throws {
         try Task.checkCancellation()
@@ -20,6 +21,7 @@ public final class InputDriver {
     }
     public func click(_ point: CGPoint, generation: UInt64, pid: pid_t, right: Bool = false, double: Bool = false) async throws {
         try check(generation, pid: pid)
+        onClick?(point)
         let button: CGMouseButton = right ? .right : .left
         for number in 1...(double ? 2 : 1) {
             try check(generation, pid: pid)
