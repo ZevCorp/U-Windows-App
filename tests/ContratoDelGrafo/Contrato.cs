@@ -858,6 +858,15 @@ internal static class Contrato
         Prueba("355. el resumen se pinta sin ejecutar marcado: títulos, viñetas y negritas se reconocen y todo lo demás es texto literal", ElResumenSePintaSinEjecutarMarcado);
         Prueba("356. el botón dice lo que va a hacer —«Generar resumen (N)», «Actualizar resumen» cuando las fotos cambiaron— y el progreso cuenta sobre el plan: «Leyendo fotos 4–6 de 12…»", ElBotonYElProgresoDicenLaVerdad);
         Prueba("357. si el modelo falla a mitad, lo leído se conserva, el error se dice, y reintentar lee SOLO lo que faltó", SiElModeloFallaLoLeidoSeConserva);
+
+        // ── Spec 051: «¿por qué vino a cardiología?», al soltar la historia en la Nota ────────
+        // El motivo casi nunca está en un estudio cardiológico —está en la remisión, en urgencias, en la
+        // interconsulta—, así que aquí se lee TODA la historia; la 351 sigue intacta para su panel.
+        // 420-439 reservadas el 2026-09-24 con la sesión del collar, que usa 410-419.
+        Prueba("420. lo soltado se reparte por su tipo: una foto (jpg, jpeg, png, bmp, gif, tif, tiff, webp, heic, heif) se lee como imagen, un PDF como archivo, y cualquier otra cosa se nombra como no admitida —con su nombre y qué hacer— sin tumbar a las demás; la extensión se mira sin distinguir mayúsculas", LoSoltadoSeRepartePorSuTipo);
+        Prueba("421. leer la historia la TRANSCRIBE literal, por páginas y párrafos: cada documento viaja precedido de «Documento n — id: Dn», la foto como imagen con detalle alto y el PDF como archivo con su nombre, todo con store:false; las fotos van de 3 en 3 y cada PDF solo; lo que vuelve se convierte en párrafos con id estable «Dn-pP-k»; y un documento del que no volvió nada queda sin leer, diciendo por qué", LaHistoriaSeTranscribeLiteral);
+        Prueba("422. «¿por qué vino a cardiología?» se pregunta con los párrafos de TODA la historia —de cardiología o no— y sin ninguna imagen ni archivo; la respuesta es UNA frase de como mucho 220 caracteres, y los párrafos que la sostienen se copian en código de la transcripción por su id: un id que no existe se descarta, y sin ninguna cita válida el titular es «Los documentos no dicen por qué vino a cardiología», aunque el modelo haya escrito una frase", ElMotivoSeCitaCopiandoDelDocumento);
+        Prueba("423. soltar más documentos no vuelve a leer los ya leídos y rehace el motivo con todos; si la lectura falla a mitad, lo leído se conserva, el error nombra el documento que faltó, y reintentar lee solo lo que faltó", SoltarMasNoVuelveALeerLoLeido);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -13672,6 +13681,260 @@ internal static class Contrato
             "del chat viajan solo las últimas 10 vueltas");
         Debe((bool)(!cp.Contains("data:image")), "ni rastro de una imagen en la pregunta");
         Debe((bool)(!string.IsNullOrWhiteSpace(respuesta) && s.Chat.Count == 13), $"la vuelta queda en el historial: {s.Chat.Count} de 13");
+    }
+
+    // ── Spec 051: la historia clínica soltada en la Nota ──────────────────────────────────────────
+
+    /// <summary>Qué lleva un cuerpo: imágenes, archivos y los ids que anuncian «Documento n — id: X».</summary>
+    private static (int Imagenes, int Archivos, List<string> Ids, string Texto) LoQueLlevaLaHistoria(string cuerpo)
+    {
+        int imagenes = 0, archivos = 0;
+        var ids = new List<string>();
+        var texto = new System.Text.StringBuilder();
+        using var doc = JsonDocument.Parse(cuerpo);
+        if (doc.RootElement.TryGetProperty("instructions", out var ins)) texto.Append(ins.GetString()).Append('\n');
+        if (!doc.RootElement.TryGetProperty("input", out var entrada)) return (0, 0, ids, texto.ToString());
+        foreach (var mensaje in entrada.EnumerateArray())
+        {
+            if (!mensaje.TryGetProperty("content", out var contenido) || contenido.ValueKind != JsonValueKind.Array) continue;
+            foreach (var parte in contenido.EnumerateArray())
+            {
+                string tipo = parte.TryGetProperty("type", out var ti) ? ti.GetString() ?? "" : "";
+                if (tipo == "input_image") imagenes++;
+                if (tipo == "input_file") archivos++;
+                if (tipo == "input_text")
+                {
+                    string t = parte.GetProperty("text").GetString() ?? "";
+                    texto.Append(t).Append('\n');
+                    var m = System.Text.RegularExpressions.Regex.Match(t, @"^Documento \d+ — id: (\S+)");
+                    if (m.Success) ids.Add(m.Groups[1].Value);
+                }
+            }
+        }
+        return (imagenes, archivos, ids, texto.ToString());
+    }
+
+    /// <summary>
+    /// La historia de mentira: D2 es la remisión de MEDICINA GENERAL —no es cardiología— y es la que dice
+    /// por qué vino. El motivo cita un id bueno y uno que no existe, para que se vea cuál sobrevive.
+    /// </summary>
+    private static Func<string, CancellationToken, Task<string>> ModeloDeLaHistoria(
+        List<string> cuerpos, ISet<string>? callar = null, Func<int, bool>? fallaEn = null)
+    {
+        return (cuerpo, _) =>
+        {
+            cuerpos.Add(cuerpo);
+            if (fallaEn != null && fallaEn(cuerpos.Count)) throw new HttpRequestException("503 Service Unavailable (de mentira)");
+            var (imagenes, archivos, ids, _) = LoQueLlevaLaHistoria(cuerpo);
+            if (imagenes == 0 && archivos == 0)
+                return Task.FromResult(RespuestaDeOpenAI("```json\n" + JsonSerializer.Serialize(new
+                {
+                    motivo = "Viene remitido por dolor torácico opresivo de esfuerzo con FEVI reducida.",
+                    citas = new[] { "D2-p1-2", "D9-p9-9" },
+                }) + "\n```"));
+            object Paginas(string id) => id switch
+            {
+                "D1" => new object[] { new { pagina = 1, parrafos = new[] { "ECOCARDIOGRAMA TRANSTORÁCICO", "FEVI 35 %." } } },
+                "D2" => new object[] { new { pagina = 1, parrafos = new[] { "Nota de medicina general.", "Se remite a cardiología por dolor torácico opresivo de esfuerzo." } } },
+                "D3" => new object[]
+                {
+                    new { pagina = 1, parrafos = new[] { "Laboratorio clínico." } },
+                    new { pagina = 2, parrafos = new[] { "Troponina I 0,02 ng/mL." } },
+                },
+                _ => new object[] { new { pagina = 1, parrafos = new[] { $"Texto de {id}." } } },
+            };
+            var documentos = ids.Where(id => callar == null || !callar.Contains(id)).Select(id => new { id, paginas = Paginas(id) }).ToArray();
+            return Task.FromResult(RespuestaDeOpenAI(JsonSerializer.Serialize(new { documentos })));
+        };
+    }
+
+    /// <summary>Una historia con documentos de mentira: (nombre, esPdf) en ese orden.</summary>
+    private static dynamic? HistoriaCon(params (string Nombre, bool Pdf)[] docs)
+    {
+        var tHistoria = Cardio("HistoriaDeLaConsulta");
+        var tTipo = Cardio("TipoDeDocumento");
+        var agregar = MetodoCardio(tHistoria, "Agregar", 3);
+        if (tHistoria == null || tTipo == null || agregar == null) return null;
+        var h = Activator.CreateInstance(tHistoria)!;
+        foreach (var (nombre, pdf) in docs)
+            agregar.Invoke(h, new object[] { nombre, Enum.Parse(tTipo, pdf ? "Pdf" : "Foto"), new byte[] { 1, 2, 3 } });
+        return h;
+    }
+
+    private static void LoSoltadoSeRepartePorSuTipo()
+    {
+        var t = Cardio("HistoriaClinica");
+        var tipoDe = MetodoCardio(t, "TipoDe", 1);
+        var repartir = MetodoCardio(t, "Repartir", 1);
+        if (tipoDe == null || repartir == null) { Pendiente("Cardio.HistoriaClinica.TipoDe(ruta) + Repartir(rutas)", "420", "051"); return; }
+        string Tipo(string ruta) => tipoDe.Invoke(null, new object[] { ruta })!.ToString()!;
+
+        Debe(new[] { "a.jpg", "b.JPEG", "c.png", "d.bmp", "e.gif", "f.tif", "g.TIFF", "h.webp", "i.heic", "j.HEIF" }.All(r => Tipo(r) == "Foto"),
+            "las diez extensiones de foto se leen como imagen, con mayúsculas o sin ellas");
+        Debe(Tipo("historia.pdf") == "Pdf" && Tipo(@"C:\x\REMISION.PDF") == "Pdf", "un PDF es un archivo, se llame como se llame");
+        Debe(Tipo("informe.docx") == "NoAdmitido" && Tipo("sin-extension") == "NoAdmitido" && Tipo("x.pdf.exe") == "NoAdmitido",
+            "lo demás no se admite: ni Word, ni sin extensión, ni un .exe disfrazado");
+
+        dynamic r = repartir.Invoke(null, new object[] { new[] { @"C:\h\eco.jpg", @"C:\h\informe.docx", @"C:\h\remision.pdf", @"C:\h\ecg.PNG" } })!;
+        var fotos = ((IEnumerable<string>)r.Fotos).ToList();
+        var pdfs = ((IEnumerable<string>)r.Pdfs).ToList();
+        var avisos = ((IEnumerable<string>)r.Avisos).ToList();
+        Debe(fotos.Count == 2 && pdfs.Count == 1, $"lo admitido sigue adelante aunque haya uno que no: {fotos.Count} foto(s), {pdfs.Count} PDF");
+        Debe(avisos.Count == 1 && avisos[0].Contains("informe.docx") && avisos[0].Contains("PDF"),
+            $"el que no se admite se nombra y se dice qué hacer: «{string.Join(" | ", avisos)}»");
+    }
+
+    private static void LaHistoriaSeTranscribeLiteral()
+    {
+        var tLector = Cardio("LectorDeLaHistoria");
+        var ctor = tLector?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var leer = MetodoCardio(tLector, "LeerAsync", 3);
+        dynamic? h = HistoriaCon(("eco.jpg", false), ("remision.jpg", false), ("laboratorio.pdf", true),
+                                 ("ecg.jpg", false), ("nota.jpg", false), ("epicrisis.pdf", true));
+        if (ctor == null || leer == null || h == null)
+        {
+            Pendiente("Cardio.LectorDeLaHistoria(enviar, modelo).LeerAsync + HistoriaDeLaConsulta.Agregar", "421", "051");
+            return;
+        }
+
+        var cuerpos = new List<string>();
+        var lector = ctor.Invoke(new object[] { ModeloDeLaHistoria(cuerpos, callar: new HashSet<string> { "D5" }), "modelo-x" });
+        ((Task)leer.Invoke(lector, new object[] { h, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
+
+        var conDocs = cuerpos.Select(LoQueLlevaLaHistoria).Where(x => x.Imagenes + x.Archivos > 0).ToList();
+        Debe(conDocs.Where(x => x.Imagenes > 0).All(x => x.Imagenes <= 3 && x.Archivos == 0)
+             && conDocs.Where(x => x.Imagenes > 0).Sum(x => x.Imagenes) == 4,
+            $"las 4 fotos van de 3 en 3 y sin PDFs mezclados: [{string.Join(", ", conDocs.Select(x => $"{x.Imagenes}i+{x.Archivos}a"))}]");
+        Debe(conDocs.Count(x => x.Archivos > 0) == 2 && conDocs.Where(x => x.Archivos > 0).All(x => x.Archivos == 1 && x.Imagenes == 0),
+            "cada PDF viaja solo");
+        Debe(conDocs.SelectMany(x => x.Ids).OrderBy(x => x).SequenceEqual(new[] { "D1", "D2", "D3", "D4", "D5", "D6" })
+             && conDocs.All(x => x.Ids.Count == x.Imagenes + x.Archivos),
+            $"cada documento va precedido de «Documento n — id: Dn»: [{string.Join(", ", conDocs.SelectMany(x => x.Ids))}]");
+        Debe(cuerpos.All(c => JsonDocument.Parse(c).RootElement.TryGetProperty("store", out var st) && st.ValueKind == JsonValueKind.False),
+            "todas las peticiones piden store:false");
+        Debe(conDocs.All(x => x.Texto.Contains("literal", StringComparison.OrdinalIgnoreCase)), "se pide transcribir LITERAL, no resumir");
+
+        string conPdf = cuerpos.First(c => LoQueLlevaLaHistoria(c).Archivos > 0);
+        Debe(conPdf.Contains("\"filename\":\"laboratorio.pdf\"") && conPdf.Contains("data:application/pdf;base64,"),
+            "el PDF viaja como archivo con su nombre");
+        string conFoto = cuerpos.First(c => LoQueLlevaLaHistoria(c).Imagenes > 0);
+        Debe(conFoto.Contains("\"detail\":\"high\""), "la foto de un documento viaja con detalle alto: letra pequeña");
+
+        var docs = ((System.Collections.IEnumerable)h.Documentos).Cast<dynamic>().ToList();
+        var d2 = ((System.Collections.IEnumerable)docs[1].Parrafos).Cast<dynamic>().Select(p => (string)p.Id).ToList();
+        var d3 = ((System.Collections.IEnumerable)docs[2].Parrafos).Cast<dynamic>().ToList();
+        Debe(d2.SequenceEqual(new[] { "D2-p1-1", "D2-p1-2" }), $"los párrafos tienen id estable «Dn-pP-k»: [{string.Join(", ", d2)}]");
+        Debe(d3.Count == 2 && (string)d3[1].Id == "D3-p2-1" && (int)d3[1].Pagina == 2 && (string)d3[1].Texto == "Troponina I 0,02 ng/mL.",
+            "la página se conserva, y el texto es el transcrito, tal cual");
+        Debe((bool)docs[1].Leido && !(bool)docs[4].Leido && !string.IsNullOrWhiteSpace((string)docs[4].Motivo),
+            $"del que no volvió nada queda sin leer, diciendo por qué: «{(string)docs[4].Motivo}»");
+    }
+
+    private static void ElMotivoSeCitaCopiandoDelDocumento()
+    {
+        var t = Cardio("LecturaDeLaHistoria");
+        var cuerpoMotivo = MetodoCardio(t, "CuerpoMotivo", 2);
+        var interpretar = MetodoCardio(t, "InterpretarMotivo", 2);
+        var tLector = Cardio("LectorDeLaHistoria");
+        var ctor = tLector?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var leer = MetodoCardio(tLector, "LeerAsync", 3);
+        dynamic? h = HistoriaCon(("eco.jpg", false), ("remision.jpg", false), ("laboratorio.pdf", true));
+        if (cuerpoMotivo == null || interpretar == null || ctor == null || leer == null || h == null)
+        {
+            Pendiente("Cardio.LecturaDeLaHistoria.CuerpoMotivo + InterpretarMotivo", "422", "051");
+            return;
+        }
+
+        var cuerpos = new List<string>();
+        var lector = ctor.Invoke(new object[] { ModeloDeLaHistoria(cuerpos), "modelo-x" });
+        ((Task)leer.Invoke(lector, new object[] { h, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
+
+        // 1. LA PREGUNTA LLEVA TODA LA HISTORIA, Y NINGUNA IMAGEN.
+        var delMotivo = cuerpos.Select(LoQueLlevaLaHistoria).LastOrDefault();
+        Debe(delMotivo.Imagenes == 0 && delMotivo.Archivos == 0, "el motivo se pregunta sin ninguna imagen ni archivo: solo lo transcrito");
+        Debe(delMotivo.Texto != null && delMotivo.Texto.Contains("[D2-p1-2]") && delMotivo.Texto.Contains("Se remite a cardiología")
+             && delMotivo.Texto.Contains("[D3-p2-1]") && delMotivo.Texto.Contains("por qué vino a cardiología", StringComparison.OrdinalIgnoreCase),
+            "lleva los párrafos de TODA la historia con su id —también la remisión de medicina general— y la pregunta");
+
+        // 2. LA CITA LA COPIA EL CÓDIGO; UN ID QUE NO EXISTE SE TIRA.
+        dynamic m = h.Motivo;
+        var citas = m == null ? new List<dynamic>() : ((System.Collections.IEnumerable)m.Citas).Cast<dynamic>().ToList();
+        Debe(m != null && (string)m.Titular == "Viene remitido por dolor torácico opresivo de esfuerzo con FEVI reducida.",
+            $"el titular es la frase del modelo cuando la sostiene una cita: «{(m == null ? "(sin motivo)" : (string)m.Titular)}»");
+        Debe(citas.Count == 1 && (string)citas[0].Id == "D2-p1-2" && (string)citas[0].Texto == "Se remite a cardiología por dolor torácico opresivo de esfuerzo."
+             && (string)citas[0].Documento == "remision.jpg" && (int)citas[0].Pagina == 1,
+            $"la cita es el párrafo DEL DOCUMENTO, con su nombre y su página, y el id inventado (D9-p9-9) se descarta: {citas.Count} cita(s)");
+
+        // 3. SIN CITA VÁLIDA NO HAY FRASE; Y LA FRASE ES UNA.
+        var parrafos = ((System.Collections.IEnumerable)h.Documentos).Cast<dynamic>()
+            .SelectMany(d => ((System.Collections.IEnumerable)d.Parrafos).Cast<object>()).ToList();
+        var lista = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(Cardio("Parrafo")!))!;
+        foreach (var p in parrafos) lista.Add(p);
+        dynamic Interpretar(string json) => interpretar.Invoke(null, new object[] { RespuestaDeOpenAI(json), lista })!;
+        string Titular(dynamic x) => (string)x.Titular;
+        const string sinMotivo = "Los documentos no dicen por qué vino a cardiología";
+
+        dynamic inventado = Interpretar("{\"motivo\":\"Viene por una arritmia.\",\"citas\":[\"D7-p1-1\"]}");
+        Debe(Titular(inventado) == sinMotivo && ((System.Collections.ICollection)inventado.Citas).Count == 0,
+            $"sin ninguna cita válida, NO se enseña la frase del modelo: «{Titular(inventado)}»");
+        Debe(Titular(Interpretar("{\"motivo\":\"\",\"citas\":[\"D2-p1-2\"]}")) == sinMotivo, "una cita sin frase tampoco es un motivo");
+        Debe(Titular(Interpretar("no hay JSON aquí")) == sinMotivo, "una respuesta que no se entiende no se convierte en titular");
+
+        string larga = "Viene por dolor torácico de esfuerzo. Además tiene hipertensión, diabetes y " + new string('x', 300);
+        string t2 = Titular(Interpretar(JsonSerializer.Serialize(new { motivo = larga, citas = new[] { "D2-p1-2" } })));
+        Debe(t2 == "Viene por dolor torácico de esfuerzo.", $"el titular es UNA frase: «{t2}»");
+        string sinPunto = new string('a', 400);
+        string t3 = Titular(Interpretar(JsonSerializer.Serialize(new { motivo = sinPunto, citas = new[] { "D2-p1-2" } })));
+        Debe(t3.Length <= 220, $"y de como mucho 220 caracteres: {t3.Length}");
+    }
+
+    private static void SoltarMasNoVuelveALeerLoLeido()
+    {
+        var tLector = Cardio("LectorDeLaHistoria");
+        var ctor = tLector?.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 2);
+        var leer = MetodoCardio(tLector, "LeerAsync", 3);
+        var agregar = MetodoCardio(Cardio("HistoriaDeLaConsulta"), "Agregar", 3);
+        var tTipo = Cardio("TipoDeDocumento");
+        dynamic? h = HistoriaCon(("eco.jpg", false), ("remision.jpg", false), ("laboratorio.pdf", true));
+        if (ctor == null || leer == null || agregar == null || tTipo == null || h == null)
+        {
+            Pendiente("Cardio.LectorDeLaHistoria.LeerAsync incremental", "423", "051");
+            return;
+        }
+        void Agregar(string nombre) => agregar.Invoke(h, new object[] { nombre, Enum.Parse(tTipo, "Foto"), new byte[] { 9 } });
+
+        var cuerpos = new List<string>();
+        int fallarEn = -1;
+        var lector = ctor.Invoke(new object[] { ModeloDeLaHistoria(cuerpos, fallaEn: n => n == fallarEn), "modelo-x" });
+        void Leer() => ((Task)leer.Invoke(lector, new object[] { h, (Action<string>)(_ => { }), CancellationToken.None })!).GetAwaiter().GetResult();
+        Leer();
+
+        // 1. UNO MÁS NO RELEE A LOS DEMÁS, PERO EL MOTIVO LOS MIRA A TODOS.
+        cuerpos.Clear();
+        Agregar("ecg.jpg");
+        Leer();
+        var leidos = cuerpos.Select(LoQueLlevaLaHistoria).Where(x => x.Imagenes + x.Archivos > 0).SelectMany(x => x.Ids).ToList();
+        Debe(leidos.SequenceEqual(new[] { "D4" }), $"al soltar uno más, solo ese viaja: [{string.Join(", ", leidos)}]");
+        var motivo = cuerpos.Select(LoQueLlevaLaHistoria).LastOrDefault();
+        Debe(motivo.Texto != null && motivo.Texto.Contains("[D2-p1-2]") && motivo.Texto.Contains("[D4-p1-1]"),
+            "y el motivo se rehace con TODOS los párrafos, los viejos y el nuevo");
+
+        // 2. SI FALLA A MITAD, LO LEÍDO SE QUEDA Y SE NOMBRA LO QUE FALTÓ.
+        cuerpos.Clear();
+        Agregar("uno.jpg"); Agregar("dos.jpg"); Agregar("tres.jpg"); Agregar("epicrisis.pdf");
+        // 1.ª llamada: las tres fotos. 2.ª: el PDF → falla.
+        fallarEn = 2;
+        string error = "";
+        try { Leer(); } catch (Exception e) { error = e.Message; }
+        var docs = ((System.Collections.IEnumerable)h.Documentos).Cast<dynamic>().ToList();
+        Debe(error.Contains("epicrisis.pdf"), $"el error nombra el documento que faltó: «{error}»");
+        Debe(docs.Take(7).All(d => (bool)d.Leido) && !(bool)docs[7].Leido, "lo leído antes del fallo se conserva");
+
+        cuerpos.Clear();
+        fallarEn = -1;
+        Leer();
+        var releidos = cuerpos.Select(LoQueLlevaLaHistoria).Where(x => x.Imagenes + x.Archivos > 0).SelectMany(x => x.Ids).ToList();
+        Debe(releidos.SequenceEqual(new[] { "D8" }), $"reintentar lee solo lo que faltó: [{string.Join(", ", releidos)}]");
     }
 
     private static void UnaFotoSePreparaYUnaIlegibleSeNombra()
