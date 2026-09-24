@@ -905,7 +905,7 @@ internal static class Contrato
         Prueba("371. la paleta de Jev es la del plano y se juzga sin pincel: cada token guarda su ARGB exacto, su significado y si es cromático —saturación HSL de 0,25 o más—, dos tokens cromáticos con distinto significado distan al menos 30° de tono salvo los tres pares aceptados por escrito —los azules entre sí—, los neutros y los acromáticos se juzgan solo por su valor, no hay token para lo que no existe —el cian del OCR—, y el overlay de Jev y el inspector no se encienden a la vez: la regla es pura, el inspector y la vista de Jev la consultan antes de encenderse y ponen su bandera, que se lee en sus fuentes, y un overlay impedido no se da por visible", LaPaletaDeJevEsLaDelPlano);
         Prueba("372. el panel de Jev sale de un modelo puro: dado un ciclo —objetivo, paso, candidatas, decisión, lo pulsado y tiempos— produce exactamente lo que se pinta: la cabecera «paso k» «· N detectados» «{ms}ms», los medidores cumplido y ausente, y cinco barras como mucho ordenadas de mayor a menor probabilidad con su valor a dos decimales y la etiqueta sola —numerada solo si dos de las cinco la comparten—; la resaltada es la pulsada por su id —la elegida solo mientras no se conozca la pulsada—, nunca una por parecido de texto; y si la mano pulsó otra que la elegida, el ticker lo dice", ElPanelDeJevSaleDeUnModeloPuro);
         Prueba("373. sin distribución no hay gráfico: con Luna, con la regla local o con una respuesta sin probabilidades no se pintan cabecera, medidores ni barras; el coste es el acumulado de la tarea a partir de los tokens facturados que devuelva el cliente, con cinco decimales, y sin tokens se enseña «—» y no crece; el ms de la cabecera es el de decidir; y un medidor sin dato enseña «—», nunca 0", SinDistribucionNoHayGrafico);
-        Prueba("374. los textos del panel describen el paso y no concluyen: cada estado tiene su cadena exacta, el motivo con que el tramo para se enseña tal cual llega —sin reescribirlo—, «Jev cree que ya está» nunca se convierte en «listo» ni en «terminado», pulsar la segunda mejor se dice como lo que es, y el punto del ticker va a 0,82 mientras el tramo sigue y a 0,42 cuando para", LosTextosDelPanelDescribenElPasoYNoConcluyen);
+        Prueba("374. los textos del panel describen el paso y no concluyen: cada estado tiene su cadena exacta, el motivo con que el tramo para se enseña tal cual llega —sin reescribirlo—, «Jev cree que ya está» nunca se convierte en «listo» ni en «terminado», pulsar la segunda mejor se dice como lo que es, una decisión vetada se dice vetada con el porqué del veto tal cual —nunca «pulsando» ni «no estoy seguro»— y sin barra resaltada, y el punto del ticker va a 0,82 mientras el tramo sigue y a 0,42 cuando para", LosTextosDelPanelDescribenElPasoYNoConcluyen);
         Prueba("375. el overlay pinta exactamente la lista que se ofreció al decisor: una caja por candidata con caja leída y ninguna más, en su orden, con su etiqueta sola; una candidata sin caja se ofrece pero no se pinta y se cuenta; la rosa es la de lo pulsado —por su id, o por la caja que la mano dice haber pulsado— y nunca la elegida antes de pulsar ni una por etiqueta —dos «Buscar» dan una sola rosa—; y las cajas caducan al cambiar la ventana de delante: la caducidad es pura y el gancho que la dispara se lee en el fuente del overlay", ElOverlayPintaExactamenteLoQueSeOfrecio);
         Prueba("376. el panel de Jev mide lo que dice el plano y su alto sale de sus partes y de un mínimo declarado, no del contenido: 340 de ancho, 64 sin resultados —el mínimo, que calca los 63,7 del vídeo; las partes suman 57,6— y 198,6 con cinco barras; el XAML medido sin pantalla da lo mismo y la zona de resultados recibe sus 314 enteros porque el borde no ocupa sitio; y si WPF no mide en el arnés, la promesa queda SIN JUZGAR, ni verde ni roja", ElPanelDeJevMideLoQueDiceElPlano);
         Prueba("377. el panel se pone donde no estorba, y se calcula sin pantalla: junto a la carita a (56, 32) de su borde por la escala —un ancla-punto es una carita de 0×0—, probando las cuatro esquinas en orden, sin tapar la carita ni los 22 de alrededor —el cuadrado de 44 de un ancla-punto—, a 12 del borde del área de trabajo, sin cruzar el notch ni ningún obstáculo ni la caja de lo pulsado si alguna esquina cabe, y si ninguna cabe se va a la esquina opuesta; nunca se sale del área de trabajo", ElPanelSePoneDondeNoEstorba);
@@ -913,7 +913,7 @@ internal static class Contrato
         Prueba("379. el overlay de Jev es una ventana por monitor en píxeles físicos, transparente, click-through, no activable, de herramienta y excluida de la captura —las máscaras son puras y el overlay las aplica, que se lee en su fuente—, y por defecto está apagado: lo enciende U_JEV_OVERLAY=si al encender Jev, la configuración es pura y dice por qué quedó como quedó, y el estado de la vista lo nombra", ElOverlayDeJevEsUnaVentanaPorMonitorYPorDefectoApagado);
         Prueba("380. todo lo de Jev se dibuja por Pantallas: la inversa —de físicos a la unidad de un monitor concreto, restando su origen— existe y con la ida da la identidad, un monitor secundario con otra escala convierte bien, no hay ninguna conversión a mano nueva bajo Ui/Jev, y al cambiar el DPI el overlay vuelve a aplicar el rect calculado y no el sugerido: la regla es pura y su llamada desde OnDpiChanged se lee en el fuente", TodoLoDeJevSeDibujaPorPantallas);
         Prueba("381. la flecha vuela a lo pulsado con la duración del plano y no cuando la app no está delante: la duración es la distancia entre 520 por la escala, acotada entre 1,05 y 2,2 s; aterriza a 42 por la escala del centro de lo pulsado; el camino sale y llega parado y no se devuelve; con la ventana de trabajo detrás de otra no hay vuelo; y quién está delante se le pregunta a Windows, no se da por hecho, que se lee en el fuente de la vista", LaFlechaVuelaALoPulsadoConLaDuracionDelPlano);
-        Prueba("382. nada de la vista bloquea el ciclo: la decisión pasa por el observador intacta —el mismo objeto, y una excepción del decisor sale tal cual—, envolver dos veces envuelve una, publicar un ciclo solo encola y nunca ejecuta en el acto —con un despachador que lanza si se le pide ejecutar ya, publicar no lanza—, con la cola sin vaciar se pinta solo el último ciclo, una excepción al pintar no sale al ciclo y queda en el log con su tipo y su mensaje, y el único BeginInvoke de la vista vive en su adaptador a WPF", NadaDeLaVistaBloqueaElCiclo);
+        Prueba("382. nada de la vista bloquea el ciclo: la vista oye cada paso decidido por el evento del mapa —AlDecidir, con la decisión ya vetada— y no envuelve ni reasigna el decisor, oírlo dos veces se suscribe una, y un oyente que lanza no sale al paso y queda en el log con su tipo y su mensaje; del evento sale el ciclo que se pinta —la pulsada es la del paso, solo si la mano terminó, y la caja de una candidata solo si el paso no cambió lo que se ve— y la línea que llega pegada a él pinta las mismas cajas; publicar un ciclo solo encola y nunca ejecuta en el acto —con un despachador que lanza si se le pide ejecutar ya, publicar no lanza—, con la cola sin vaciar se pinta solo el último ciclo, una excepción al pintar no sale al ciclo y queda en el log con su tipo y su mensaje, y el único BeginInvoke de la vista vive en su adaptador a WPF", NadaDeLaVistaBloqueaElCiclo);
         Prueba("383. apagar Jev cierra las tres ventanas —overlay, panel y flecha— y Escape o soltar lo señalado vacían el overlay, esconden la flecha y dejan el panel sin corrida: la máquina es pura y sus dos ganchos se leen en el parcial; el interruptor del decisor sigue apagando el catálogo byte a byte", ApagarJevCierraLasTresVentanas);
         Prueba("384. una sola cosa vuela por clic: mientras corre un tramo con Jev la carita ni viaja al clic ni sigue al cursor sintético, fuera de tramo sigue haciéndolo, y la carita no cambia de tamaño: la regla es pura y sus dos llamadas en FaceWindow se cuentan en el fuente", UnaSolaCosaVuelaPorClic);
         Prueba("385. el panel de Jev nunca toma el ratón ni el foco ni sale en las capturas —click-through, no activable y excluido de la captura siempre—, nace al encender Jev sin tocar el atajo de invocar a Ü —InvocarPorAtajo sigue abriendo el globo y no sabe de Jev, que se lee en su fuente—, y se aparta de lo pulsado en cuanto lo conoce, con el alto que pinta", ElPanelDeJevNuncaTomaElRatonNiElFoco);
@@ -16361,6 +16361,7 @@ internal static class Contrato
         public double[]? Probabilidades = { 0.08, 0.12, 0.21, 0.02, 0.04, 0.52, 0.01 };
         public double? Cumplido = 0.10, Ausente = 0.05, Peligro = 0.00;
         public string Porque = "Jev eligió «6) Buscar (Button)» con confianza 0.52.";
+        public string? Veto;   // null = no se pone (y DecisionDeJev no necesita tenerlo); con texto, la decisión va vetada (390)
         public string? Pulsada = null;
         public WRect? CajaPulsada = null;   // la caja de la mano llega por ConPulsada (375); el ciclo la lleva para el puente
         public int MsDecidir = 399;
@@ -16385,8 +16386,13 @@ internal static class Contrato
                 var alternativas = new List<(string Puerta, double Probabilidad)>();
                 if (Probabilidades != null)
                     for (int i = 0; i < Probabilidades.Length; i++) alternativas.Add((Id(i), Probabilidades[i]));
-                decision = Crear(tDec, ("Actuar", Actuar), ("Puerta", Puerta), ("Confianza", Confianza), ("Alternativas", alternativas),
-                                 ("Cumplido", Cumplido), ("Ausente", Ausente), ("Peligro", Peligro), ("Porque", Porque));
+                var deLaDecision = new List<(string, object?)>
+                {
+                    ("Actuar", Actuar), ("Puerta", Puerta), ("Confianza", Confianza), ("Alternativas", alternativas),
+                    ("Cumplido", Cumplido), ("Ausente", Ausente), ("Peligro", Peligro), ("Porque", Porque),
+                };
+                if (Veto != null) deLaDecision.Add(("Veto", Veto));
+                decision = Crear(tDec, deLaDecision.ToArray());
             }
             var campos = new List<(string, object?)>
             {
@@ -16633,40 +16639,45 @@ internal static class Contrato
             $"los milisegundos van con separador de miles invariante: «{Texto(PropDe(PropDe(lento, "Resultados")!, "Cabecera")!, "Ms")}»");
         Debe(Texto(r, "Objetivo") == "abrir detalles", "y el objetivo del tramo se pinta tal cual");
 
-        // AÑADIDAS AL ARREGLAR LA REVISIÓN DEL 2026-09-23, ANTES QUE SU CÓDIGO. Lo de arriba juzga el modelo con la
-        // pulsada puesta a mano, y en la app nadie la ponía: el puente no la leía de la línea de progreso (spec 049
-        // §El puente, 2), así que la resaltada era siempre la elegida y el ticker nunca decía «la 1.ª no estaba»,
-        // con la 372 en verde. El puente es puro, se juzga aquí, y la vista lo usa (por fuente).
+        // LA PULSADA LLEGA CON EL PASO, NO CON LA PROSA (al juntar B, C y D, 2026-09-24; reescribe lo añadido al arreglar
+        // la revisión del 2026-09-23). Hasta aquí el puente sacaba la pulsada de la línea de progreso con una regex que
+        // terminaba en «· (no )?cambió$»; B (353) escribe ahora «cambió de sitio», «cambió dentro» y «cambió delante», y
+        // toda pulsación que cambió algo dejaba la pulsada en null —la resaltada volvía a ser la elegida— con este juez en
+        // verde, porque sus líneas eran las de antes de B. El evento de C (368) trae el paso con su número (Paso.Numero),
+        // que es lo que la spec 049 le pidió a C «para que el puente por Progreso deje de hacer falta»: la pulsada viene en
+        // el ciclo decidido y la línea no la toca, ni para ponerla ni para quitarla (aprendizaje nº16: una sola fuente).
         var conLaLinea = t.Ciclo.GetMethod("ConLaLinea");
         if (conLaLinea == null)
-            Pendiente("Ui.Jev.CicloDeJev.ConLaLinea(decidido, objetivo, linea): la pulsada sale de «paso k: «x» (n)»", "372", "049");
+            Pendiente("Ui.Jev.CicloDeJev.ConLaLinea(decidido, objetivo, linea): la línea se pinta sobre el ciclo decidido", "372", "049");
         else
         {
             object Linea(object? decidido, string linea) => conLaLinea.Invoke(null, new[] { decidido, "abrir detalles", linea })!;
-            var decidido = c.Construir(t.Ciclo, t.Candidata, t.Decision);
-            const string laSegunda = "paso 2: «Buscar» (3) conf 0.40 · cambió";
-            var conSegunda = Linea(decidido, laSegunda);
-            Debe(Texto(conSegunda, "Pulsada") == "3" && PropDe(conSegunda, "Fase")?.ToString() == "Linea" && Texto(conSegunda, "Linea") == laSegunda,
-                $"la línea «{laSegunda}» da un ciclo de línea con la pulsada «3» y la línea tal cual: pulsada «{Texto(conSegunda, "Pulsada")}», fase {PropDe(conSegunda, "Fase")}");
-            var pintado = t.De.Invoke(null, new[] { conSegunda, Activator.CreateInstance(t.Coste)! })!;
-            var resaltadasL = Elementos(PropDe(PropDe(pintado, "Resultados")!, "Barras")).Where(b => Cierto(b, "Resaltada")).ToList();
-            Debe(resaltadasL.Count == 1 && Texto(resaltadasL[0], "Id") == "3) Buscar (Button)" && Cierto(resaltadasL[0], "PorPulsada"),
-                "y pintado, la resaltada es la 3 por pulsada, no la 6 elegida: la mano pulsó la segunda mejor");
-            Debe(Texto(pintado, "Ticker") == "la 1.ª no estaba: pulsé la 2.ª «Buscar» (3)",
-                $"y el ticker lo dice como lo que es: «{Texto(pintado, "Ticker")}»");
-            Debe(Texto(Linea(decidido, "paso 2: «Guardar (F5)» (3) conf 0.40 · cambió"), "Pulsada") == "3",
-                "una etiqueta con paréntesis no confunde el número: es el que va delante de « conf»");
-            Debe(PropDe(Linea(decidido, "paso 3: sin acción · no se acciona"), "Pulsada") == null,
-                "una línea sin acción no trae pulsada, y no se inventa una");
-            // «no pudo» es que la mano no terminó (ElTramo.cs:204, p.Termino falso): marcarla como pulsada haría decir
-            // al ticker «pulsé la 2.ª» de algo que no se pulsó.
-            Debe(PropDe(Linea(decidido, "paso 2: «Buscar» (3) conf 0.40 · no pudo"), "Pulsada") == null,
-                "ni una en la que la mano no pudo: «pulsé» sería mentira");
-            Debe(PropDe(Linea(decidido, "tramo: 3 paso(s) · se agotó el tope de 4 paso(s)."), "Pulsada") == null,
-                "ni la línea con que el tramo para");
+            var conLaTres = new CicloDeMentira { Pulsada = "3" }.Construir(t.Ciclo, t.Candidata, t.Decision);
+            // LAS CUATRO PALABRAS DE B (353), tal cual las escribe ElTramo.Cuenta.
+            foreach (var queCambio in new[] { "cambió de sitio", "cambió dentro", "cambió delante", "no cambió" })
+            {
+                string laSegunda = $"paso 2: «Buscar» (3) conf 0.40 · {queCambio}";
+                var conSegunda = Linea(conLaTres, laSegunda);
+                Debe(Texto(conSegunda, "Pulsada") == "3" && PropDe(conSegunda, "Fase")?.ToString() == "Linea" && Texto(conSegunda, "Linea") == laSegunda,
+                    $"con la línea «{laSegunda}» el ciclo de línea conserva la pulsada «3» del paso y lleva la línea tal cual: pulsada «{Texto(conSegunda, "Pulsada")}», fase {PropDe(conSegunda, "Fase")}");
+                var pintado = t.De.Invoke(null, new[] { conSegunda, Activator.CreateInstance(t.Coste)! })!;
+                var resaltadasL = Elementos(PropDe(PropDe(pintado, "Resultados")!, "Barras")).Where(b => Cierto(b, "Resaltada")).ToList();
+                Debe(resaltadasL.Count == 1 && Texto(resaltadasL[0], "Id") == "3) Buscar (Button)" && Cierto(resaltadasL[0], "PorPulsada"),
+                    $"y pintado tras «{queCambio}», la resaltada es la 3 por pulsada, no la 6 elegida: la mano pulsó la segunda mejor");
+                Debe(Texto(pintado, "Ticker") == "la 1.ª no estaba: pulsé la 2.ª «Buscar» (3)",
+                    $"y el ticker lo dice como lo que es: «{Texto(pintado, "Ticker")}»");
+            }
+            // LA PROSA NO ES FUENTE: sin pulsada en el paso, una línea que nombra un número no la inventa.
+            var sinPulsada = c.Construir(t.Ciclo, t.Candidata, t.Decision);
+            Debe(PropDe(Linea(sinPulsada, "paso 2: «Buscar» (3) conf 0.40 · no cambió"), "Pulsada") == null,
+                "si el paso no dice qué pulsó la mano, la línea «paso 2: «Buscar» (3) …» no lo dice por él");
+            var parada = Linea(conLaTres, "tramo: 3 paso(s) · se agotó el tope de 4 paso(s).");
+            var pintadaParada = t.De.Invoke(null, new[] { parada, Activator.CreateInstance(t.Coste)! })!;
+            Debe(!Elementos(PropDe(PropDe(pintadaParada, "Resultados") ?? new object(), "Barras")).Any(b => Cierto(b, "Resaltada")),
+                "con la línea con que el tramo para, ninguna barra resaltada aunque el paso trajera su pulsada");
             var sinDecision = Linea(null, "paso 1: «Detalles» (2) conf 0.91 · no cambió");
-            Debe(Texto(sinDecision, "Objetivo") == "abrir detalles" && Texto(sinDecision, "Pulsada") == "2" && PropDe(sinDecision, "Decision") == null,
-                "sin decisión todavía, el ciclo nace del objetivo con la línea y su pulsada, sin decisión inventada");
+            Debe(Texto(sinDecision, "Objetivo") == "abrir detalles" && PropDe(sinDecision, "Pulsada") == null && PropDe(sinDecision, "Decision") == null,
+                $"sin decisión todavía, el ciclo nace del objetivo con la línea, sin decisión ni pulsada inventadas (pulsada «{PropDe(sinDecision, "Pulsada") ?? "null"}»)");
         }
         var vista = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "372");
         if (vista != null)
@@ -16804,6 +16815,32 @@ internal static class Contrato
         // parada, su motivo sin reescribir. Panel y voz no cuentan lo mismo con dos frases.
         Dice(new CicloDeMentira { Puerta = "2) Detalles (RadioButton)", Confianza = 0.91, Probabilidades = new[] { 0.05, 0.91, 0.02, 0.01, 0.01, 0.0, 0.0 }, Pulsada = "2", Fase = "linea", Linea = "paso 3: «Detalles» (2) conf 0.91 · no cambió" },
             "paso 3: «Detalles» (2) conf 0.91 · no cambió", 0.82, "una línea de progreso del tramo");
+        // UNA DECISIÓN VETADA SE DICE VETADA (390 de A contra la 049, al juntar A, C y D, 2026-09-24). Desde ec72d96 el
+        // evento de C publica la decisión YA vetada —Actuar=false, Puerta vacía, Veto con el porqué— y la 046 le deja
+        // escrito a D que pinte «vetada» cuando Veto no está vacío. Sin eso el ticker caía a la última compuerta de Jev y
+        // decía «No estoy seguro (0.99)» de una elegida a 0,99 que Jev sí quería pulsar —una causa inventada, aprendizaje
+        // nº2—; y con el puente de antes era peor: la decisión llegaba SIN vetar y decía «Pulsando «Grabar» (4)».
+        if (t.Decision.GetProperty("Veto") == null)
+            Pendiente("Ui.Jev.DecisionDeJev.Veto: la decisión que pinta el panel lleva el veto de la 390", "374", "049");
+        else
+        {
+            const string veto = "«Grabar» no se puede deshacer: te la dejo a ti.";
+            var vetada = new CicloDeMentira
+            {
+                Actuar = false, Puerta = "4) Grabar (Button)", Confianza = 0.99, Cumplido = 0.02, Peligro = 0.0,
+                Etiquetas = new[] { "Nuevo", "Detalles", "Buscar", "Grabar", "Ayuda", "Buscar", "Atrás" },
+                Probabilidades = new[] { 0.002, 0.002, 0.002, 0.99, 0.002, 0.001, 0.001 },
+                Porque = "Jev eligió «Grabar» (4) y está vetada: " + veto, Veto = veto,
+            };
+            Dice(vetada, "Vetada: " + veto, 0.42, "la elegida vetada, con Jev a 0,99 y peligro 0");
+            var barrasVetada = Elementos(PropDe(PropDe(Pinta(t, vetada), "Resultados") ?? new object(), "Barras"));
+            Debe(barrasVetada.Count > 0 && !barrasVetada.Any(b => Cierto(b, "Resaltada")),
+                $"y con la elegida vetada hay barras ({barrasVetada.Count}) pero ninguna resaltada: nada se pulsó ni se va a pulsar");
+            // SIN DISTRIBUCIÓN TAMBIÉN: el veto no mira quién decidió, y una regla sin reparto también puede elegir lo irreversible.
+            Dice(new CicloDeMentira { Actuar = false, Puerta = "", Probabilidades = null, Cumplido = 0, Peligro = 0,
+                    Porque = "Jev eligió «Grabar» (4) y está vetada: " + veto, Veto = veto },
+                "Vetada: " + veto, 0.42, "la elegida vetada, sin distribución");
+        }
         var parado = new CicloDeMentira { Fase = "linea", Linea = "tramo: 3 paso(s) · se agotó el tope de 4 paso(s)." };
         Dice(parado, "se agotó el tope de 4 paso(s).", 0.42, "el tramo paró");
         var rParado = Pinta(t, parado);
@@ -17591,67 +17628,60 @@ internal static class Contrato
     private static void NadaDeLaVistaBloqueaElCiclo()
     {
         var tObs = Jev("ObservadorDelDecisor");
-        var envolver = tObs?.GetMethod("Envolver"); var estaEnvuelto = tObs?.GetMethod("EstaEnvuelto"); var internoDe = tObs?.GetMethod("InternoDe");
         var tCiclo = Jev("CicloDeJev"); var tCand = Jev("CandidataDeJev"); var tDec = Jev("DecisionDeJev");
         var tDesp = Jev("IDespachador"); var tConector = Jev("ConectorDeLaVista");
-        if (envolver == null || estaEnvuelto == null || internoDe == null || tCiclo == null || tCand == null || tDec == null || tDesp == null || tConector == null)
+        if (tObs == null || tCiclo == null || tCand == null || tDec == null || tDesp == null || tConector == null)
         {
-            Pendiente("Ui.Jev.ObservadorDelDecisor (Envolver, EstaEnvuelto, InternoDe) + IDespachador (Encolar, Ahora) + ConectorDeLaVista(despachador, pintor, log).Publicar", "382", "049");
+            Pendiente("Ui.Jev.ObservadorDelDecisor + IDespachador (Encolar, Ahora) + ConectorDeLaVista(despachador, pintor, log).Publicar", "382", "049");
             return;
         }
-        var tipoDecisor = typeof(Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>);
 
-        // LA DECISIÓN PASA POR EL OBSERVADOR INTACTA: el mismo objeto, y una excepción sale tal cual.
-        var cazador = CazadorDe(tCiclo, out var alDecidir);
-        var esperada = Decision("Si", "2) Detalles (RadioButton)", 0.91, "de mentira");
-        var interno = Decide((_, _, _) => esperada);
-        var envuelto = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>)envolver.Invoke(null, new object[] { interno, alDecidir })!;
-        var ids = new List<string> { "1) Nuevo (Button)", "2) Detalles (RadioButton)" };
-        var salida = envuelto("uia://de-mentira", "abrir detalles", ids);
-        Debe(ReferenceEquals(salida, esperada), "la decisión que sale del envoltorio es EL MISMO objeto que devolvió el decisor: la vista no la toca");
-        var recibidos = (List<object>)PropDe(cazador, "Recibidos")!;
-        Debe(recibidos.Count == 1, $"y el observador recibió un ciclo por decisión: {recibidos.Count}");
-        if (recibidos.Count == 1)
-        {
-            var ciclo = recibidos[0];
-            Debe(Convert.ToInt64(PropDe(ciclo, "MsDecidir")) >= 0, "el ciclo lleva los ms de decidir, cronometrados por el observador");
-            var candidatas = Elementos(PropDe(ciclo, "Candidatas")).Select(c => Texto(c, "Id")).ToList();
-            Debe(candidatas.SequenceEqual(ids), $"y las mismas ids que se ofrecieron, en su orden: [{string.Join(" · ", candidatas)}]");
-            Debe(Texto(ciclo, "Objetivo") == "abrir detalles", "y el objetivo");
-        }
-        var lanza = Decide((_, _, _) => throw new InvalidOperationException("el decisor de mentira revienta"));
-        var envueltoQueLanza = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>)envolver.Invoke(null, new object[] { lanza, alDecidir })!;
-        try
-        {
-            envueltoQueLanza("uia://de-mentira", "x", ids);
-            Debe(false, "una excepción del decisor sale tal cual: no se tragó");
-        }
-        catch (InvalidOperationException e)
-        {
-            Debe(e.Message == "el decisor de mentira revienta", $"mismo tipo y mismo mensaje: «{e.Message}»");
-        }
-
-        // ENVOLVER DOS VECES ENVUELVE UNA: el interruptor reasigna el Decisor en cada Encender/Apagar y
-        // Sincronizar corre después de los dos; sin esto cada pulsación apilaría un cronómetro más.
-        var dosVeces = envolver.Invoke(null, new object[] { envuelto, alDecidir })!;
-        Debe((bool)estaEnvuelto.Invoke(null, new object[] { envuelto })! && !(bool)estaEnvuelto.Invoke(null, new object[] { interno })!,
-            "EstaEnvuelto distingue un envoltorio de un decisor a secas");
-        Debe(ReferenceEquals(internoDe.Invoke(null, new[] { dosVeces }), interno), "Envolver(Envolver(f)) tiene por interno a f, no a otro envoltorio");
-        Debe(ReferenceEquals(internoDe.Invoke(null, new object[] { envuelto }), interno), "y el interno del primero también es f");
+        // LA VISTA OYE EL EVENTO DE C Y NO TOCA EL DECISOR (al juntar C y D, 2026-09-24; reescribe lo que juzgaba el
+        // envoltorio). Hasta aquí la vista decoraba el Decisor del mapa desde fuera —el puente provisional de la 049— y
+        // este juez miraba que la decisión saliera intacta del envoltorio y que envolver dos veces envolviera una. Con C
+        // dentro el puente sobra, y además mentía: el envoltorio ve la decisión ANTES del veto de A (390), así que con
+        // «Guardar» a 0,99 publicaba Actuar=true y el panel decía «Pulsando «Guardar»» con su barra resaltada sobre algo
+        // que no se pulsa. El evento AlDecidir (368) sale después del veto (ec72d96) y con el paso entero. Lo que se juzga
+        // ahora, sobre un mapa DE VERDAD: oír dos veces se suscribe una, el ciclo de lo vetado dice «vetada», la pulsada
+        // es la del paso, las cajas de una pantalla que se fue no se pintan, y un oyente que lanza no rompe el paso.
+        var oir = tObs.GetMethod("Oir");
+        var cicloDelEvento = tObs.GetMethod("CicloDe", new[] { typeof(SurfaceMapTools.PasoDecidido) });
+        if (oir == null || cicloDelEvento == null)
+            Pendiente("Ui.Jev.ObservadorDelDecisor.Oir(mapa, publicar) y CicloDe(PasoDecidido): la vista oye SurfaceMapTools.AlDecidir (368) en vez de envolver el Decisor", "382", "049");
+        else
+            LaVistaOyeElEventoDelMapa(oir, tCiclo);
 
         // AÑADIDAS EN LA FASE 6, ANTES QUE SU CÓDIGO: lo que el observador TRADUCE. La costura da una
         // DecisionDeUnPaso y el panel pinta una DecisionDeJev, y las dos no significan lo mismo (hallazgo de la fase
         // 2, «para la fase 6»): la Puerta viene VACÍA cuando no se actúa, y Cumplido vale 0 cuando no se preguntó.
-        // CicloDe es la traducción entera y es la misma para el puente de hoy (Envolver) y para el evento tipado de
-        // la 048 cuando entre (368, PR #117): sus argumentos son los campos de PasoDecidido —Objetivo, Ofrecidas,
-        // Decision, Ms.Decidir y la caja de cada Candidata—, sin nombrar un tipo que main aún no tiene.
-        var cicloDe = tObs!.GetMethod("CicloDe");
+        // CicloDe es la traducción entera: sus argumentos son los campos de PasoDecidido —Objetivo, Ofrecidas,
+        // Decision, Ms.Decidir y la caja de cada Candidata—, y la sobrecarga que recibe el evento entero (arriba) pasa
+        // por ella. Se pide por su firma: con las dos sobrecargas, pedirla solo por el nombre sería ambiguo.
+        var cicloDe = tObs!.GetMethod("CicloDe", new[] { typeof(string), typeof(IReadOnlyList<string>), typeof(U.WindowsClient.Decision.DecisionDeUnPaso), typeof(long), typeof(IReadOnlyList<WRect>) });
         if (cicloDe == null) Pendiente("Ui.Jev.ObservadorDelDecisor.CicloDe(objetivo, ofrecidas, decision, msDecidir, cajas)", "382", "049");
         else
         {
             object CicloDe(IReadOnlyList<string> ofrecidas, U.WindowsClient.Decision.DecisionDeUnPaso d, IReadOnlyList<WRect>? cajas = null) =>
                 cicloDe.Invoke(null, new object?[] { "abrir detalles", ofrecidas, d, 399L, cajas })!;
             var dosIds = new List<string> { "9) Grabar (Button)", "2) Detalles (RadioButton)" };
+
+            // (0) EL VETO VIAJA CON LA DECISIÓN (390, al juntar A y D, 2026-09-24): la vetada llega con Actuar=false y
+            // Puerta vacía como cualquier «no», y lo que la distingue es su Veto. Si la traducción lo perdiera, el panel
+            // no tendría con qué decir «vetada» (374) y caería a una causa que no es.
+            var tDecDeUnPaso = typeof(U.WindowsClient.Decision.DecisionDeUnPaso);
+            var conVeto = tDecDeUnPaso.GetMethod("ConVeto", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+            if (tDec.GetProperty("Veto") == null || conVeto == null)
+                Pendiente("Ui.Jev.DecisionDeJev.Veto, copiado de DecisionDeUnPaso.Veto por CicloDe", "382", "049");
+            else
+            {
+                const string veto = "«Grabar» no se puede deshacer: te la dejo a ti.";
+                var quiere = DecisionCon(Decision("Si", "9) Grabar (Button)", 0.99, "Jev eligió «9) Grabar (Button)» con confianza 0.99."),
+                    new[] { ("9) Grabar (Button)", 0.99), ("2) Detalles (RadioButton)", 0.01) }, cumplido: 0.02, peligro: 0.0);
+                var vetada = (U.WindowsClient.Decision.DecisionDeUnPaso)conVeto.Invoke(quiere, new object[] { veto, "Jev eligió «Grabar» (9) y está vetada: " + veto })!;
+                var decV = PropDe(CicloDe(dosIds, vetada), "Decision")!;
+                Debe(Texto(decV, "Veto") == veto && !Cierto(decV, "Actuar") && Texto(decV, "Puerta") == "9) Grabar (Button)",
+                    $"la vetada llega con su Veto, sin actuar, y con la elegida por Puerta: Veto «{Texto(decV, "Veto")}», Actuar {PropDe(decV, "Actuar")}, Puerta «{Texto(decV, "Puerta")}»");
+            }
 
             // (1) La que no actúa CON distribución: la Puerta es la primera de la distribución, no «»; si no, el
             // panel diría «"" no se deshace». Y Cumplido vino, así que se conserva.
@@ -17682,7 +17712,7 @@ internal static class Contrato
             string etiquetas = string.Join(" · ", cands.Select(c => Texto(c, "Etiqueta") + "|" + Texto(c, "Tipo")));
             Debe(etiquetas == "Nuevo|Button · Guardar (F5)|Button · Grabar|", $"etiqueta y tipo salen del id: [{etiquetas}]");
             Debe(cands.All(c => PropDe(c, "Caja") == null && !Cierto(c, "EsLeida")),
-                "y el puente no ve cajas: ninguna candidata lleva una, y ninguna se dice leída (375: se ofrece, no se pinta)");
+                "y sin cajas (null: no se saben) ninguna candidata lleva una, y ninguna se dice leída (375: se ofrece, no se pinta)");
 
             // (4) Con las cajas del evento de C, en paralelo a las ofrecidas: la leída va con su caja y EsLeida, la
             // Rect.Empty (terreno, dynpro) va sin caja. Y si no son tantas como las ofrecidas, NO se emparejan a
@@ -17700,17 +17730,8 @@ internal static class Contrato
             {
                 Debe(e.InnerException!.Message.Contains('1') && e.InnerException.Message.Contains('2'), $"y el mensaje dice cuántas de cada: «{e.InnerException.Message}»");
             }
-
-            // (5) Un observador que lanza tampoco toca la decisión: sale el mismo objeto, y queda en el log con su
-            // tipo y su mensaje (patrón nº3) —pintar no puede cambiar lo que se pulsa—.
-            var oyenteQueLanza = CazadorDe(tCiclo, out var alDecidirQueLanza, _ => throw new InvalidOperationException("el oyente de mentira revienta"));
-            var envueltoConOyenteRoto = (Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>)envolver.Invoke(null, new object[] { interno, alDecidirQueLanza })!;
-            U.WindowsClient.Decision.DecisionDeUnPaso? conOyenteRoto = null;
-            try { conOyenteRoto = envueltoConOyenteRoto("uia://de-mentira", "abrir detalles", ids); }
-            catch (Exception e) { Debe(false, $"un oyente que lanza no sale al paso: salió {e.GetType().Name}: {e.Message}"); }
-            Debe(ReferenceEquals(conOyenteRoto, esperada), "con un oyente que lanza, la decisión sale intacta: el mismo objeto");
-            Debe(U.WindowsClient.Diagnostics.LogBus.Snapshot().Any(l => l.Contains("InvalidOperationException", StringComparison.Ordinal) && l.Contains("el oyente de mentira revienta", StringComparison.Ordinal)),
-                "y el log lo dice con su tipo y su mensaje");
+            // (5) El oyente que lanza, que aquí juzgaba el envoltorio, se juzga ahora sobre el mapa de verdad
+            // (LaVistaOyeElEventoDelMapa, caso 6): es allí donde un oyente podría romper el paso.
         }
 
         // PUBLICAR SOLO ENCOLA: el despachador es un doble sin reloj (DispatchProxy sobre IDespachador).
@@ -17769,13 +17790,196 @@ internal static class Contrato
             var adaptador = fuentes.FirstOrDefault(x => x.Archivo == "DespachadorDeWpf.cs").Texto;
             int llamadas = adaptador == null ? 0 : LineasDeCodigo(adaptador, "BeginInvoke(");
             Debe(llamadas == 1, $"y en DespachadorDeWpf.cs esa aparición es una llamada, BeginInvoke( en una línea de código: hay {llamadas}");
+            // Y NINGUNA PIEZA DE LA VISTA TOCA EL DECISOR (al juntar C y D): ni lo reasigna ni lo envuelve.
+            var tocan = fuentes.Where(x => LineasDeCodigo(x.Texto, ".Decisor =") > 0 || LineasDeCodigo(x.Texto, "Envolver(") > 0).Select(x => x.Archivo).ToList();
+            Debe(tocan.Count == 0, $"bajo Ui/Jev ningún fuente reasigna el Decisor ni lo envuelve, en código: lo hacen [{string.Join(", ", tocan)}]");
         }
-        // AÑADIDA EN LA FASE 9, ANTES QUE SU CÓDIGO: el puente provisional hasta que C entre (spec 049 §El puente). El
-        // envoltorio juzgado arriba no ve nada si nadie lo pone alrededor del Decisor del mapa, y lo que publica tiene
-        // que llegar a la vista.
+        // EL PARCIAL OYE EL EVENTO, NO DECORA EL DECISOR (al juntar C y D, 2026-09-24; hasta aquí exigía el
+        // ObservadorDelDecisor.Envolver( del puente provisional). Lo que se oye tiene que llegar a Publicar de la vista, y
+        // nada del parcial puede volver a ponerse en el camino del decisor: el interruptor lo reasigna en cada Encender, y
+        // un envoltorio vería otra vez la decisión antes del veto.
         var parcial = FuenteDelRepo("windows-client/src/Ui/FaceWindow.Jev.cs", "382");
         if (parcial != null)
-            Debe(GanchoLlevaA(parcial, "ObservadorDelDecisor.Envolver(", "Publicar"), "FaceWindow.Jev.cs envuelve el Decisor con ObservadorDelDecisor.Envolver( en código, y lo que decide va a Publicar de la vista");
+        {
+            Debe(GanchoLlevaA(parcial, "ObservadorDelDecisor.Oir(", "Publicar"),
+                "FaceWindow.Jev.cs oye el evento del mapa con ObservadorDelDecisor.Oir( en código, y lo que oye va a Publicar de la vista");
+            Debe(LineasDeCodigo(parcial, ".Decisor =") == 0 && LineasDeCodigo(parcial, "Envolver(") == 0,
+                $"y no reasigna ni envuelve el Decisor del mapa: «.Decisor =» en {LineasDeCodigo(parcial, ".Decisor =")} línea(s) de código, «Envolver(» en {LineasDeCodigo(parcial, "Envolver(")}");
+        }
+    }
+
+    /// <summary>
+    /// 382, la parte del evento (al juntar C y D, 2026-09-24): la vista oye <c>AlDecidir</c> sobre un mapa DE VERDAD —la
+    /// pantalla de mentira de la 368: Buscar, Crear Triage, Salir y Guardar, todas con su caja leída—, con el decisor y la
+    /// mano inyectados. Lo que se mira es el ciclo que recibiría la vista y lo que el panel pintaría con él; que el evento
+    /// lleve lo que se ofreció lo juzga la 368.
+    /// </summary>
+    private static void LaVistaOyeElEventoDelMapa(MethodInfo oir, Type tCiclo)
+    {
+        var tipos = TiposDeLaObservacion();
+        var pLee = typeof(SurfaceMapTools).GetProperty("Lee");
+        var pDecisor = typeof(SurfaceMapTools).GetProperty("Decisor");
+        var panel = TiposDelPanel();
+        var tCajas = Jev("CajasDelOverlay");
+        var deCajas = tCajas?.GetMethods().FirstOrDefault(m => m.Name == "De" && m.GetParameters().Length == 2);
+        if (tipos == null || pLee == null || pDecisor == null || panel == null || deCajas == null)
+        {
+            Pendiente("la lectura de la 048 (SurfaceMapTools.Lee), el modelo del panel y CajasDelOverlay.De, para oír el evento de un mapa de verdad", "382", "049");
+            return;
+        }
+        var t = panel.Value;
+        var (tObs, tEl, tObservatorio) = tipos.Value;
+        var pReloj = tObservatorio.GetProperty("Reloj", BindingFlags.Public | BindingFlags.Static)!;
+        var mInvalida = tObservatorio.GetMethod("Invalida", BindingFlags.Public | BindingFlags.Static)!;
+        const string A = "uia://sap/NWP1";
+        long ahora = 120_000;
+        pReloj.SetValue(null, (Func<long>)(() => ahora));
+        mInvalida.Invoke(null, new object[] { "el juez de la 382 empieza limpio" });
+        try
+        {
+            var caja = new System.Windows.Rect(3, 3, 50, 14);
+            var args = new Dictionary<string, string> { ["objetivo"] = "crear el triage" };
+            const string CrearTriage = "2) Crear Triage Administrativo (Button)";
+            // La mano: cada llamada contesta lo que diga «mano» con su número de llamada (1, 2…).
+            SurfaceMapTools Mapa(U.WindowsClient.Decision.DecisionDeUnPaso decision, Func<int, RecorrerSegunElNucleo.Resultado> mano)
+            {
+                var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "sap", "");
+                var mapa = new SurfaceMapTools(() => loc);
+                var vistos = new object[]
+                {
+                    ElementoVisto(tEl, "uia:name=Buscar;ct=Edit", "Buscar", "Edit", caja, "1.1"),
+                    ElementoVisto(tEl, "uia:name=Crear Triage Administrativo;ct=Button", "Crear Triage Administrativo", "Button", caja, "1.2"),
+                    ElementoVisto(tEl, "uia:name=Salir;ct=Button", "Salir", "Button", caja, "1.3"),
+                    ElementoVisto(tEl, "uia:name=Guardar;ct=Button", "Guardar", "Button", caja, "1.4"),
+                };
+                pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true, vistos)));
+                int llamadas = 0;
+                mapa.RecorrerPorElNucleo = pasos => mano(++llamadas);
+                pDecisor.SetValue(mapa, Decide((_, _, _) => decision));
+                return mapa;
+            }
+            RecorrerSegunElNucleo.Resultado CambiaDeSitio(int _) => new(1, 1, "uia://sap/NV2000", true,
+                "hice los 1 paso(s): pulsé «Crear Triage Administrativo» y ahora estás en «uia://sap/NV2000».", true);
+            RecorrerSegunElNucleo.Resultado NoCambia(int _) => new(1, 1, A, true, "hice los 1 paso(s): pulsé «Crear Triage Administrativo» y la pantalla no cambió.", false);
+            RecorrerSegunElNucleo.Resultado NoEsta(int _) => new(0, 1, A, false, "no encontré «Crear Triage Administrativo» en esta pantalla.", false);
+            // Oye un mapa y decide una vez; devuelve los ciclos que le llegaron a la vista.
+            List<object> OyeYDecide(SurfaceMapTools mapa, int veces = 1)
+            {
+                var cazador = CazadorDe(tCiclo, out var publicar);
+                for (int i = 0; i < veces; i++) oir.Invoke(null, new object[] { mapa, publicar });
+                try { mapa.Call("map_decidir", args); }
+                catch (Exception e) { Debe(false, $"decidir con la vista oyendo no lanza: salió {e.GetType().Name}: {e.Message}"); }
+                return (List<object>)PropDe(cazador, "Recibidos")!;
+            }
+            object PintaCiclo(object ciclo) => t.De.Invoke(null, new[] { ciclo, Activator.CreateInstance(t.Coste)! })!;
+            List<object> Barras(object pintado) => Elementos(PropDe(PropDe(pintado, "Resultados") ?? new object(), "Barras"));
+
+            // 1. OÍRLO DOS VECES SE SUSCRIBE UNA, Y LO VETADO SE PINTA VETADO. «Guardar» a 0,99 y peligro 0: Jev quiere,
+            // la lista de lo irreversible no (390), y el evento lo publica ya vetado (ec72d96).
+            var quiereGuardar = DecisionCon(Decision("Si", "4) Guardar (Button)", 0.99, "Jev eligió «4) Guardar (Button)» con confianza 0.99."),
+                new[] { ("4) Guardar (Button)", 0.99), ("3) Salir (Button)", 0.01) }, cumplido: 0.02, peligro: 0.0);
+            var mapaV = Mapa(quiereGuardar, CambiaDeSitio);
+            var cazadorV = CazadorDe(tCiclo, out var publicarV);
+            var primera = oir.Invoke(null, new object[] { mapaV, publicarV });
+            var segunda = oir.Invoke(null, new object[] { mapaV, publicarV });
+            Debe(primera is true && segunda is false, $"oír el mismo mapa dos veces se suscribe una: la primera dice que sí ({primera}) y la segunda que ya oía ({segunda})");
+            try { mapaV.Call("map_decidir", args); }
+            catch (Exception e) { Debe(false, $"decidir con la vista oyendo no lanza: salió {e.GetType().Name}: {e.Message}"); }
+            var deV = (List<object>)PropDe(cazadorV, "Recibidos")!;
+            Debe(deV.Count == 1, $"un paso decidido es UN ciclo, aunque se oyera dos veces: llegaron {deV.Count}");
+            if (deV.Count >= 1)
+            {
+                var cV = deV[0];
+                var dV = PropDe(cV, "Decision");
+                Debe(dV != null && !Cierto(dV, "Actuar") && Texto(dV, "Veto").Length > 0,
+                    $"el ciclo lleva la decisión YA vetada: Actuar={(dV == null ? "—" : PropDe(dV, "Actuar"))}, Veto «{(dV == null ? "—" : Texto(dV, "Veto"))}»");
+                Debe(PropDe(cV, "Pulsada") == null, $"y ninguna pulsada: la mano no recibió «Guardar» (pulsada «{PropDe(cV, "Pulsada")}»)");
+                var pV = PintaCiclo(cV);
+                string ticker = Texto(pV, "Ticker");
+                Debe(ticker.StartsWith("Vetada: ", StringComparison.Ordinal) && !ticker.Contains("Pulsando", StringComparison.Ordinal),
+                    $"y el panel dice «vetada», no «acciona»: «{ticker}»");
+                Debe(!Barras(pV).Any(b => Cierto(b, "Resaltada")), "y ninguna barra queda resaltada: «Guardar» ni se pulsó ni se va a pulsar");
+            }
+
+            // 2. LA PULSADA ES LA DEL PASO, Y LAS CAJAS DE UNA PANTALLA QUE SE FUE NO SE PINTAN. El evento sale cuando el
+            // paso acabó, espera incluida: si la mano cambió de sitio, las cajas leídas son de la pantalla de antes.
+            var deSitio = OyeYDecide(Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), CambiaDeSitio));
+            Debe(deSitio.Count == 1 && Texto(deSitio[0], "Pulsada") == "2",
+                $"tras pulsar «Crear Triage» (2), el ciclo trae la pulsada «2» del paso: [{string.Join(" · ", deSitio.Select(c => PropDe(c, "Pulsada") ?? "null"))}]");
+            if (deSitio.Count == 1)
+            {
+                var cands = Elementos(PropDe(deSitio[0], "Candidatas"));
+                Debe(cands.Count == 4 && cands.All(c => PropDe(c, "Caja") == null && !Cierto(c, "EsLeida")),
+                    $"y como la mano cambió de sitio, ninguna de las {cands.Count} candidatas lleva caja: serían de la pantalla que se fue (patrón nº8)");
+            }
+
+            // 3. SI EL PASO NO CAMBIÓ LO QUE SE VE, las cajas siguen valiendo, y la rosa va a la pulsada por su id (375).
+            var quieto = OyeYDecide(Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), NoCambia));
+            Debe(quieto.Count == 1 && Texto(quieto[0], "Pulsada") == "2", $"con «no cambió», la pulsada también es «2»: [{string.Join(" · ", quieto.Select(c => PropDe(c, "Pulsada") ?? "null"))}]");
+            if (quieto.Count == 1)
+            {
+                var cands = Elementos(PropDe(quieto[0], "Candidatas"));
+                Debe(cands.Count == 4 && cands.All(c => PropDe(c, "Caja") is WRect r && r == caja && Cierto(c, "EsLeida")),
+                    $"y las {cands.Count} candidatas llevan su caja leída: la pantalla es la misma");
+                var cajas = Elementos(PropDe(deCajas.Invoke(null, new[] { PropDe(quieto[0], "Candidatas"), PropDe(quieto[0], "Pulsada") })!, "Cajas"));
+                var rosas = cajas.Where(c => Cierto(c, "Rosa")).Select(c => Texto(c, "Id")).ToList();
+                Debe(cajas.Count == 4 && rosas.Count == 1 && rosas[0] == CrearTriage, $"y el overlay pinta las 4 con una sola rosa, la de «{CrearTriage}»: [{string.Join(" · ", rosas)}]");
+
+                // Y LA LÍNEA QUE LLEGA PEGADA AL EVENTO PINTA LAS MISMAS CAJAS. El evento sale al terminar el paso y el tramo
+                // escribe su línea en el acto, y el conector pinta solo el último ciclo (abajo): si solo el decidido pintara el
+                // overlay, las cajas de un paso casi nunca llegarían a verse. La línea es el mismo ciclo con la línea puesta.
+                var delCiclo = tCajas!.GetMethod("DelCiclo");
+                var conLaLinea = tCiclo.GetMethod("ConLaLinea");
+                if (delCiclo == null || conLaLinea == null)
+                    Pendiente("Ui.Jev.CajasDelOverlay.DelCiclo(ciclo): las cajas que pinta un ciclo, el decidido o la línea que lo lleva", "382", "049");
+                else
+                {
+                    var linea = conLaLinea.Invoke(null, new object?[] { quieto[0], "crear el triage", "paso 1: «Crear Triage Administrativo» (2) conf 0.93 · no cambió" })!;
+                    var cajasLinea = delCiclo.Invoke(null, new[] { linea });
+                    var deLaLinea = cajasLinea == null ? new List<object>() : Elementos(PropDe(cajasLinea, "Cajas"));
+                    var rosasLinea = deLaLinea.Where(c => Cierto(c, "Rosa")).Select(c => Texto(c, "Id")).ToList();
+                    Debe(cajasLinea != null && deLaLinea.Count == 4 && rosasLinea.SequenceEqual(new[] { CrearTriage }),
+                        $"y la línea de ese paso pinta las mismas {deLaLinea.Count} cajas con la misma rosa: [{string.Join(" · ", rosasLinea)}]");
+                    Debe(delCiclo.Invoke(null, new[] { Activator.CreateInstance(tCiclo)! }) == null,
+                        "y un ciclo sin paso —el de «Mirando la pantalla»— no toca el overlay");
+                }
+            }
+            var vista = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "382");
+            if (vista != null)
+                Debe(LineasDeCodigo(vista, "CajasDelOverlay.DelCiclo(") >= 1, "Ui/Jev/VistaDeJev.cs pinta el overlay de cada ciclo con CajasDelOverlay.DelCiclo(, en una línea de código");
+
+            // 4. LA SEGUNDA MEJOR LLEGA POR EL PASO, no por la prosa: la primera no estaba y la mano pulsó «Salir» (3).
+            var conSegunda = DecisionCon(Decision("Si", CrearTriage, 0.60, $"Jev eligió «{CrearTriage}» con confianza 0.60."),
+                new[] { (CrearTriage, 0.60), ("3) Salir (Button)", 0.35), ("1) Buscar (Edit)", 0.05) }, cumplido: 0.05, peligro: 0.0);
+            var segundaMejor = OyeYDecide(Mapa(conSegunda, n => n == 1 ? NoEsta(n) : NoCambia(n)));
+            Debe(segundaMejor.Count == 1 && Texto(segundaMejor[0], "Pulsada") == "3",
+                $"si la elegida no estaba y la mano pulsó la segunda, la pulsada es «3»: [{string.Join(" · ", segundaMejor.Select(c => PropDe(c, "Pulsada") ?? "null"))}]");
+            if (segundaMejor.Count == 1)
+                Debe(Texto(PintaCiclo(segundaMejor[0]), "Ticker") == "la 1.ª no estaba: pulsé la 2.ª «Salir» (3)",
+                    $"y el ticker lo dice como lo que es: «{Texto(PintaCiclo(segundaMejor[0]), "Ticker")}»");
+
+            // 5. SI LA MANO NO TERMINÓ, NO HAY PULSADA: «pulsé» sería mentira.
+            var noTermino = OyeYDecide(Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), NoEsta));
+            Debe(noTermino.Count == 1 && PropDe(noTermino[0], "Pulsada") == null,
+                $"con la mano que no encontró la elegida y sin segunda, el ciclo no trae pulsada: [{string.Join(" · ", noTermino.Select(c => PropDe(c, "Pulsada") ?? "null"))}]");
+
+            // 6. UN OYENTE QUE LANZA NO SALE AL PASO, y queda en el log con su tipo y su mensaje (patrón nº3).
+            var mapaL = Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), NoCambia);
+            CazadorDe(tCiclo, out var publicarQueLanza, _ => throw new InvalidOperationException("el pintor de la 382 revienta al oír"));
+            oir.Invoke(null, new object[] { mapaL, publicarQueLanza });
+            string? cuenta = null;
+            try { cuenta = mapaL.Call("map_decidir", args); }
+            catch (Exception e) { Debe(false, $"un oyente que lanza no sale al paso: salió {e.GetType().Name}: {e.Message}"); }
+            Debe(cuenta != null && cuenta.Contains("Crear Triage Administrativo", StringComparison.Ordinal),
+                $"y el paso sigue y cuenta lo que hizo la mano: «{cuenta}»");
+            Debe(U.WindowsClient.Diagnostics.LogBus.Snapshot().Any(l => l.Contains("InvalidOperationException", StringComparison.Ordinal) && l.Contains("el pintor de la 382 revienta al oír", StringComparison.Ordinal)),
+                "y el log lo dice con su tipo y su mensaje");
+        }
+        finally
+        {
+            mInvalida.Invoke(null, new object[] { "el juez de la 382 termina" });
+            pReloj.SetValue(null, null);
+        }
     }
 
     /// <summary>La máquina de la vista con una pantalla de mentira puesta: área de trabajo, escala, tamaño del panel y ancla.</summary>
