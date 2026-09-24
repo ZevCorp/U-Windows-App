@@ -116,6 +116,17 @@ $salida | ForEach-Object { Write-Host $_ }
 # Es el aprendizaje n.17 con el signo cambiado, que es peor: no dijo "culpable", dijo "inocente".
 #
 # 99 y no otro: el codigo normal es el numero de promesas incumplidas, y 81 no llegan ahi.
+#
+# TRES VEREDICTOS desde la 049 (2026-09-22): INTACTO, ROTO y "SIN VEREDICTO COMPLETO", que es el
+# propio juez diciendo que hubo promesas que no llego a probar (sin U_REPO, sin WPF en el runner)
+# y ninguna roja. Sale con 99 tambien, porque tampoco es un recuento; la diferencia con el 99 de
+# aqui abajo es que ESTE lo emite el juez y viene con sus "SIN JUZGAR:" nombrados, y el de abajo
+# es que el juez ni llego a hablar. Los dos se rotulan aparte en verificar.ps1 y contrato.yml.
+if ($salida -match 'CONTRATO SIN VEREDICTO COMPLETO') {
+  Write-Host ""
+  Write-Host "SIN VEREDICTO COMPLETO: ninguna promesa roja, pero hubo promesas SIN JUZGAR (busca las de arriba)." -ForegroundColor DarkYellow
+  exit 99
+}
 if (-not ($salida -match 'CONTRATO (INTACTO|ROTO)')) {
   Write-Host ""
   Write-Host "NO SE PUDO JUZGAR: el contrato no llego a emitir veredicto." -ForegroundColor Red

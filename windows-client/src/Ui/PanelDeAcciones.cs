@@ -267,8 +267,9 @@ public sealed class PanelDeAcciones : Window
         SizeChanged += (_, __) => Recolocar();
 
         // Topmost no basta: es una posición en una lista y cualquier otra capa que pida lo mismo nos
-        // adelanta. Ver SiempreDelante.
-        this.Vigilar();
+        // adelanta. Ver SiempreDelante. En el grupo, por encima de la carita y por debajo de lo de
+        // Jev, con el reloj de todos y no con uno propio (promesa 378, spec 049).
+        SiempreDelante.EntraAlGrupo(this, Jev.Capa.Notch);
 
         _caducar = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _caducar.Tick += (_, __) =>

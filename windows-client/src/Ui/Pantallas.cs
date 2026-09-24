@@ -53,4 +53,43 @@ public static class Pantallas
         var br = AlVisual(destino, pantalla.Right, pantalla.Bottom);
         return new Rect(tl.X, tl.Y, Math.Max(0, br.X - tl.X), Math.Max(0, br.Y - tl.Y));
     }
+
+    /// <summary>
+    /// El conversor de UN MONITOR CONCRETO, sin ventana: de píxeles físicos del escritorio virtual a la unidad de
+    /// ese monitor (DIP con origen en su esquina) y vuelta. Promesa 380 (spec 049).
+    ///
+    /// Lo de arriba necesita un visual conectado; las ventanas de Jev se ponen con <c>SetWindowPos</c> en físicos
+    /// ANTES de existir en pantalla, y el overlay es una por monitor, así que la pregunta que tienen es otra:
+    /// «¿dónde cae este físico dentro de ESTE monitor?». Se contesta restando su origen y dividiendo por SU escala;
+    /// las siete conversiones a mano de hoy solo valen en la primaria (spec 049 §Diagnóstico).
+    /// </summary>
+    /// <param name="rcMonitorFisico">El <c>rcMonitor</c> de <c>GetMonitorInfo</c>, en físicos.</param>
+    /// <param name="escala">La de <c>GetDpiForMonitor</c> / 96 para ese monitor.</param>
+    public static ConversorDeMonitor DelMonitor(Rect rcMonitorFisico, double escala) =>
+        new(rcMonitorFisico.TopLeft, escala);
+}
+
+/// <summary>De físicos a la unidad de un monitor, y vuelta. Nace de <see cref="Pantallas.DelMonitor"/>.</summary>
+public sealed class ConversorDeMonitor
+{
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Con una escala que no es un número positivo. Un <c>GetDpiForMonitor</c> que falla deja 0 (patrón nº9: vacío
+    /// no es ausente), y con 0 la inversa da infinitos y la ida los devuelve como NaN: un conversor así no
+    /// convierte nada y lo haría en silencio. No nace, y el mensaje dice el valor que llegó.
+    /// </exception>
+    internal ConversorDeMonitor(Point origen, double escala)
+    {
+        if (!double.IsFinite(escala) || escala <= 0)
+            throw new ArgumentOutOfRangeException(nameof(escala), escala,
+                "la escala de un monitor es un número positivo (DPI / 96): 0, NaN o negativa es un GetDpiForMonitor que falló");
+        Origen = origen; Escala = escala;
+    }
+
+    public Point Origen { get; }
+
+    public double Escala { get; }
+
+    public Point AUnidad(Point fisico) => new((fisico.X - Origen.X) / Escala, (fisico.Y - Origen.Y) / Escala);
+
+    public Point AFisico(Point unidad) => new(Origen.X + unidad.X * Escala, Origen.Y + unidad.Y * Escala);
 }

@@ -474,6 +474,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                     if (vivo == null) { LogBus.Log("tramo", "sin sesión de voz: la cuenta queda para map_tramo_estado"); return; }
                     _ = vivo.EnviarTextoAsync("[el tramo terminó] " + cuenta);
                 };
+                NacerLaVistaDeJev(mcp.Map); // spec 049: va DESPUÉS de los avisos del tramo, que encadena (FaceWindow.Jev.cs)
                 if (cfgDecisor.Quien != "luna") _interruptorDelDecisor.Encender(Credenciales.ClavesDelBackend.DeLaApp);
                 PintarBotonJev();
             }
@@ -1902,6 +1903,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         Dispatcher.BeginInvoke(new Action(() =>
         {
             if (!_collapsed) return;
+            if (!Jev.ReglaDeQuienVuela.LaCaritaViaja(_vistaDeJev?.EnTramo == true)) return; // 384: en tramo con Jev vuela la flecha
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
             double px = x / dpi.DpiScaleX + 18, py = y / dpi.DpiScaleY + 18;
             var wa = SystemParameters.WorkArea;
@@ -2869,6 +2871,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// </summary>
     private void PintarBotonJev()
     {
+        SincronizarLaVistaDeJev(_interruptorDelDecisor?.Encendido == true); // 383: apagar Jev cierra las tres ventanas
         if (JevBtn == null) return;
         bool on = _interruptorDelDecisor?.Encendido == true;
         JevBtn.Content = on ? "Jev · on" : "Jev · off";
@@ -4600,6 +4603,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     private void IrJuntoA(Rect fisico, bool alClic = false)
     {
         if (alClic && !_collapsed) return;
+        if (alClic && !Jev.ReglaDeQuienVuela.LaCaritaViaja(_vistaDeJev?.EnTramo == true)) return; // 384: una sola cosa vuela por clic
         if (JuntoA(fisico) is not { } sitio) return;
 
         // SEÑALAR VARIAS EMITE LAS DOS SEÑALES. Senalador avisa de «estas seis» y acto seguido de

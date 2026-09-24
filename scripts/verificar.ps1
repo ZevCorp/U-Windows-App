@@ -129,9 +129,17 @@ if (-not $bloquea) {
   # regresion a la fase que va segun el plan. Latente aqui mientras el grafo tenga cero pendientes;
   # salio a la luz en el contrato de la voz el 2026-08-13.
   $pendientes = @(Select-String -Path $log -SimpleMatch "PENDIENTE:").Count
+  # "SIN JUZGAR:" es la tercera marca (spec 049, fase 0): promesas que el juez no llego a probar
+  # -sin U_REPO, sin WPF en el runner- y que antes salian verdes o rojas sin haber mirado nada.
+  $sinJuzgar = @(Select-String -Path $log -SimpleMatch "SIN JUZGAR:").Count
 
   if ($fallos -eq 0) {
-    Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes"
+    Anotar "Contrato" "OK" "$total/$total promesas, 0 pendientes, 0 sin juzgar"
+  } elseif ($fallos -eq 99 -and (Select-String -Path $log -SimpleMatch "CONTRATO SIN VEREDICTO COMPLETO")) {
+    # El juez SI hablo: ninguna roja, pero $sinJuzgar promesas que no llego a probar. No es un fallo
+    # del arnes ni una regresion: es un "no se" con nombres, y se rotula como lo que es: no corrido.
+    Anotar "Contrato" "NO CORRIDO" "SIN VEREDICTO COMPLETO: 0 rojas, pero $sinJuzgar promesa(s) SIN JUZGAR (busca 'SIN JUZGAR:' en $log)"
+    $bloquea = $true
   } elseif ($fallos -eq 99) {
     # 99 = el contrato no emitio veredicto (ver scripts\contrato-del-grafo.ps1). Se rotula distinto
     # a proposito: decir "N/$total verdes" con un codigo que no es un recuento seria inventarse el dato.
@@ -141,7 +149,7 @@ if (-not $bloquea) {
     Anotar "Contrato" "NO CORRIDO" "$($total - $fallos)/$total verdes, $pendientes PENDIENTES declaradas (fase intermedia: NO puede ir a main)"
   } else {
     $regresiones = $fallos - $pendientes
-    Anotar "Contrato" "FALLO" "$($total - $fallos)/$total verdes; $regresiones incumplida(s) con codigo y $pendientes pendiente(s)"
+    Anotar "Contrato" "FALLO" "$($total - $fallos)/$total verdes; $regresiones incumplida(s) con codigo, $pendientes pendiente(s) y $sinJuzgar sin juzgar"
     $bloquea = $true
   }
 } else {

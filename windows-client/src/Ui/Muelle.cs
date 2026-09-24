@@ -172,7 +172,9 @@ public sealed class Muelle : Window, AnfitrionDeLaCarita
         // Y QUE NO SE QUEDE DEBAJO. Topmost es una posición en una lista, no una promesa: cualquier
         // otra aplicación que pida lo mismo nos adelanta y no volvemos a subir solos. Ver
         // SiempreDelante — es el bug que el dueño describió como «a veces queda detrás de las apps».
-        this.Vigilar();
+        // Entra al grupo en la capa de la carita (es su anfitrión) y no con un reloj propio: un
+        // solo vigilante sube todas las capas de Ü en un orden fijo (promesa 378, spec 049).
+        SiempreDelante.EntraAlGrupo(this, Jev.Capa.Carita);
     }
 
     private static double CentroPorDefecto()
