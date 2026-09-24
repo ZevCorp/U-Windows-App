@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using U.Graph;
 using U.WindowsClient.Actions;
 using U.WindowsClient.Mcp;
@@ -839,6 +840,21 @@ internal static class Contrato
         Prueba("343. cada proceso de Ü escribe en su propio archivo de log identificable", CadaInstanciaTieneSuLog);
         Prueba("344. los detalles cotidianos de una preferencia pueden convertirse en recuerdo", DetalleCotidianoPuedeGuardarse);
         Prueba("345. GPT-Live recibe el hilo anterior como historial inicial y no como un mensaje que dispare una respuesta", HistorialInicialDeGptLiveEsPasivo);
+        // ── Spec 051: el espejo no sube lo escrito, y el log deja de guardarlo ─────────────────────
+        // El espejo del log mandaba al backend cada línea, y el log llevaba lo que Ü escribe en SAP, lo que
+        // se dice y lo que se pide. La 394 cierra la puerta (sale entero solo lo marcado), la 395 las otras
+        // salidas y sus canales, y las 396–399 el log local. Los censos son DATOS de la spec, al final del archivo.
+        Console.WriteLine();
+        Prueba("394. el espejo del log sube por línea marcada, no por etiqueta: de una línea anotada con LogBus.Log —sea cual sea su etiqueta, también exportar, workflow o dictado, y también la que llega por el diario del player— solo sale del equipo su etiqueta y su longitud, con label exactamente «‹etiqueta› · línea de N car.» y un detail con exactamente las claves tag y largo; entera sale solo la anotada con LogBus.Publico, y cada LogBus.Publico del código está en el censo de la 051 con su etiqueta, su ancla y sus huecos —uno nuevo, o uno que cambie un hueco, pone el contrato rojo nombrando archivo y línea—; ninguno lleva una de las catorce etiquetas de lo escrito, lo dicho, lo narrado o el objetivo; y una línea de la etiqueta telemetry no produce ningún evento", ElEspejoSubePorLineaMarcada);
+        Prueba("395. ninguna otra salida del equipo lleva lo escrito, lo dicho, lo narrado ni el objetivo: el objetivo y el resumen de una corrida consciente y el contexto de un workflow suben por su longitud, un error sube por su tipo y no por su mensaje, y un paso de workflow por su número y su tipo de acción, nunca por su etiqueta; cada TelemetryBus.Emit del código está en el censo de la 051 con todos sus argumentos; y los canales por los que algo puede salir —los oyentes de LogBus, los lectores del archivo y del anillo del log y las llamadas a rutas /agent/— son exactamente los censados: uno nuevo, o uno que cambie lo que manda, pone el contrato rojo nombrando archivo y línea", NingunaOtraSalidaLlevaLoEscrito);
+        Prueba("396. el log del rellenador dice etiqueta, longitud y si coincide, nunca el valor: la línea que el rellenador anota al escribir un campo es exactamente su etiqueta, la longitud de lo leído y si es igual a lo pedido, igual salvo mayúsculas o espacios, o distinto con la longitud de lo pedido; la de un campo que quedó vacío, exactamente su etiqueta y la longitud de lo pedido; y se juzga la línea que el rellenador de verdad anota, no una función aparte", ElRellenadorDiceLaFormaNoElValor);
+        Prueba("397. lo que las manos escriben no queda en el log: la línea de cada llamada al mapa nombra sus argumentos de lugar (target, selector, surface, app, path, exit, workflow_id) con su valor y cualquier otro solo por su longitud; la línea de su respuesta y la del resultado de una acción mcp del agente consciente tapan esos valores aunque la respuesta los repita; y el recorrido por lotes —su línea, la cuenta que devuelve y el plan del piloto—, el «type» del agente consciente —también el que la compuerta de origen descarta—, el contexto con que se invoca un workflow y el dato que el núcleo escribe, elige o no pudo escribir van por su longitud", LasManosNoDejanLoEscritoEnElLog);
+        Prueba("398. lo que se dice y lo que se pide no queda en el log: lo que dijo la persona y lo que contestó Ü al cerrar un turno, lo que la persona contesta a una pregunta del piloto, el mensaje crudo del servidor que no se traduce, lo que narra el piloto —también dentro del veredicto que vuelve a la consulta—, el objetivo de una corrida consciente y su resumen final se registran por su longitud —y su tipo—, nunca por su texto", LoDichoYLoPedidoNoQuedanEnElLog);
+        Prueba("399. el censo de la 051 queda cerrado en el código: cada uno de los 43 sitios contados —35 el 2026-09-23 y 8 en la revisión del 2026-09-24— se encuentra por su ancla y su sentencia no tiene más huecos que SinValor, una longitud o los permitidos de su fila; en todo windows-client y windows-graph, ninguna línea que llega al log —por LogBus.Log o por cualquier embudo que acabe en él— ni ningún error que una superficie devuelve lleva, fuera de SinValor y de una línea Linea…, un hueco que nombre valor, texto o dato, o que lea un miembro Texto —su longitud sí—, y lo que esa regla no nombra lo juzga solo el censo; y un embudo hacia el log que el juez no sabe seguir lo pone rojo", ElCensoDeLo051QuedaCerrado);
+        // Revisión del 2026-09-24: el juez de la comprobación anotaba lo leído y lo tecleado, y los servidores
+        // locales atendían a cualquier página del navegador (8792 con CORS abierto sirviendo el rastro de batches).
+        Prueba("400. el juez de la comprobación dice etiqueta, longitud y si coincide, nunca el valor: la línea que anota al juzgar un campo tecleado es exactamente el evento, su veredicto, la etiqueta del campo, la longitud de lo que dice y si es lo que tecleó la demo —igual, con otro formato, o distinto con la longitud de lo tecleado—, o por qué no se pudo leer; el relato de su veredicto final no lleva ni lo leído ni lo tecleado; la línea con que el mapa anota la respuesta de una llegada o de un plan del piloto va por su longitud; y lo que el juez le dice al piloto sigue nombrando los dos valores, como exige la 175", ElJuezDeLaComprobacionDiceLaForma);
+        Prueba("401. los servidores locales no son una puerta abierta: ninguna respuesta del servidor del núcleo ni del MCP lleva Access-Control-Allow-Origin; una petición con un Origin que no es la página del propio servidor, o con un Host que no es esta máquina en su puerto, se rechaza sin tocar nada —ni escribir, ni despachar una herramienta—; la que llega sin Origin o desde la propia página se atiende, y lo que el núcleo escribe se anota por su longitud; y los servidores locales, sus prefijos y sus rutas son exactamente los censados: uno nuevo pone el contrato rojo nombrando archivo y línea", LosServidoresLocalesNoSonUnaPuertaAbierta);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -11612,6 +11628,891 @@ internal static class Contrato
                 : Array.Empty<Voz.Realtime.Hecho>();
     }
 
+    // ── EL ESPEJO NO SUBE LO ESCRITO (spec 051): el arnés ────────────────────
+    //
+    // Los valores de estas promesas son INVENTADOS Y OBVIOS, y ninguno es subcadena de una etiqueta. Uno
+    // no es ASCII —«Ñandú Inventado 051»— porque el POST escapa lo no ASCII (la «é» viaja escapada con su código) y un «no contiene»
+    // sobre el JSON crudo daría verde con el valor dentro: se mira siempre lo DESERIALIZADO.
+
+    private const string Inventado051 = "ZZ-INVENTADO-051";            // 16
+    private const string Paciente051 = "Paciente Inventado Cero";       // 23
+    private const string Documento051 = "999000111";
+    private const string NoAscii051 = "Ñandú Inventado 051";            // 19
+    private const string Contexto051 = Paciente051 + " · " + Documento051;          // 35
+    private const string Objetivo051 = "escribe " + Inventado051 + " en Talla";      // 33
+
+    /// <summary>
+    /// Las fuentes del ámbito de la 051, leídas una vez por corrida. Null —y la promesa incumplida, con
+    /// «NO PUDE JUZGARLA»— si no hay U_REPO: un juez que no llegó a mirar no dice «inocente» (aprendizaje nº17).
+    /// </summary>
+    private static List<Fuentes051.Fuente>? Fuentes051DelRepo(string promesa)
+    {
+        string repo = Environment.GetEnvironmentVariable("U_REPO") ?? "";
+        if (repo.Length == 0 || !Directory.Exists(Path.Combine(repo, "windows-client")) || !Directory.Exists(Path.Combine(repo, "windows-graph", "src")))
+        {
+            _fallos++;
+            Console.WriteLine($"   ⚠ NO PUDE JUZGARLA ({promesa}): sin U_REPO no hay fuentes que leer (lo pone scripts/contrato-del-grafo.ps1). "
+                            + "No es que la promesa falle: es que no llegué a probarla, y eso cuenta como incumplida.");
+            return null;
+        }
+        if (_fuentes051 == null || _fuentes051Repo != repo) { _fuentes051 = Fuentes051.Ambito(repo); _fuentes051Repo = repo; }
+        return _fuentes051;
+    }
+    private static List<Fuentes051.Fuente>? _fuentes051;
+    private static string _fuentes051Repo = "";
+
+    private static string Renglones(IEnumerable<string> l) => string.Concat(l.Select(x => "\n       · " + x));
+
+    /// <summary>Un evento de telemetría tal como sale del equipo, ya deserializado.</summary>
+    private sealed record EventoSubido(string Kind, string Phase, string Label, string WorkflowId, string RunId,
+        JsonElement? Detail, IReadOnlyList<string> Valores)
+    {
+        /// <summary>¿Alguno de los valores que viajan (los siete campos y cada cadena de detail) contiene esto, sin mirar mayúsculas?</summary>
+        public bool Lleva(string valor) => Valores.Any(v => v.Contains(valor, StringComparison.OrdinalIgnoreCase));
+        public string Resumen => $"kind={Kind} phase={Phase} label=«{Label}» detail={(Detail?.GetRawText() ?? "null")}";
+    }
+
+    /// <summary>
+    /// El oído del juez sobre TelemetryBus.Emitido: guarda cada evento deserializado y, APARTE, sus propias
+    /// excepciones. LogBus.Log se traga lo que lance un oyente (LogBus.cs:57); sin esto un fallo del arnés
+    /// se leería como «no llegó ningún evento», que es un veredicto sobre el núcleo (aprendizaje nº17).
+    /// </summary>
+    private sealed class OidoDeLaTelemetria
+    {
+        private readonly EventInfo _evento;
+        private readonly Delegate? _manejador;
+        private readonly List<EventoSubido> _eventos = new();
+        private readonly List<string> _reventones = new();
+
+        public OidoDeLaTelemetria(EventInfo evento)
+        {
+            _evento = evento;
+            if (evento.EventHandlerType == typeof(Action<string>)) _manejador = (Action<string>)Oye;
+            else if (evento.EventHandlerType == typeof(EventHandler<string>)) _manejador = (EventHandler<string>)((_, j) => Oye(j));
+            if (_manejador != null) evento.AddEventHandler(null, _manejador);
+            else _reventones.Add($"TelemetryBus.Emitido es {evento.EventHandlerType}, y el juez solo sabe oír Action<string> o EventHandler<string>");
+        }
+
+        private void Oye(string json)
+        {
+            try
+            {
+                using var d = JsonDocument.Parse(json);
+                var r = d.RootElement;
+                string C(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+                var valores = new List<string>();
+                foreach (var k in new[] { "kind", "phase", "appId", "surfaceUrl", "workflowId", "runId", "label" }) valores.Add(C(k));
+                JsonElement? detail = r.TryGetProperty("detail", out var dt) && dt.ValueKind != JsonValueKind.Null ? dt.Clone() : null;
+                void Cadenas(JsonElement e)
+                {
+                    switch (e.ValueKind)
+                    {
+                        case JsonValueKind.String: valores.Add(e.GetString() ?? ""); break;
+                        case JsonValueKind.Object: foreach (var p in e.EnumerateObject()) Cadenas(p.Value); break;
+                        case JsonValueKind.Array: foreach (var x in e.EnumerateArray()) Cadenas(x); break;
+                    }
+                }
+                if (detail is { } de) Cadenas(de);
+                lock (_eventos) _eventos.Add(new EventoSubido(C("kind"), C("phase"), C("label"), C("workflowId"), C("runId"), detail, valores));
+            }
+            catch (Exception e)
+            {
+                lock (_reventones) _reventones.Add($"{e.GetType().Name}: {e.Message} (json: {(json.Length > 200 ? json[..200] + "…" : json)})");
+            }
+        }
+
+        /// <summary>Lo que se subió mientras corría la acción.</summary>
+        public List<EventoSubido> Durante(Action accion)
+        {
+            lock (_eventos) _eventos.Clear();
+            accion();
+            lock (_eventos) return _eventos.ToList();
+        }
+
+        public IReadOnlyList<string> Reventones { get { lock (_reventones) return _reventones.ToList(); } }
+
+        public void Soltar() { if (_manejador != null) _evento.RemoveEventHandler(null, _manejador); }
+    }
+
+    /// <summary>Las líneas del log (etiqueta, texto) que se anotaron mientras corría la acción.</summary>
+    private static List<(string Etiqueta, string Texto)> LineasDurante(EventInfo anotado, Action accion)
+    {
+        var lineas = new List<(string, string)>();
+        Action<string, string> oye = (t, m) => { lock (lineas) lineas.Add((t, m)); };
+        anotado.AddEventHandler(null, oye);
+        try { accion(); }
+        finally { anotado.RemoveEventHandler(null, oye); }
+        lock (lineas) return lineas.ToList();
+    }
+
+    private sealed class VozMuda051 : U.WindowsClient.Agent.IVoice
+    {
+        public void Narrate(string text) { }
+        public void Speak(string text) { }
+    }
+
+    private sealed class UsuarioMudo051 : U.WindowsClient.Agent.IUserChannel
+    {
+        public Task<string> AskAsync(string question, CancellationToken ct) => Task.FromResult("");
+    }
+
+    /// <summary>Un método por nombre, público o privado, estático o no.</summary>
+    private static MethodInfo? Metodo051(Type? t, string nombre)
+        => t?.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
+             .FirstOrDefault(m => m.Name == nombre);
+
+    /// <summary>
+    /// Llama a un método pedido por nombre ajustando lo que la firma no fija la spec: un número a int o long,
+    /// una lista de pasos a lo que pida (lista o arreglo). Lo demás, tal cual.
+    /// </summary>
+    private static object? Llama051(MethodInfo m, object? instancia, params object?[] args)
+    {
+        var ps = m.GetParameters();
+        var reales = new object?[ps.Length];
+        for (int i = 0; i < ps.Length; i++)
+        {
+            if (i >= args.Length) { reales[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : Type.Missing; continue; }
+            object? a = args[i];
+            var t = ps[i].ParameterType;
+            if (a is int n && (t == typeof(long) || t == typeof(double))) a = Convert.ChangeType(n, t);
+            else if (a is System.Collections.IList lista && t.IsArray)
+            {
+                var arr = Array.CreateInstance(t.GetElementType()!, lista.Count);
+                lista.CopyTo(arr, 0);
+                a = arr;
+            }
+            reales[i] = a;
+        }
+        return m.Invoke(m.IsStatic ? null : instancia, reales);
+    }
+
+    /// <summary>Promesa 394.</summary>
+    /// <remarks>
+    /// EL ESPEJO SUBÍA CADA LÍNEA DEL LOG, y el log llevaba lo que Ü escribe en SAP. Medido sobre 043addc
+    /// (2026-09-23): EspejoDelLog.cs:43 se engancha a LogBus.Anotado y :66 manda el texto entero en label y
+    /// en detail; RellenadorSap.cs:409 anota «{campo} = «{después}» (pedido «{valor}»)». Arreglar los 35
+    /// sitios deja intacta la puerta: el espejo sube POR DEFECTO, y el sitio 36 de mañana sale igual. La
+    /// puerta se cierra aquí —sale entero solo lo marcado, y lo marcado está censado—; las 396–399 cierran
+    /// el log local.
+    /// </remarks>
+    private static void ElEspejoSubePorLineaMarcada()
+    {
+        // (c) EL CENSO DE LO PÚBLICO, que no pide ninguna capacidad nueva: se juzga siempre.
+        var fuentes = Fuentes051DelRepo("394");
+        if (fuentes != null)
+        {
+            var fallos = Fuentes051.Censo051.JuzgarPublicas(fuentes, out int enElCodigo);
+            Debe(fallos.Count == 0,
+                $"cada LogBus.Publico del código está en el censo P1–P26 de la 051 con su etiqueta, su ancla y sus huecos, "
+                + $"ninguno con una de las catorce etiquetas de fuera, y cada fila del censo existe ({enElCodigo} en el código, "
+                + $"{Fuentes051.Censo051.Publicas.Length} en el censo):" + Renglones(fallos));
+        }
+
+        var emitido = typeof(U.WindowsClient.Telemetry.TelemetryBus).GetEvent("Emitido", BindingFlags.Public | BindingFlags.Static);
+        var publico = typeof(U.WindowsClient.Diagnostics.LogBus).GetMethod("Publico", BindingFlags.Public | BindingFlags.Static,
+            null, new[] { typeof(string), typeof(string) }, null);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (emitido == null) Pendiente("Telemetry.TelemetryBus.Emitido (el evento entero tal como sale, visto sin red)", "394", "051");
+        if (publico == null) Pendiente("Diagnostics.LogBus.Publico (la línea marcada, la única que sube entera)", "394", "051");
+        if (anotado == null) Pendiente("Diagnostics.LogBus.Anotado", "394", "051");
+        if (emitido == null) return;
+
+        var oido = new OidoDeLaTelemetria(emitido);
+        U.WindowsClient.Telemetry.EspejoDelLog.Encender();
+        try
+        {
+            // (a) UNA LÍNEA CORRIENTE, SEA CUAL SEA SU ETIQUETA, SALE COMO CADENCIA.
+            var lineas = new List<(string Etiqueta, string Texto, string[] Valores)>();
+            foreach (var e in Fuentes051.Censo051.EtiquetasDeFuera)
+                lineas.Add((e, $"«Talla» = «{Inventado051}» · {Paciente051}", new[] { Inventado051, Paciente051 }));
+            lineas.Add(("etiqueta-nueva-051", $"{NoAscii051} · {Documento051}", new[] { NoAscii051, Documento051 }));
+            // Las tres que hoy diagnostican, y justo por eso llevan valores: la exportación, el rellenador y el
+            // diario del player, cuya etiqueta de un select ES la opción elegida (UiaSurface.cs:2359, 2385).
+            lineas.Add(("exportar", $"trabajo 7: escribí {Inventado051}", new[] { Inventado051 }));
+            lineas.Add(("dictado", $"«Talla» = «{NoAscii051}»", new[] { NoAscii051 }));
+            lineas.Add(("workflow", $"→ paso 3 «{Paciente051}» (select) · ubicación ANTES='uia://x'", new[] { Paciente051 }));
+
+            foreach (var (etiqueta, texto, valores) in lineas)
+            {
+                var eventos = oido.Durante(() => U.WindowsClient.Diagnostics.LogBus.Log(etiqueta, texto))
+                    .Where(x => x.Phase == etiqueta).ToList();
+                string vistos = eventos.Count == 0 ? "ninguno" : string.Join(" | ", eventos.Select(x => x.Resumen));
+                Debe(eventos.Count == 1,
+                    $"una línea «{etiqueta}» anotada con LogBus.Log produce exactamente UN evento (produjo {eventos.Count}: {vistos})");
+                if (eventos.Count != 1) continue;
+                var ev = eventos[0];
+                string esperado = $"‹{etiqueta}› · línea de {texto.Length} car.";
+                Debe(ev.Kind == "log", $"el evento de una línea «{etiqueta}» es de kind «log» (es «{ev.Kind}»)");
+                Debe(ev.Label == esperado, $"de una línea «{etiqueta}» sale como label exactamente «{esperado}», su etiqueta y su longitud (salió «{ev.Label}»)");
+                var claves = ev.Detail is { ValueKind: JsonValueKind.Object } d
+                    ? d.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList() : new List<string>();
+                Debe(claves.SequenceEqual(new[] { "largo", "tag" }),
+                    $"y su detail lleva exactamente las claves tag y largo (lleva: {(claves.Count == 0 ? "nada" : string.Join(", ", claves))})");
+                if (ev.Detail is { ValueKind: JsonValueKind.Object } dd && claves.SequenceEqual(new[] { "largo", "tag" }))
+                {
+                    var tag = dd.GetProperty("tag");
+                    var largo = dd.GetProperty("largo");
+                    Debe(tag.ValueKind == JsonValueKind.String && tag.GetString() == etiqueta, $"con tag «{etiqueta}» (es {tag.GetRawText()})");
+                    Debe(largo.ValueKind == JsonValueKind.Number && largo.GetInt32() == texto.Length, $"y largo {texto.Length} (es {largo.GetRawText()})");
+                }
+                foreach (var v in valores)
+                    Debe(!ev.Lleva(v), $"y ningún valor que viaja en el evento de una línea «{etiqueta}» contiene «{v}» ({ev.Resumen})");
+            }
+
+            var propias = oido.Durante(() => U.WindowsClient.Diagnostics.LogBus.Log("telemetry", "flush: tiempo agotado"))
+                .Where(x => x.Phase == "telemetry").ToList();
+            Debe(propias.Count == 0,
+                $"una línea de la etiqueta telemetry no produce ningún evento, ni cadencia: sería la realimentación de EspejoDelLog.cs:24-33 (produjo {propias.Count})");
+
+            // (b) LA LÍNEA MARCADA SUBE ENTERA, Y SIGUE EN EL LOG LOCAL.
+            if (publico != null && anotado != null)
+            {
+                const string actualizacion = "versión 9.9.9-inventada descargada y lista para aplicar";
+                List<EventoSubido> eventos = new();
+                var enElLog = LineasDurante(anotado, () =>
+                    eventos = oido.Durante(() => publico.Invoke(null, new object[] { "update", actualizacion }))
+                        .Where(x => x.Phase == "update").ToList());
+                Debe(eventos.Count == 1, $"una línea anotada con LogBus.Publico produce exactamente UN evento (produjo {eventos.Count})");
+                if (eventos.Count == 1)
+                {
+                    Debe(eventos[0].Label == actualizacion, $"y sube ENTERA en label (salió «{eventos[0].Label}»)");
+                    string? texto = eventos[0].Detail is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty("text", out var t)
+                        && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+                    Debe(texto == actualizacion, $"y entera en detail.text (es «{texto ?? "(no hay)"}»)");
+                }
+                Debe(enElLog.Count(l => l.Etiqueta == "update" && l.Texto == actualizacion) == 1,
+                    $"y LogBus.Anotado también la recibe: marcarla para subir no la saca del log local (llegaron {enElLog.Count} línea(s))");
+            }
+
+            Debe(oido.Reventones.Count == 0, "el juez no reventó escuchando la telemetría:" + Renglones(oido.Reventones));
+        }
+        finally
+        {
+            U.WindowsClient.Telemetry.EspejoDelLog.Apagar();
+            oido.Soltar();
+        }
+    }
+
+    /// <summary>Promesa 395.</summary>
+    /// <remarks>
+    /// EL ESPEJO NO ES LA ÚNICA SALIDA. Diez TelemetryBus.Emit directos (medido sobre 043addc), y seis
+    /// llevaban texto libre: el objetivo entero (AgentLoop.cs:96), lo que Ü contestó (:181), el mensaje de un
+    /// error de backend con el cuerpo de la respuesta dentro (:133 ← BackendClient.cs:117), el contexto de un
+    /// workflow (WorkflowMcpRunner.cs:39), la etiqueta de un paso —la opción elegida en un select— (:55) y el
+    /// error del workflow (:71). Y congelar las sentencias no basta si se abre otro canal: también se congelan.
+    /// </remarks>
+    private static void NingunaOtraSalidaLlevaLoEscrito()
+    {
+        // (b) y (c): las fuentes.
+        var fuentes = Fuentes051DelRepo("395");
+        if (fuentes != null)
+        {
+            var emisiones = Fuentes051.Censo051.JuzgarEmisiones(fuentes, out int enElCodigo);
+            Debe(emisiones.Count == 0,
+                $"cada TelemetryBus.Emit del código está en el censo S1–S10 de la 051 con todos sus argumentos, y cada fila existe "
+                + $"({enElCodigo} en el código, {Fuentes051.Censo051.Emisiones.Length} en el censo):" + Renglones(emisiones));
+            var canales = Fuentes051.Censo051.JuzgarCanales(fuentes);
+            Debe(canales.Count == 0,
+                "los oyentes de LogBus (Anotado, AnotadoConMarca, Logged), los lectores de LogBus.TodayFile() y LogBus.Snapshot() "
+                + "y las rutas /agent/ son exactamente los censados:" + Renglones(canales));
+        }
+
+        var emitido = typeof(U.WindowsClient.Telemetry.TelemetryBus).GetEvent("Emitido", BindingFlags.Public | BindingFlags.Static);
+        if (emitido == null) { Pendiente("Telemetry.TelemetryBus.Emitido (el evento entero tal como sale, visto sin red)", "395", "051"); return; }
+
+        var oido = new OidoDeLaTelemetria(emitido);
+        try
+        {
+            // (a) EL CONTEXTO DE UN WORKFLOW. Sin clave de Graph (ApiKey vacía pisa la embebida por CI) vuelve
+            // antes de tocar nada, pero DESPUÉS de emitir workflow_start: se juzga el evento real sin red.
+            string devuelve = "";
+            var eventos = oido.Durante(() => devuelve = new WorkflowMcpRunner(new GraphConfig { ApiKey = "" }, new VozMuda051())
+                .RunAsync("wf-051", Contexto051, CancellationToken.None).GetAwaiter().GetResult());
+            Debe(devuelve.StartsWith("workflows no disponibles", StringComparison.Ordinal),
+                $"(precondición) sin clave, el workflow vuelve sin tocar la pantalla ni la red (devolvió «{devuelve}»)");
+            var inicio = eventos.Where(e => e.Kind == "workflow_start" && e.WorkflowId == "wf-051").ToList();
+            Debe(inicio.Count == 1, $"invocar el workflow deja exactamente un workflow_start (dejó {inicio.Count})");
+            if (inicio.Count == 1)
+            {
+                Debe(inicio[0].Label == $"‹{Contexto051.Length} car.›",
+                    $"el contexto del workflow sube por su longitud: label «‹{Contexto051.Length} car.›» (salió «{inicio[0].Label}»)");
+                foreach (var v in new[] { Contexto051, Paciente051, Documento051 })
+                    Debe(!inicio[0].Lleva(v), $"y ningún valor del workflow_start contiene «{v}» ({inicio[0].Resumen})");
+            }
+
+            // (a′) EL OBJETIVO Y EL RESUMEN DE UNA CORRIDA CONSCIENTE. Con el token ya cancelado el bucle no da
+            // ninguna vuelta: no hay backend, ni pantalla, ni turno; solo los dos eventos de sus extremos.
+            using var cancelado = new CancellationTokenSource();
+            cancelado.Cancel();
+            var uia = new U.WindowsClient.Uia.UiaReader();
+            var bucle = new U.WindowsClient.Agent.AgentLoop(
+                new U.WindowsClient.Backend.BackendClient(new U.WindowsClient.Config(), new GraphConfig { ApiKey = "" }),
+                uia, new LocalMcp(uia), new VozMuda051(), new UsuarioMudo051(), () => Array.Empty<string>());
+            var corrida = oido.Durante(() => bucle.RunAsync(Objetivo051, cancelado.Token).GetAwaiter().GetResult());
+            var arranca = corrida.Where(e => e.Kind == "conscious_run_start").ToList();
+            var acaba = corrida.Where(e => e.Kind == "conscious_run_end").ToList();
+            Debe(arranca.Count == 1 && arranca[0].Label == $"‹{Objetivo051.Length} car.›",
+                $"el objetivo de una corrida consciente sube por su longitud: label «‹{Objetivo051.Length} car.›» (salió: {string.Join(" | ", arranca.Select(e => e.Resumen))})");
+            // «Mmm, no estoy seguro de haberte entendido. ¿Me lo dices de otra forma?»: el resumen fijo de AgentLoop.cs:176, 70 caracteres.
+            Debe(acaba.Count == 1 && acaba[0].Label == "‹70 car.›",
+                $"y su resumen final, también: label «‹70 car.›» (salió: {string.Join(" | ", acaba.Select(e => e.Resumen))})");
+            Debe(!corrida.Any(e => e.Lleva(Inventado051)),
+                $"y ningún evento de la corrida lleva «{Inventado051}» (salieron: {string.Join(" | ", corrida.Select(e => e.Resumen))})");
+
+            Debe(oido.Reventones.Count == 0, "el juez no reventó escuchando la telemetría:" + Renglones(oido.Reventones));
+        }
+        finally { oido.Soltar(); }
+    }
+
+    /// <summary>Promesa 396.</summary>
+    /// <remarks>
+    /// LA FUGA QUE LA 012 VIO Y NO LLEGÓ AL CONTRATO. RellenadorSap.cs:405 y :409 anotan el valor de cada campo
+    /// clínico; la 012 lo diagnosticó el 2026-09-07 y su promesa 170 nunca se escribió aquí (el número lo tomó
+    /// otra el mismo día). Se juzga la línea que el rellenador DE VERDAD anota, por su costura de prueba, y no
+    /// una función aparte: una función pura intacta que nadie llama es un guardia que se cree puesto.
+    /// </remarks>
+    private static void ElRellenadorDiceLaFormaNoElValor()
+    {
+        var sinValor = typeof(GraphConfig).Assembly.GetType("U.Graph.SinValor");
+        var forma = sinValor?.GetMethod("Forma", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+        if (forma == null) Pendiente("U.Graph.SinValor.Forma", "396", "051");
+        else
+        {
+            Debe((string?)forma.Invoke(null, new object?[] { null }) == "‹vacío›", "SinValor.Forma(null) es «‹vacío›»");
+            Debe((string?)forma.Invoke(null, new object?[] { "" }) == "‹vacío›", "y SinValor.Forma(\"\") también: vacío no es ausente, pero los dos se dicen igual");
+        }
+
+        // LA COSTURA: el rellenador con «ejecutar» y «leer» en vez de SapGuiSurface (hoy _sap es concreto,
+        // RellenadorSap.cs:40). ejecutar(paso) → (escribió, error), como Execute(paso, out err); leer(selector) → lo que dice el campo.
+        var tipo = typeof(U.WindowsClient.Clinical.RellenadorSap);
+        var costura = tipo.GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null,
+            new[] { typeof(GraphConfig), typeof(Func<PlanStep, (bool, string)>), typeof(Func<string, string>) }, null);
+        var escribir = tipo.GetMethod("Escribir", BindingFlags.NonPublic | BindingFlags.Instance, null,
+            new[] { typeof(DetectedField), typeof(string) }, null);
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        // Un Pendiente por lo que falta, no uno para todo: «falta la costura» y «falta Escribir» mandan a sitios distintos (patrón nº2).
+        if (costura == null) Pendiente("RellenadorSap(GraphConfig, Func<PlanStep, (bool Ok, string Error)> ejecutar, Func<string, string?> leer): la costura de prueba", "396", "051");
+        if (escribir == null) Pendiente("RellenadorSap.Escribir(DetectedField, string), el productor real de la línea", "396", "051");
+        if (anotado == null) Pendiente("Diagnostics.LogBus.Anotado", "396", "051");
+        if (costura == null || escribir == null || anotado == null) return;
+
+        var campo = new DetectedField { StepOrder = 1, ActionType = "input", Selector = "wnd[0]/usr/txtZZ-051", Label = "Talla", ControlType = "GuiTextField" };
+        var casos = new (string Pedido, string Leido, string Linea)[]
+        {
+            ("170", "170", "«Talla» = ‹3 car.›, igual a lo pedido"),
+            (Inventado051, "zz-inventado-051 ", "«Talla» = ‹17 car.›, igual salvo mayúsculas o espacios"),
+            ("170", "17", "«Talla» = ‹2 car.›, distinto de lo pedido (‹3 car.›)"),
+            (Inventado051, "", "«Talla» aceptó ‹16 car.› pero quedó vacío: no se cuenta"),
+        };
+        foreach (var (pedido, leido, esperada) in casos)
+        {
+            object rellenador = costura.Invoke(new object[]
+            {
+                new GraphConfig { ApiKey = "" },
+                (Func<PlanStep, (bool, string)>)(_ => (true, "")),
+                (Func<string, string>)(_ => leido),
+            });
+            var dictado = LineasDurante(anotado, () => escribir.Invoke(rellenador, new object[] { campo, pedido }))
+                .Where(l => l.Etiqueta == "dictado").Select(l => l.Texto).ToList();
+            Debe(dictado.Count == 1 && dictado[0] == esperada,
+                $"pedido «{pedido}» y leído «{leido}»: la línea del rellenador es exactamente «{esperada}» "
+                + $"(anotó {dictado.Count}: {string.Join(" | ", dictado.Select(l => "«" + l + "»"))})");
+        }
+    }
+
+    /// <summary>Promesa 397.</summary>
+    /// <remarks>
+    /// LAS MANOS ANOTABAN LO QUE ESCRIBÍAN. La línea «→» de cada llamada al mapa llevaba todos sus argumentos
+    /// con su valor (SurfaceMapTools.cs:2068), la «←» repetía la respuesta —«escribí «…» y confirmé con
+    /// Enter» (:2847)—, y un comentario de AgentLoop.cs:300 juraba que el texto de un type «nunca sale hacia
+    /// Graph»: sale desde que existe el espejo (2026-08-16). Aprendizaje nº18, con comentario incluido.
+    /// </remarks>
+    private static void LasManosNoDejanLoEscritoEnElLog()
+    {
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "397", "051"); return; }
+        var args = new Dictionary<string, string> { ["text"] = Inventado051, ["decir"] = Paciente051, ["target"] = "Talla" };
+
+        // (a) LA LÍNEA DE LA LLAMADA, por el despacho real: una herramienta que no existe cae en «herramienta
+        // de mapa no soportada» (SurfaceMapTools.cs:2130) sin tocar nada, pero su línea «→» se escribe igual.
+        var llamada = LineasDurante(anotado, () => new SurfaceMapTools(() => null).Call("herramienta_de_prueba_051", args))
+            .Where(l => l.Etiqueta == "mapa-mcp" && l.Texto.StartsWith("→ ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+        const string flecha = "→ herramienta_de_prueba_051 text=‹16 car.› decir=‹23 car.› target=Talla";
+        Debe(llamada.Count == 1 && llamada[0] == flecha,
+            $"la línea de una llamada al mapa nombra target con su valor y text y decir por su longitud: «{flecha}» (anotó: {string.Join(" | ", llamada.Select(l => "«" + l + "»"))})");
+
+        // (b) LA LÍNEA DE LA RESPUESTA tapa lo que la respuesta repite.
+        var respuesta = Metodo051(typeof(SurfaceMapTools), "LineaDeRespuesta");
+        if (respuesta == null) Pendiente("SurfaceMapTools.LineaDeRespuesta", "397", "051");
+        else
+        {
+            string linea = (string?)Llama051(respuesta, new SurfaceMapTools(() => null), 12, SurfaceMapTools.RelatoDeEscribir(Inventado051, "", ""), args) ?? "(null)";
+            const string esperada = "← (12 ms) escribí ‹16 car.› y confirmé con Enter";
+            Debe(linea == esperada, $"la línea de la respuesta de escribir es exactamente «{esperada}» (es «{linea}»)");
+        }
+
+        // (c) EL RECORRIDO POR LOTES.
+        var recorrido = Metodo051(typeof(SurfaceMapTools), "LineaDelRecorrido");
+        if (recorrido == null) Pendiente("SurfaceMapTools.LineaDelRecorrido", "397", "051");
+        else
+        {
+            var pasos = new List<RecorrerSegunElNucleo.Paso> { new("", Inventado051), new("Guardar") };
+            string linea = (string?)Llama051(recorrido, new SurfaceMapTools(() => null), pasos) ?? "(null)";
+            const string esperada = "recorrido de 2 paso(s): escribir ‹16 car.› → «Guardar»";
+            Debe(linea == esperada, $"la línea del recorrido es exactamente «{esperada}» (es «{linea}»)");
+        }
+
+        // (d) EL «TYPE» DEL AGENTE CONSCIENTE.
+        var describe = typeof(U.WindowsClient.Agent.AgentLoop).GetMethod("Describe", BindingFlags.NonPublic | BindingFlags.Static);
+        if (describe == null) Pendiente("AgentLoop.Describe", "397", "051");
+        else
+        {
+            var accion = new U.WindowsClient.Domain.AgentAction { Kind = "type", X = 10, Y = 20, Text = NoAscii051 };
+            string linea = (string?)describe.Invoke(null, new object[] { accion }) ?? "(null)";
+            Debe(linea == "type (10,20) ‹19 car.›", $"un type del agente consciente se describe exactamente «type (10,20) ‹19 car.›» (es «{linea}»)");
+        }
+
+        // (e) EL CONTEXTO CON QUE SE INVOCA UN WORKFLOW, por la invocación real (vuelve sin clave, sin red).
+        var invoca = LineasDurante(anotado, () => new WorkflowMcpRunner(new GraphConfig { ApiKey = "" }, new VozMuda051())
+                .RunAsync("wf-051", Contexto051, CancellationToken.None).GetAwaiter().GetResult())
+            .Where(l => l.Etiqueta == "workflow" && l.Texto.StartsWith("MCP invoca", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+        const string mcp = "MCP invoca workflow_id='wf-051' context=‹35 car.›";
+        Debe(invoca.Count == 1 && invoca[0] == mcp,
+            $"invocar un workflow anota exactamente «{mcp}» (anotó: {string.Join(" | ", invoca.Select(l => "«" + l + "»"))})");
+
+        // (f) TAPAR: lo que E5, E12, E18, O2 y O3 usan para una respuesta que repite un valor conocido.
+        var tapar = typeof(GraphConfig).Assembly.GetType("U.Graph.SinValor")?.GetMethod("Tapar", BindingFlags.Public | BindingFlags.Static);
+        if (tapar == null) Pendiente("U.Graph.SinValor.Tapar", "397", "051");
+        else
+        {
+            string tapado = (string?)tapar.Invoke(null, new object[]
+            {
+                $"escribí «{Inventado051}» y confirmé con Enter; zz-inventado-051 quedó", new string?[] { Inventado051 },
+            }) ?? "(null)";
+            const string esperada = "escribí ‹16 car.› y confirmé con Enter; ‹16 car.› quedó";
+            Debe(tapado == esperada, $"Tapar cambia el valor —entre «» y suelto, sin mirar mayúsculas— por su forma: «{esperada}» (es «{tapado}»)");
+        }
+
+        // (g) LA CUENTA QUE DEVUELVE EL RECORRIDO POR LOTES, por el ejecutor real con manos falsas (revisión del
+        // 2026-09-24). Esa cuenta tenía CINCO salidas —la respuesta al modelo, la «←» del batch (tapada en la fase
+        // 4), el rastro que sirve /batches (FaceWindow.xaml.cs:900), el «plan · PARÓ» de la comprobación y la «←»
+        // de mostrar— y solo una tapada: se arregla donde nace, no en cada salida (patrón nº5).
+        var gT = new Nucleo.Grafo();
+        gT.Estoy("uia://x.exe/a");
+        gT.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:t", "Talla", "Edit") });
+        string dondeT = "uia://x.exe/a";
+        var pulsarT = new PulsarSegunElNucleo(gT, () => dondeT, (sel, et) => true) { EsperaMaximaMs = 240 };
+        var noEscribe = new RecorrerSegunElNucleo(gT, () => dondeT, pulsarT, escribir: (_, _) => false) { EsperaMaximaMs = 240 };
+        string c1 = noEscribe.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Talla", Inventado051) }).Cuenta;
+        Debe(c1.Contains("no pude escribir ‹16 car.› en «Talla».", StringComparison.Ordinal) && !c1.Contains(Inventado051, StringComparison.OrdinalIgnoreCase),
+            $"la cuenta de un recorrido que no pudo escribir dice «no pude escribir ‹16 car.› en «Talla».», nunca lo escrito (es «{c1}»)");
+        var escribe = new RecorrerSegunElNucleo(gT, () => dondeT, pulsarT, escribir: (_, _) => true) { EsperaMaximaMs = 240 };
+        string c2 = escribe.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Talla", Inventado051, "uia://x.exe/otra") }).Cuenta;
+        Debe(c2.Contains("escribí ‹16 car.› y quedé en «uia://x.exe/a»", StringComparison.Ordinal) && !c2.Contains(Inventado051, StringComparison.OrdinalIgnoreCase),
+            $"y la de uno que escribió y no llegó, «escribí ‹16 car.› y quedé en «uia://x.exe/a»…», tampoco (es «{c2}»)");
+
+        // (h) EL PLAN DEL PILOTO, que la comprobación anota antes de recorrerlo (FaceWindow.xaml.cs, RecorrerElPlan).
+        var plan = Cap004("U.WindowsClient.Piloto.PlanDeComprobacion")?.GetMethod("LineaDelPlan", BindingFlags.Public | BindingFlags.Static);
+        if (plan == null) Pendiente("Piloto.PlanDeComprobacion.LineaDelPlan (la línea del plan del piloto, por la longitud de lo que escribe)", "397", "051");
+        else
+        {
+            var pasosDelPlan = new List<U.WindowsClient.Piloto.PasoDelPlan> { new(1, "Talla", Inventado051, "", "", ""), new(2, "Guardar", "", "", "", "") };
+            string linea = (string?)Llama051(plan, null, pasosDelPlan) ?? "(null)";
+            const string esperada = "2 paso(s) → escribir ‹16 car.› en «Talla» → «Guardar»";
+            Debe(linea == esperada, $"la línea del plan del piloto es exactamente «{esperada}» (es «{linea}»)");
+        }
+    }
+
+    /// <summary>Promesa 398.</summary>
+    /// <remarks>
+    /// LO DICHO QUEDABA EN EL LOG. En esta máquina, 17 archivos de log (2026-08-06 → 09-22) guardan 107 líneas
+    /// «usuario dijo:» y 92 «Ü dijo:» (contadas sin leer su contenido), y dos de ellos con el espejo encendido.
+    /// Y el objetivo: con el dictado de respaldo ES la frase dicha (FaceWindow.xaml.cs:2607).
+    /// </remarks>
+    private static void LoDichoYLoPedidoNoQuedanEnElLog()
+    {
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "398", "051"); return; }
+
+        // (c) LO QUE NARRA EL PILOTO, puro.
+        var piloto = Cap004("U.WindowsClient.Piloto.ElPiloto")?.GetMethod("LineaDelPiloto",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static, null, new[] { typeof(string) }, null);
+        if (piloto == null) Pendiente("Piloto.ElPiloto.LineaDelPiloto", "398", "051");
+        else
+        {
+            string json = JsonSerializer.Serialize(new { tipo = "texto", texto = Paciente051 });
+            string l1 = (string?)piloto.Invoke(null, new object[] { json }) ?? "(null)";
+            Debe(l1 == "texto: ‹23 car.›", $"lo que narra el piloto se anota por su tipo y su longitud: «texto: ‹23 car.›» (es «{l1}»)");
+            string crudo = Inventado051 + " sin json";
+            string l2 = (string?)piloto.Invoke(null, new object[] { crudo }) ?? "(null)";
+            Debe(l2 == $"línea sin JSON: ‹{crudo.Length} car.›", $"y una línea que no es JSON, por su longitud: «línea sin JSON: ‹{crudo.Length} car.›» (es «{l2}»)");
+        }
+
+        // (d) EL OBJETIVO Y EL RESUMEN DE UNA CORRIDA CONSCIENTE, por la corrida real con el token cancelado.
+        using (var cancelado = new CancellationTokenSource())
+        {
+            cancelado.Cancel();
+            var uia = new U.WindowsClient.Uia.UiaReader();
+            var bucle = new U.WindowsClient.Agent.AgentLoop(
+                new U.WindowsClient.Backend.BackendClient(new U.WindowsClient.Config(), new GraphConfig { ApiKey = "" }),
+                uia, new LocalMcp(uia), new VozMuda051(), new UsuarioMudo051(), () => Array.Empty<string>());
+            var lineas = LineasDurante(anotado, () => bucle.RunAsync(Objetivo051, cancelado.Token).GetAwaiter().GetResult());
+            var agente = lineas.Where(l => l.Etiqueta == "agent").Select(l => l.Texto).ToList();
+            string objetivo = $"▶ objetivo: ‹{Objetivo051.Length} car.› · SIN compuerta de superficie";
+            Debe(agente.Count(l => l == objetivo) == 1,
+                $"el objetivo se anota exactamente «{objetivo}» (anotó: {string.Join(" | ", agente.Select(l => "«" + l + "»"))})");
+            const string fin = "■ fin · 0 acción(es) · ‹70 car.›";
+            Debe(agente.Count(l => l == fin) == 1, $"y el fin, exactamente «{fin}» (anotó: {string.Join(" | ", agente.Select(l => "«" + l + "»"))})");
+            Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)),
+                $"y ninguna línea de la corrida contiene «{Inventado051}»:" + Renglones(lineas.Where(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)).Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+
+        // (e) LO QUE LA PERSONA CONTESTA A UNA PREGUNTA DEL PILOTO (revisión del 2026-09-24). voz_preguntar devuelve
+        // «la persona dijo: «…»» (FaceWindow.xaml.cs, PreguntarYEsperar), y la «←» del mapa solo tapaba lo que venía
+        // en los argumentos —la pregunta—, así que la respuesta salía entera: la 398 cubría «usuario dijo:» y no
+        // esta segunda copia. Por el despacho real, con la voz falsa.
+        {
+            string contestado = $"la persona dijo: «{Paciente051} mide 170»";
+            var voz = new SurfaceMapTools(() => null) { Preguntar = _ => contestado };
+            string devuelto = "";
+            var lineas = LineasDurante(anotado, () => devuelto = voz.Call("voz_preguntar",
+                new Dictionary<string, string> { ["texto"] = "¿qué talla tiene?" }));
+            Debe(devuelto == contestado, $"(precondición) al piloto le llega la respuesta entera: la necesita para seguir (le llegó «{devuelto}»)");
+            var vuelta = lineas.Where(l => l.Etiqueta == "mapa-mcp" && l.Texto.StartsWith("← ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+            Debe(vuelta.Count == 1 && Regex.IsMatch(vuelta[0], $@"^← \(\d+ ms\) ‹{contestado.Length} car\.›$"),
+                $"la línea de la respuesta a una pregunta del piloto es «← (N ms) ‹{contestado.Length} car.›» (anotó: {string.Join(" | ", vuelta.Select(l => "«" + l + "»"))})");
+            Debe(!lineas.Any(l => l.Texto.Contains(Paciente051, StringComparison.OrdinalIgnoreCase)),
+                "y ninguna línea anotada contiene lo que la persona contestó:" + Renglones(lineas.Where(l => l.Texto.Contains(Paciente051, StringComparison.OrdinalIgnoreCase)).Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+
+        // (a) y (b) LO DICHO Y LO QUE NO SE TRADUCE, por la puerta del socket de una conversación GPT-Live sin socket.
+        long ahora = 0;
+        var c = GptLiveConReloj(() => Volatile.Read(ref ahora), "398");
+        if (c == null) return;
+        var (conv, llega, cierres, _) = c.Value;
+        const string dicho = Paciente051 + " tiene 38,5 inventado";   // 44
+        const string contesta = "anoto " + Inventado051;              // 22
+        string instrucciones = JsonSerializer.Serialize(new { type = "session.instructions.appended", event_id = "event_1", nota = dicho });
+        List<(string Etiqueta, string Texto)> delTurno, delCrudo;
+        int cerro;
+        using (conv)
+        {
+            delTurno = LineasDurante(anotado, () =>
+            {
+                Volatile.Write(ref ahora, 700_000); llega(OyeDelUsuario(dicho));
+                Volatile.Write(ref ahora, 700_500); llega(DiceLaVozDeU(contesta));
+                Volatile.Write(ref ahora, 703_000); llega(TicSinHechos);
+            });
+            cerro = cierres();
+            delCrudo = LineasDurante(anotado, () => llega(instrucciones));
+        }
+        Debe(cerro == 1, $"(precondición) el turno se cerró por silencio, que es cuando se escriben las líneas de lo dicho (cierres: {cerro})");
+        var vivas = delTurno.Where(l => l.Etiqueta == "voz-viva").Select(l => l.Texto).ToList();
+        var usuario = vivas.Where(l => l.StartsWith("usuario dijo:", StringComparison.Ordinal)).ToList();
+        var deU = vivas.Where(l => l.StartsWith("Ü dijo:", StringComparison.Ordinal)).ToList();
+        Debe(usuario.Count == 1 && usuario[0] == $"usuario dijo: ‹{dicho.Length} car.›",
+            $"lo que dijo la persona se anota exactamente «usuario dijo: ‹{dicho.Length} car.›» (anotó: {string.Join(" | ", usuario.Select(l => "«" + l + "»"))})");
+        Debe(deU.Count == 1 && deU[0] == $"Ü dijo: ‹{contesta.Length} car.›",
+            $"y lo que contestó Ü, «Ü dijo: ‹{contesta.Length} car.›» (anotó: {string.Join(" | ", deU.Select(l => "«" + l + "»"))})");
+        var conFrase = delTurno.Concat(delCrudo)
+            .Where(l => new[] { dicho, contesta, Paciente051, Inventado051 }.Any(v => l.Texto.Contains(v, StringComparison.OrdinalIgnoreCase))).ToList();
+        Debe(conFrase.Count == 0, "y ninguna línea anotada contiene lo dicho ni lo contestado:" + Renglones(conFrase.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        var crudas = delCrudo.Where(l => l.Etiqueta == "voz-viva" && l.Texto.StartsWith("← ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+        string esperadaCruda = $"← session.instructions.appended · ‹{instrucciones.Length} car.›";
+        Debe(crudas.Count == 1 && crudas[0] == esperadaCruda,
+            $"un mensaje que no se traduce se anota por su tipo y su longitud: «{esperadaCruda}» (anotó: {string.Join(" | ", crudas.Select(l => "«" + l + "»"))})");
+    }
+
+    /// <summary>Promesa 399.</summary>
+    /// <remarks>
+    /// EL CENSO SE JUZGA EN EL CÓDIGO, NO EN LA SPEC. La 012 contó «6 sitios» y su promesa no llegó nunca al
+    /// contrato. Aquí cada uno de los 35 sitios tiene un ancla y una lista de huecos permitidos, y la regla (b)
+    /// es la red para el sitio 36: mira TODA sentencia que llega al log —también por los embudos, que se
+    /// derivan de las lambdas y no de una lista que alguien tenga que acordarse de ampliar—.
+    /// </remarks>
+    private static void ElCensoDeLo051QuedaCerrado()
+    {
+        var fuentes = Fuentes051DelRepo("399");
+        if (fuentes == null) return;
+
+        // (a) EL CENSO: el juez de verdad.
+        var sitios = Fuentes051.Censo051.JuzgarSitios(fuentes, out int bien);
+        Debe(sitios.Count == 0,
+            $"cada uno de los {Fuentes051.Censo051.Sitios.Length} sitios del censo de la 051 se encuentra por su ancla y no lleva más huecos que SinValor, "
+            + $"una longitud o los permitidos de su fila: {bien} de {Fuentes051.Censo051.Sitios.Length}" + Renglones(sitios));
+
+        // (b) LA REGLA: la red para el sitio que todavía no existe.
+        var regla = Fuentes051.Censo051.JuzgarRegla(fuentes, out int porEmbudos, out var sinSeguir, out var embudos);
+        Debe(sinSeguir.Count == 0, "cada embudo hacia el log se deja seguir hasta el nombre por el que se le llama:"
+            + Renglones(sinSeguir.Select(s => "embudo sin seguir: " + s)));
+        int lambdas = embudos.Select(e => e.Donde).Distinct().Count();
+        int nombres = embudos.Select(e => (e.Nombre, e.Posicion, e.En?.Ruta, e.Ini)).Distinct().Count();
+        Debe(regla.Count == 0,
+            $"ninguna línea que llega al log —por LogBus.Log, por L( o por uno de los {lambdas} embudos derivados de lambdas ({nombres} nombres "
+            + $"por los que se les llama), que hoy llevan {porEmbudos} sentencias— ni ningún error que una superficie devuelve lleva un hueco "
+            + "que nombre «valor», «texto» o «dato» enteros, o que lea un miembro «Texto»:" + Renglones(regla));
+    }
+
+    /// <summary>Promesa 400.</summary>
+    /// <remarks>
+    /// EL JUEZ DE LA COMPROBACIÓN ANOTABA LO QUE LEÍA Y LO QUE LA DEMO TECLEÓ. RegistroDeLaComprobacion.cs:166-171
+    /// (medido sobre 00dcd42, 2026-09-24): «evento 3: NO hecho · «Talla» dice «17» y la demo tecleó «170»», y
+    /// Final() juntaba esos motivos en el relato que FaceWindow anota con «piloto terminó … · {final.Motivo}» y
+    /// devuelve a la consulta. Es la clase de E2 (RellenadorSap), arreglada en la fase 1 allí y no aquí. El motivo
+    /// que se le dice AL PILOTO sigue nombrando los dos valores —la 175 lo exige, y el piloto trabaja con la lección
+    /// delante—; lo que cambia es lo que se ANOTA, y la línea con que el mapa anota esa respuesta.
+    /// </remarks>
+    private static void ElJuezDeLaComprobacionDiceLaForma()
+    {
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tt = TiposDeLaLeccion.Cargar();
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "400", "051"); return; }
+        if (tt == null) { Pendiente("los tipos de la lección (Teach.EventoDeLaLeccion, Teach.Leccion…)", "400", "051"); return; }
+
+        const string otro = "ZZ-OTRO-051";   // 11
+        U.WindowsClient.Teach.Leccion LeccionDe(string tecleado)
+        {
+            var ev = ListaDe(tt.Evento);
+            ev.Add(tt.Evento_(1, 1000, "clic", 1, 1, "wnd[0]/usr/txtZZ-051", tecleado, "", "", "", Array.Empty<string>(), etiqueta: "Talla"));
+            return (U.WindowsClient.Teach.Leccion)tt.Leccion_("sapgui://QAS/ZZ051", "sapgui://QAS/ZZ051", ev, ListaDe(tt.CuadroLeccion));
+        }
+
+        // (a) LA LÍNEA DEL JUEZ, por el productor real (Llegue) con una lectura falsa, y por IGUALDAD EXACTA: un
+        // «no contiene» dejaría pasar un prefijo del valor.
+        var casos = new (string Tecleado, Func<string, string?> Leer, bool Hecho, string Linea)[]
+        {
+            (Inventado051, _ => otro, false, "evento 1: NO hecho · «Talla» = ‹11 car.›, distinto de lo que tecleó la demo (‹16 car.›)"),
+            (Inventado051, _ => "zz-inventado-051", true, "evento 1: HECHO · «Talla» = ‹16 car.›, lo que tecleó la demo"),
+            ("170", _ => "170,000", true, "evento 1: HECHO · «Talla» = ‹7 car.›, lo que tecleó la demo con otro formato (‹3 car.›)"),
+            (Inventado051, _ => null, false, "evento 1: NO hecho · «Talla» no se pudo leer (la lectura no devolvió nada): sin comprobar lo que tecleó la demo (‹16 car.›)"),
+            (Inventado051, _ => throw new InvalidOperationException("el campo " + otro + " no contesta"), false,
+                "evento 1: NO hecho · «Talla» no se pudo leer (leerlo lanzó InvalidOperationException): sin comprobar lo que tecleó la demo (‹16 car.›)"),
+        };
+        foreach (var (tecleado, leer, hecho, esperada) in casos)
+        {
+            var registro = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(tecleado), leer);
+            U.WindowsClient.Piloto.VeredictoDeEvento? v = null;
+            var lineas = LineasDurante(anotado, () => v = registro.Llegue(1, "sapgui://QAS/ZZ051"));
+            Debe(v != null && v.Aterrizo == hecho, $"(precondición) tecleado «{tecleado}»: el veredicto es {(hecho ? "HECHO" : "NO hecho")} (es {(v == null ? "nada" : v.Aterrizo ? "HECHO" : "NO hecho")})");
+            var delJuez = lineas.Where(l => l.Etiqueta == "comprobar").Select(l => l.Texto).ToList();
+            Debe(delJuez.Count == 1 && delJuez[0] == esperada,
+                $"tecleado «{tecleado}»: la línea del juez es exactamente «{esperada}» (anotó {delJuez.Count}: {string.Join(" | ", delJuez.Select(l => "«" + l + "»"))})");
+            string final = registro.Final().Motivo;
+            var enElFinal = new[] { tecleado, otro, "170,000", "zz-inventado-051" }.Where(x => final.Contains(x, StringComparison.OrdinalIgnoreCase)).ToList();
+            Debe(enElFinal.Count == 0, $"tecleado «{tecleado}»: el relato del veredicto final no lleva ni lo leído ni lo tecleado (lleva {string.Join(", ", enElFinal.Select(x => "«" + x + "»"))}: «{final}»)");
+            Debe(!lineas.Any(l => l.Texto.Contains(tecleado, StringComparison.OrdinalIgnoreCase) || l.Texto.Contains(otro, StringComparison.OrdinalIgnoreCase)),
+                $"tecleado «{tecleado}»: ninguna línea anotada lleva lo leído ni lo tecleado:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+
+        // (b) LO QUE EL JUEZ LE DICE AL PILOTO sigue nombrando los dos valores (la 175): arreglar el log no es dejar
+        // al piloto sin saber qué hay en el campo.
+        var alPiloto = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(Inventado051), _ => otro);
+        var vp = alPiloto.Llegue(1, "sapgui://QAS/ZZ051");
+        Debe(vp.Motivo.Contains(Inventado051, StringComparison.Ordinal) && vp.Motivo.Contains(otro, StringComparison.Ordinal),
+            $"el motivo que se le dice al piloto nombra lo que dice el campo y lo que tecleó la demo (es «{vp.Motivo}»)");
+
+        // (c) LA LÍNEA CON QUE EL MAPA ANOTA LA RESPUESTA de una llegada y de un plan: citan lo que el juez leyó y lo
+        // que la demo tecleó, que no vienen en los argumentos (n, pasos), así que LineaDeRespuesta no sabría taparlos.
+        // Los delegados repiten la forma de FaceWindow.xaml.cs (Llegue y el relato de RecorrerElPlan): lo que se
+        // juzga es el despacho del mapa, que es el mismo para cualquier productor.
+        var comprobando = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(Inventado051), _ => otro);
+        var mano = new SurfaceMapTools(() => null)
+        {
+            Llegue = n =>
+            {
+                var v = comprobando.Llegue(n, "sapgui://QAS/ZZ051");
+                return v.Aterrizo ? $"ATERRIZASTE: el evento {n} llegó a «{v.Esperada}». Sigue con el siguiente." : $"NO ATERRIZÓ el evento {n}: {v.Motivo}";
+            },
+            Plan = _ => "HICE 0 DE 1 y PARÉ en el paso 1. FALTA POR JUZGAR: "
+                + string.Join("; ", comprobando.Pendientes().Select(p => $"evento {p.N} «{p.Que}» ({p.Motivo})")) + ".",
+        };
+        foreach (var (herramienta, argumentos) in new[]
+        {
+            ("leccion_llegue", new Dictionary<string, string> { ["n"] = "1" }),
+            ("leccion_plan", new Dictionary<string, string> { ["pasos"] = "[]" }),
+        })
+        {
+            string devuelto = "";
+            var lineas = LineasDurante(anotado, () => devuelto = mano.Call(herramienta, argumentos));
+            Debe(devuelto.Contains(otro, StringComparison.Ordinal), $"(precondición) {herramienta}: al piloto le llega lo que dice el campo (le llegó «{devuelto}»)");
+            var vuelta = lineas.Where(l => l.Etiqueta == "mapa-mcp" && l.Texto.StartsWith("← ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+            Debe(vuelta.Count == 1 && Regex.IsMatch(vuelta[0], $@"^← \(\d+ ms\) ‹{devuelto.Length} car\.›$"),
+                $"{herramienta}: la línea de su respuesta es «← (N ms) ‹{devuelto.Length} car.›» (anotó: {string.Join(" | ", vuelta.Select(l => "«" + l + "»"))})");
+            Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase) || l.Texto.Contains(otro, StringComparison.OrdinalIgnoreCase)),
+                $"{herramienta}: ninguna línea anotada lleva lo leído ni lo tecleado:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+    }
+
+    /// <summary>Promesa 401.</summary>
+    /// <remarks>
+    /// ESCUCHAR EN 127.0.0.1 NO ES «SOLO ESTA MÁQUINA»: el navegador del médico también es esta máquina. Medido
+    /// leyendo el código (00dcd42, 2026-09-24): ServidorDelNucleo.cs:94 contestaba con «Access-Control-Allow-Origin:
+    /// *», así que cualquier página podía leer /batches —el rastro citaba lo escrito en SAP— y mandar POST a
+    /// /escribir e /ir; y ninguno de los DOS servidores locales (8790 y 8792) miraba el Origin, así que un POST
+    /// «simple» (text/plain, sin permiso previo) desde cualquier página hacía que Ü escribiera o despachara una
+    /// herramienta aunque no pudiera leer la respuesta. Que un navegador concreto lo deje pasar es (D); se juzga
+    /// lo que el servidor contesta a cada Origin, que no depende de ningún navegador.
+    /// </remarks>
+    private static void LosServidoresLocalesNoSonUnaPuertaAbierta()
+    {
+        // (d) LAS FUENTES: sin CORS en ningún literal, cada servidor local por la puerta, y el censo de servidores,
+        // prefijos y rutas. No pide ninguna capacidad nueva: se juzga siempre.
+        var fuentes = Fuentes051DelRepo("401");
+        if (fuentes != null)
+        {
+            var fallos = Fuentes051.Censo051.JuzgarServidores(fuentes);
+            Debe(fallos.Count == 0,
+                "ningún literal del código lleva Access-Control-Allow-Origin, cada servidor local pasa sus peticiones por PuertaLocal.Admite, "
+                + $"y los servidores, sus prefijos y sus rutas son exactamente los {Fuentes051.Censo051.ServidoresLocales.Length} del censo:" + Renglones(fallos));
+        }
+
+        // (a) LA REGLA, pura.
+        var admite = Cap004("U.WindowsClient.Navigation.PuertaLocal")?.GetMethod("Admite", BindingFlags.Public | BindingFlags.Static);
+        if (admite == null) Pendiente("Navigation.PuertaLocal.Admite(origen, host, puerto): quién puede hablarle a un servidor local", "401", "051");
+        else
+        {
+            var reglas = new (string? Origen, string? Host, bool Pasa, string Caso)[]
+            {
+                (null, "127.0.0.1:8792", true, "sin Origin: el piloto (Node), el Agent SDK, PowerShell y la propia app no son navegadores"),
+                ("", "127.0.0.1:8792", true, "Origin vacío: ningún navegador lo manda vacío"),
+                ("http://127.0.0.1:8792", "127.0.0.1:8792", true, "la propia página del servidor (el visor, servido desde /visor)"),
+                ("http://localhost:8792", "localhost:8792", true, "la propia página, por localhost"),
+                ("https://pagina-ajena.example", "127.0.0.1:8792", false, "una página ajena"),
+                ("null", "127.0.0.1:8792", false, "«null»: una página abierta con file:// o un iframe con sandbox"),
+                ("http://127.0.0.1:9999", "127.0.0.1:8792", false, "otra página de esta máquina, en otro puerto"),
+                (null, "pagina-ajena.example:8792", false, "un Host ajeno: un nombre que otro resolvió a 127.0.0.1"),
+                (null, "", false, "sin Host"),
+                (null, "127.0.0.1:9999", false, "el Host de otro puerto"),
+            };
+            foreach (var (origen, host, pasa, caso) in reglas)
+            {
+                object? v = admite.Invoke(null, new object?[] { origen, host, 8792 });
+                bool? dio = v == null ? null : (bool?)v.GetType().GetProperty("Pasa")?.GetValue(v);
+                Debe(dio == pasa, $"PuertaLocal.Admite(«{origen ?? "(sin Origin)"}», «{host}», 8792) {(pasa ? "atiende" : "rechaza")}: {caso} (dio {(dio == null ? "nada" : dio.Value ? "atiende" : "rechaza")})");
+            }
+        }
+
+        // (b) EL SERVIDOR DEL NÚCLEO, de verdad, en un puerto libre: lo que contesta a cada Origin y lo que hace.
+        var ctorNucleo = typeof(ServidorDelNucleo).GetConstructors().FirstOrDefault(c => c.GetParameters().Any(p => p.Name == "puerto"));
+        if (ctorNucleo == null) Pendiente("ServidorDelNucleo(…, int puerto): el servidor del núcleo en un puerto que no sea el de la app viva", "401", "051");
+        var ctorMcp = typeof(ServidorMcp).GetConstructors().FirstOrDefault(c => c.GetParameters().Any(p => p.Name == "puerto"));
+        if (ctorMcp == null) Pendiente("ServidorMcp(ProtocoloMcp, int puerto): el servidor MCP en un puerto que no sea el de la app viva", "401", "051");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "401", "051"); return; }
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        (int Estado, bool Cors, string Cuerpo) Pide(HttpMethod metodo, string url, string? cuerpo, string? origen, string? host = null)
+        {
+            using var req = new HttpRequestMessage(metodo, url);
+            if (cuerpo != null) req.Content = new StringContent(cuerpo, Encoding.UTF8, "application/json");
+            if (origen != null) req.Headers.TryAddWithoutValidation("Origin", origen);
+            if (host != null) req.Headers.Host = host;
+            using var resp = http.Send(req);
+            return ((int)resp.StatusCode, resp.Headers.Contains("Access-Control-Allow-Origin"), resp.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+        }
+
+        if (ctorNucleo != null)
+        {
+            int puerto = PuertoLibre051();
+            string donde = "uia://x.exe/formulario";
+            var g = new Nucleo.Grafo();
+            g.Estoy(donde);
+            g.Observar(donde, new[] { new Nucleo.Elemento("s:talla", "Talla", "Edit") });
+            var escritos = new List<(string Selector, string Texto)>();
+            var args = ctorNucleo.GetParameters().Select(p => p.Name switch
+            {
+                "grafo" => (object?)g,
+                "donde" => (Func<string>)(() => donde),
+                "pulsar" => (Func<string, string, bool>)((_, _) => true),
+                "enfocar" => (Func<string, bool>)(_ => true),
+                "escribir" => (Func<string, string, bool>)((sel, t) => { lock (escritos) escritos.Add((sel, t)); return true; }),
+                "elegir" => (Func<string, string, bool>)((_, _) => true),
+                "puerto" => puerto,
+                _ => p.HasDefaultValue ? p.DefaultValue : null,
+            }).ToArray();
+            using var servidor = (ServidorDelNucleo)ctorNucleo.Invoke(args);
+            if (!servidor.Arrancar())
+            {
+                _fallos++;
+                Console.WriteLine($"   ⚠ NO PUDE JUZGARLA (401): el servidor del núcleo no arrancó en 127.0.0.1:{puerto} (mira la línea «nucleo-http» del log). "
+                                + "No es que la promesa falle: es que no llegué a probarla, y eso cuenta como incumplida.");
+            }
+            else
+            {
+                string url = $"http://127.0.0.1:{puerto}";
+                string escribir = JsonSerializer.Serialize(new { elemento = "Talla", texto = Inventado051 });
+                var ajena = Pide(HttpMethod.Post, url + "/escribir", escribir, "https://pagina-ajena.example");
+                Debe(ajena.Estado == 403 && escritos.Count == 0,
+                    $"un POST a /escribir desde una página ajena se rechaza con 403 y no escribe nada (contestó {ajena.Estado}, escribió {escritos.Count})");
+                var nula = Pide(HttpMethod.Post, url + "/escribir", escribir, "null");
+                Debe(nula.Estado == 403 && escritos.Count == 0, $"y desde file:// («null»), igual (contestó {nula.Estado}, escribió {escritos.Count})");
+                var otroHost = Pide(HttpMethod.Post, url + "/escribir", escribir, null, $"pagina-ajena.example:{puerto}");
+                Debe(otroHost.Estado >= 400 && otroHost.Estado < 500 && escritos.Count == 0,
+                    $"y con un Host ajeno se rechaza sin escribir (contestó {otroHost.Estado}, escribió {escritos.Count})");
+                var rastro = Pide(HttpMethod.Get, url + "/batches", null, "https://pagina-ajena.example");
+                Debe(rastro.Estado == 403 && !rastro.Cuerpo.Contains("corridas", StringComparison.Ordinal),
+                    $"el rastro de batches no se le sirve a una página ajena (contestó {rastro.Estado}: «{(rastro.Cuerpo.Length > 120 ? rastro.Cuerpo[..120] + "…" : rastro.Cuerpo)}»)");
+
+                (int Estado, bool Cors, string Cuerpo) propia = default;
+                var lineas = LineasDurante(anotado, () => propia = Pide(HttpMethod.Post, url + "/escribir", escribir, null));
+                Debe(propia.Estado == 200 && escritos.Count == 1 && escritos[0].Texto == Inventado051,
+                    $"sin Origin se atiende y el valor llega entero a las manos (contestó {propia.Estado}, escribió {escritos.Count}: {string.Join(", ", escritos.Select(e => $"«{e.Selector}» ← ‹{e.Texto.Length} car.›"))})");
+                var delNucleo = lineas.Where(l => l.Etiqueta == "nucleo-http").Select(l => l.Texto).ToList();
+                Debe(delNucleo.Count == 1 && delNucleo[0] == "escrito ‹16 car.› en «Talla»",
+                    $"y lo que el núcleo escribe se anota exactamente «escrito ‹16 car.› en «Talla»» (anotó: {string.Join(" | ", delNucleo.Select(l => "«" + l + "»"))})");
+                Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)),
+                    "y ninguna línea anotada lleva lo escrito:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+
+                var visor = Pide(HttpMethod.Get, url + "/batches", null, url);
+                var sinOrigen = Pide(HttpMethod.Get, url + "/batches", null, null);
+                Debe(visor.Estado == 200 && sinOrigen.Estado == 200, $"la propia página y quien llega sin Origin leen el rastro (contestó {visor.Estado} y {sinOrigen.Estado})");
+                var cors = new[] { ("ajena", ajena), ("null", nula), ("rastro ajeno", rastro), ("propia", propia), ("visor", visor), ("sin Origin", sinOrigen) }
+                    .Where(x => x.Item2.Cors).Select(x => x.Item1).ToList();
+                Debe(cors.Count == 0, $"y ninguna respuesta del servidor del núcleo lleva Access-Control-Allow-Origin (la llevan: {string.Join(", ", cors)})");
+            }
+        }
+
+        // (c) EL SERVIDOR MCP, de verdad: una herramienta que solo cuenta cuántas veces la despacharon.
+        if (ctorMcp != null)
+        {
+            int puerto = PuertoLibre051();
+            int despachos = 0;
+            var protocolo = new ProtocoloMcp(
+                new[] { new Voz.Realtime.Utensilio("cuenta_051", "solo cuenta", Array.Empty<Voz.Realtime.Argumento>()) },
+                (_, __) => { Interlocked.Increment(ref despachos); return "contado"; });
+            using var servidor = (ServidorMcp)ctorMcp.Invoke(ctorMcp.GetParameters().Select(p =>
+                p.Name == "puerto" ? (object?)puerto : p.ParameterType == typeof(ProtocoloMcp) ? protocolo : p.HasDefaultValue ? p.DefaultValue : null).ToArray());
+            if (!servidor.Start())
+            {
+                _fallos++;
+                Console.WriteLine($"   ⚠ NO PUDE JUZGARLA (401): el servidor MCP no arrancó en 127.0.0.1:{puerto} (mira la línea «mcp» del log). "
+                                + "No es que la promesa falle: es que no llegué a probarla, y eso cuenta como incumplida.");
+            }
+            else
+            {
+                string url = $"http://127.0.0.1:{puerto}/mcp/";
+                const string llamada = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cuenta_051","arguments":{}}}""";
+                var ajena = Pide(HttpMethod.Post, url, llamada, "https://pagina-ajena.example");
+                Debe(ajena.Estado == 403 && Volatile.Read(ref despachos) == 0,
+                    $"una llamada MCP desde una página ajena se rechaza con 403 y no despacha la herramienta (contestó {ajena.Estado}, despachos {despachos})");
+                var propia = Pide(HttpMethod.Post, url, llamada, null);
+                Debe(propia.Estado == 200 && Volatile.Read(ref despachos) == 1,
+                    $"sin Origin —así llegan el piloto y el Agent SDK— se despacha una vez (contestó {propia.Estado}, despachos {despachos})");
+                Debe(!ajena.Cors && !propia.Cors, "y ninguna respuesta del servidor MCP lleva Access-Control-Allow-Origin");
+            }
+        }
+    }
+
+    /// <summary>Un puerto libre en 127.0.0.1: el de la app viva (8790, 8792) puede estar ocupado, y juzgar sobre él sería juzgar a la app del usuario.</summary>
+    private static int PuertoLibre051()
+    {
+        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        int p = ((IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return p;
+    }
+
     private static void Prueba(string nombre, Action cuerpo)
     {
         // Cada promesa se juzga sobre un mapa recién nacido en su propio directorio.
@@ -13333,5 +14234,1321 @@ internal static class Contrato
         if (condicion) return;
         _fallos++;
         Console.WriteLine($"   ✘ {promesa}");
+    }
+}
+
+/// <summary>
+/// EL LECTOR DE FUENTES DE LA 051 (promesas 394, 395 y 399): C# leído lo justo para no confundir un
+/// literal con código, ni un comentario con una sentencia.
+/// </summary>
+/// <remarks>
+/// POR QUÉ UN LECTOR Y NO UN GREP. Los recuentos de la spec se hicieron con grep, y un grep no sabe
+/// dónde acaba una cadena interpolada: «{texto}» dentro de un comentario, dentro de un literal o dentro
+/// de un hueco son tres cosas distintas, y solo la tercera sale al log. Un juez que no las distingue
+/// o grita por un comentario o calla por una concatenación —las dos formas de que un criterio no
+/// pueda fallar cuando el bug está presente (patrón nº7)—.
+///
+/// Qué deja: por cada archivo, una MÁSCARA del mismo largo que el texto, donde el contenido de cada
+/// literal es «·», cada comentario es blanco, y cada hueco de una interpolación sigue siendo código
+/// con sus llaves cambiadas por paréntesis. Sobre la máscara, contar paréntesis, partir por comas o
+/// por «+» y buscar llamadas es seguro: nada de dentro de una cadena lo estorba.
+///
+/// Qué NO sabe: tipos. Todo se decide por la forma del texto, y donde la forma no basta (un embudo
+/// que no se deja seguir) se dice, no se adivina (aprendizaje nº17).
+/// </remarks>
+internal static class Fuentes051
+{
+    internal const byte Codigo = 0, Comentario = 1, EnLiteral = 2;
+    private const char Tapado = '·';
+
+    internal sealed class Literal
+    {
+        public int Ini;          // el primer carácter del token ($, @ o la comilla)
+        public int Fin;          // uno más allá de la comilla que lo cierra
+        public bool Interpolado;
+        public readonly List<(int Ini, int Fin)> Huecos = new();   // el contenido entre las llaves
+    }
+
+    internal sealed class Fuente
+    {
+        public string Ruta = "";                 // relativa al repo, con «/»
+        public string Texto = "";
+        public char[] M = Array.Empty<char>();   // la máscara
+        public byte[] T = Array.Empty<byte>();   // qué es cada carácter
+        public readonly Dictionary<int, Literal> Literales = new();
+        private int[]? _lineas;
+
+        public int Linea(int i)
+        {
+            if (_lineas == null)
+            {
+                var l = new List<int> { 0 };
+                for (int k = 0; k < Texto.Length; k++) if (Texto[k] == '\n') l.Add(k + 1);
+                _lineas = l.ToArray();
+            }
+            int pos = Array.BinarySearch(_lineas, i);
+            return (pos >= 0 ? pos : ~pos - 1) + 1;
+        }
+
+        public string Donde(int i) => $"{Ruta}:{Linea(i)}";
+        public string Mascara(int ini, int fin) => new string(M, ini, Math.Max(0, fin - ini));
+    }
+
+    // ── El lector ────────────────────────────────────────────────────────────
+
+    internal static Fuente Leer(string ruta, string texto)
+    {
+        var f = new Fuente { Ruta = ruta, Texto = texto, M = texto.ToCharArray(), T = new byte[texto.Length] };
+        LeerCodigo(f, 0, enHueco: false);
+        return f;
+    }
+
+    /// <summary>El ámbito de la 051: windows-client/**/*.cs sin bin ni obj, y windows-graph/src.</summary>
+    internal static List<Fuente> Ambito(string repo)
+    {
+        var fuentes = new List<Fuente>();
+        foreach (var raiz in new[] { Path.Combine(repo, "windows-client"), Path.Combine(repo, "windows-graph", "src") })
+        {
+            if (!Directory.Exists(raiz)) continue;
+            foreach (var a in Directory.EnumerateFiles(raiz, "*.cs", SearchOption.AllDirectories))
+            {
+                string rel = Path.GetRelativePath(repo, a).Replace('\\', '/');
+                if (rel.Split('/').Any(p => p.Equals("bin", StringComparison.OrdinalIgnoreCase)
+                                         || p.Equals("obj", StringComparison.OrdinalIgnoreCase))) continue;
+                fuentes.Add(Leer(rel, File.ReadAllText(a)));
+            }
+        }
+        return fuentes.OrderBy(x => x.Ruta, StringComparer.Ordinal).ToList();
+    }
+
+    private static void Marca(Fuente f, int i, byte tipo, char c) { f.T[i] = tipo; f.M[i] = c; }
+
+    /// <summary>Recorre código desde i. Dentro de un hueco, para en la llave que lo cierra y devuelve su índice.</summary>
+    private static int LeerCodigo(Fuente f, int i, bool enHueco)
+    {
+        string s = f.Texto; int n = s.Length; int prof = 0;
+        while (i < n)
+        {
+            char c = s[i];
+            if (c == '/' && i + 1 < n && s[i + 1] == '/')
+            {
+                while (i < n && s[i] != '\n') { Marca(f, i, Comentario, ' '); i++; }
+                continue;
+            }
+            if (c == '/' && i + 1 < n && s[i + 1] == '*')
+            {
+                int fin = s.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                fin = fin < 0 ? n : fin + 2;
+                for (; i < fin; i++) Marca(f, i, Comentario, s[i] == '\n' ? '\n' : ' ');
+                continue;
+            }
+            if (c == '\'') { i = Caracter(f, i); continue; }
+            if (EmpiezaCadena(s, i, out int comilla, out int dolares, out bool verbatim))
+            {
+                i = Cadena(f, i, comilla, dolares, verbatim);
+                continue;
+            }
+            if (enHueco)
+            {
+                if (c is '(' or '[' or '{') prof++;
+                else if (c is ')' or ']') prof--;
+                else if (c == '}') { if (prof == 0) return i; prof--; }
+                else if (c == ':' && prof == 0 && !(i + 1 < n && s[i + 1] == ':') && !(i > 0 && s[i - 1] == ':'))
+                {
+                    // El formato de un hueco ({x:0.000}) es texto hasta la llave: ni cadenas ni código.
+                    while (i < n && s[i] != '}') i++;
+                    return i;
+                }
+            }
+            i++;
+        }
+        return i;
+    }
+
+    private static bool EmpiezaCadena(string s, int i, out int comilla, out int dolares, out bool verbatim)
+    {
+        int j = i; dolares = 0; verbatim = false; comilla = -1;
+        while (j < s.Length && s[j] == '$') { dolares++; j++; }
+        if (j < s.Length && s[j] == '@')
+        {
+            verbatim = true; j++;
+            while (j < s.Length && s[j] == '$') { dolares++; j++; }
+        }
+        if (j >= s.Length || s[j] != '"') return false;
+        // Un «"» suelto siempre abre; «$» y «@» solo si les sigue la comilla (la @ de @class no).
+        if (j > i && i > 0 && (char.IsLetterOrDigit(s[i - 1]) || s[i - 1] == '_')) return false;
+        comilla = j;
+        return true;
+    }
+
+    private static int Caracter(Fuente f, int i)
+    {
+        string s = f.Texto; int n = s.Length; int j = i + 1;
+        while (j < n && s[j] != '\'' && s[j] != '\n') j += s[j] == '\\' ? 2 : 1;
+        int fin = Math.Min(n, j + 1);
+        for (int k = i; k < fin; k++) Marca(f, k, EnLiteral, Tapado);
+        return fin;
+    }
+
+    private static int Cadena(Fuente f, int ini, int comilla, int dolares, bool verbatim)
+    {
+        string s = f.Texto; int n = s.Length;
+        var lit = new Literal { Ini = ini, Interpolado = dolares > 0 };
+        for (int k = ini; k <= comilla; k++) Marca(f, k, EnLiteral, Tapado);
+
+        int q = 0; while (comilla + q < n && s[comilla + q] == '"') q++;
+        bool cruda = q >= 3;
+        int i = comilla + (cruda ? q : 1);
+        if (cruda) for (int k = comilla; k < i; k++) Marca(f, k, EnLiteral, Tapado);
+
+        while (i < n)
+        {
+            char c = s[i];
+            if (cruda)
+            {
+                if (c == '"' && i + q <= n && s.Substring(i, q) == new string('"', q))
+                {
+                    for (int k = i; k < i + q; k++) Marca(f, k, EnLiteral, Tapado);
+                    i += q; break;
+                }
+            }
+            else if (verbatim)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < n && s[i + 1] == '"') { Marca(f, i, EnLiteral, Tapado); Marca(f, i + 1, EnLiteral, Tapado); i += 2; continue; }
+                    Marca(f, i, EnLiteral, Tapado); i++; break;
+                }
+            }
+            else
+            {
+                if (c == '\\' && i + 1 < n) { Marca(f, i, EnLiteral, Tapado); Marca(f, i + 1, EnLiteral, Tapado); i += 2; continue; }
+                if (c == '"') { Marca(f, i, EnLiteral, Tapado); i++; break; }
+                if (c == '\n') break;   // una cadena normal no cruza de línea: si pasa, el lector se perdió y no sigue arrastrando
+            }
+
+            if (lit.Interpolado && c == '{')
+            {
+                int llaves = 0; while (i + llaves < n && s[i + llaves] == '{') llaves++;
+                int necesarias = Math.Max(1, dolares);
+                if (!cruda && dolares <= 1 && llaves >= 2)
+                {
+                    // «{{» es una llave escrita, no un hueco.
+                    Marca(f, i, EnLiteral, Tapado); Marca(f, i + 1, EnLiteral, Tapado); i += 2; continue;
+                }
+                if (llaves >= necesarias)
+                {
+                    int abre = i + llaves - necesarias;   // las de más, si las hay, son texto
+                    for (int k = i; k < abre; k++) Marca(f, k, EnLiteral, Tapado);
+                    for (int k = abre; k < abre + necesarias; k++) Marca(f, k, EnLiteral, k == abre + necesarias - 1 ? '(' : Tapado);
+                    f.T[abre + necesarias - 1] = Codigo;
+                    int contenido = abre + necesarias;
+                    int cierra = LeerCodigo(f, contenido, enHueco: true);
+                    lit.Huecos.Add((contenido, Math.Min(cierra, n)));
+                    if (cierra < n) { Marca(f, cierra, Codigo, ')'); }
+                    int tras = cierra + 1;
+                    for (int k = 1; k < necesarias && tras < n && s[tras] == '}'; k++, tras++) Marca(f, tras, EnLiteral, Tapado);
+                    i = tras;
+                    continue;
+                }
+            }
+            if (lit.Interpolado && c == '}' && !cruda && dolares <= 1 && i + 1 < n && s[i + 1] == '}')
+            {
+                Marca(f, i, EnLiteral, Tapado); Marca(f, i + 1, EnLiteral, Tapado); i += 2; continue;
+            }
+            Marca(f, i, EnLiteral, c == '\n' ? '\n' : Tapado);
+            i++;
+        }
+        lit.Fin = i;
+        f.Literales[ini] = lit;
+        return i;
+    }
+
+    // ── Sobre la máscara ─────────────────────────────────────────────────────
+
+    internal static string Norm(string s) => new string(s.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    /// <summary>El cierre que corresponde a la apertura en i, o -1.</summary>
+    internal static int Cierra(Fuente f, int i)
+    {
+        int prof = 0;
+        for (int j = i; j < f.M.Length; j++)
+        {
+            char c = f.M[j];
+            if (c is '(' or '[' or '{') prof++;
+            else if (c is ')' or ']' or '}') { prof--; if (prof == 0) return j; }
+        }
+        return -1;
+    }
+
+    /// <summary>La apertura que corresponde al cierre en i, o -1.</summary>
+    internal static int AbreAtras(Fuente f, int i)
+    {
+        int prof = 0;
+        for (int j = i; j >= 0; j--)
+        {
+            char c = f.M[j];
+            if (c is ')' or ']' or '}') prof++;
+            else if (c is '(' or '[' or '{') { prof--; if (prof == 0) return j; }
+        }
+        return -1;
+    }
+
+    private static (int, int) Recorta(Fuente f, int ini, int fin)
+    {
+        while (ini < fin && char.IsWhiteSpace(f.M[ini])) ini++;
+        while (fin > ini && char.IsWhiteSpace(f.M[fin - 1])) fin--;
+        return (ini, fin);
+    }
+
+    /// <summary>Quita los paréntesis que envuelven la expresión ENTERA.</summary>
+    private static (int, int) SinParentesis(Fuente f, int ini, int fin)
+    {
+        (ini, fin) = Recorta(f, ini, fin);
+        while (fin - ini >= 2 && f.M[ini] == '(' && f.T[ini] == Codigo && Cierra(f, ini) == fin - 1)
+            (ini, fin) = Recorta(f, ini + 1, fin - 1);
+        return (ini, fin);
+    }
+
+    /// <summary>Parte [ini, fin) por un separador de primer nivel (la coma de los argumentos, el «+» binario).</summary>
+    internal static List<(int Ini, int Fin)> Partir(Fuente f, int ini, int fin, char sep, bool conAngulos = false)
+    {
+        var partes = new List<(int, int)>();
+        int prof = 0, angulos = 0, desde = ini;
+        for (int j = ini; j < fin; j++)
+        {
+            char c = f.M[j];
+            if (f.T[j] != Codigo) continue;
+            if (c is '(' or '[' or '{') prof++;
+            else if (c is ')' or ']' or '}') prof--;
+            else if (conAngulos && c == '<') angulos++;
+            else if (conAngulos && c == '>' && angulos > 0) angulos--;
+            else if (c == sep && prof == 0 && angulos == 0 && EsSeparador(f, j, sep, desde))
+            {
+                partes.Add((desde, j)); desde = j + 1;
+            }
+        }
+        partes.Add((desde, fin));
+        return partes;
+    }
+
+    private static bool EsSeparador(Fuente f, int j, char sep, int desde)
+    {
+        if (sep != '+') return true;
+        if (j + 1 < f.M.Length && (f.M[j + 1] == '+' || f.M[j + 1] == '=')) return false;
+        if (j > 0 && f.M[j - 1] == '+') return false;
+        int k = j - 1; while (k >= desde && char.IsWhiteSpace(f.M[k])) k--;
+        if (k < desde) return false;   // un + unario al principio
+        char p = f.M[k];
+        return char.IsLetterOrDigit(p) || p is '_' or ')' or ']' or Tapado;
+    }
+
+    /// <summary>La condición de primer nivel «c ? a : b», si la hay: los tramos de a y de b.</summary>
+    private static ((int, int) Si, (int, int) No)? Condicional(Fuente f, int ini, int fin)
+    {
+        int prof = 0;
+        for (int j = ini; j < fin; j++)
+        {
+            char c = f.M[j];
+            if (f.T[j] != Codigo) continue;
+            if (c is '(' or '[' or '{') { prof++; continue; }
+            if (c is ')' or ']' or '}') { prof--; continue; }
+            if (prof != 0 || c != '?') continue;
+            char sig = j + 1 < fin ? f.M[j + 1] : ' ';
+            char ant = j > 0 ? f.M[j - 1] : ' ';
+            if (sig is '?' or '.' or '[' || ant == '?') continue;
+            // Un «?» pegado a un nombre de tipo (string?) seguido de un nombre no es una condición.
+            int pendientes = 1, p2 = 0;
+            for (int k = j + 1; k < fin; k++)
+            {
+                char d = f.M[k];
+                if (f.T[k] != Codigo) continue;
+                if (d is '(' or '[' or '{') { p2++; continue; }
+                if (d is ')' or ']' or '}') { p2--; continue; }
+                if (p2 != 0) continue;
+                if (d == '?' && !(k + 1 < fin && f.M[k + 1] is '?' or '.' or '[') && f.M[k - 1] != '?') pendientes++;
+                else if (d == ':' && !(k + 1 < fin && f.M[k + 1] == ':') && f.M[k - 1] != ':')
+                {
+                    pendientes--;
+                    if (pendientes == 0) return ((j + 1, k), (k + 1, fin));
+                }
+            }
+            return null;
+        }
+        return null;
+    }
+
+    /// <summary>Un hueco: su tramo en la fuente y su texto normalizado.</summary>
+    internal readonly record struct Hueco(int Ini, int Fin, string Texto);
+
+    /// <summary>
+    /// Los huecos de una expresión: cada {…} de primer nivel de una interpolación, y cada operando no literal
+    /// de un «+». Una condición no es un hueco (no se imprime): lo son sus ramas. Un {…} que es una condición
+    /// entre dos literales tampoco: solo elige entre dos textos fijos.
+    /// </summary>
+    internal static List<Hueco> Huecos(Fuente f, int ini, int fin)
+    {
+        var res = new List<Hueco>();
+        HuecosDe(f, ini, fin, res);
+        return res;
+    }
+
+    private static void HuecosDe(Fuente f, int ini, int fin, List<Hueco> res)
+    {
+        (ini, fin) = SinParentesis(f, ini, fin);
+        if (ini >= fin) return;
+        if (Condicional(f, ini, fin) is { } cond)
+        {
+            HuecosDe(f, cond.Si.Item1, cond.Si.Item2, res);
+            HuecosDe(f, cond.No.Item1, cond.No.Item2, res);
+            return;
+        }
+        var operandos = Partir(f, ini, fin, '+');
+        if (operandos.Count > 1)
+        {
+            foreach (var (a, b) in operandos) HuecosDe(f, a, b, res);
+            return;
+        }
+        if (LiteralEntero(f, ini, fin) is { } lit)
+        {
+            foreach (var (hi, he) in lit.Huecos)
+            {
+                if (EntreDosLiterales(f, hi, he)) continue;
+                res.Add(new Hueco(hi, he, Norm(f.Texto[hi..he])));
+            }
+            return;
+        }
+        res.Add(new Hueco(ini, fin, Norm(f.Texto[ini..fin])));
+    }
+
+    /// <summary>El literal que ES toda la expresión (con, a lo sumo, llamadas de argumentos literales detrás: .TrimEnd()).</summary>
+    private static Literal? LiteralEntero(Fuente f, int ini, int fin)
+    {
+        if (!f.Literales.TryGetValue(ini, out var lit)) return null;
+        if (lit.Fin >= fin) return lit;
+        string resto = new string(f.M, lit.Fin, fin - lit.Fin);
+        string limpio = new string(resto.Where(c => !char.IsWhiteSpace(c) && c != Tapado && c != ',').ToArray());
+        return Regex.IsMatch(limpio, @"^(\.\w+\(\))+$") ? lit : null;
+    }
+
+    private static bool EntreDosLiterales(Fuente f, int hi, int he)
+    {
+        var (a, b) = SinParentesis(f, hi, he);
+        if (Condicional(f, a, b) is not { } cond) return false;
+        bool Plano((int, int) r)
+        {
+            var (x, y) = Recorta(f, r.Item1, r.Item2);
+            return f.Literales.TryGetValue(x, out var l) && !l.Interpolado && l.Fin == y;
+        }
+        return Plano(cond.Si) && Plano(cond.No);
+    }
+
+    // ── Los sumideros: por dónde llega algo al log ───────────────────────────
+
+    internal sealed record Sumidero(Fuente F, int Ini, int Fin, int MsgIni, int MsgFin, string? Etiqueta, string Forma)
+    {
+        public string Texto => F.Texto[Ini..Fin];
+        public string Donde => F.Donde(Ini);
+        public List<Hueco> Huecos() => Fuentes051.Huecos(F, MsgIni, MsgFin);
+    }
+
+    private static readonly Regex LlamadaAlLog = new(@"LogBus\s*\.\s*(Log|Publico)\s*\(", RegexOptions.Compiled);
+    private static readonly Regex AsignaError = new(@"(?<![\w.])(error|err)\s*=(?![=>])", RegexOptions.Compiled);
+
+    /// <summary>El texto de un literal plano (la etiqueta), o null si el argumento no lo es.</summary>
+    private static string? TextoLiteral(Fuente f, int ini, int fin)
+    {
+        (ini, fin) = Recorta(f, ini, fin);
+        if (!f.Literales.TryGetValue(ini, out var l) || l.Interpolado || l.Fin != fin) return null;
+        string t = f.Texto[ini..fin];
+        int a = t.IndexOf('"');
+        return a >= 0 && t.Length >= a + 2 ? t[(a + 1)..^1] : null;
+    }
+
+    /// <summary>Cada LogBus.Log( y LogBus.Publico( del archivo, con su mensaje (el segundo argumento).</summary>
+    internal static List<Sumidero> LlamadasAlLog(Fuente f, string? solo = null)
+    {
+        var res = new List<Sumidero>();
+        string m = new string(f.M);
+        foreach (Match x in LlamadaAlLog.Matches(m))
+        {
+            if (f.T[x.Index] != Codigo) continue;
+            if (solo != null && x.Groups[1].Value != solo) continue;
+            int abre = x.Index + x.Length - 1;
+            int cierra = Cierra(f, abre);
+            if (cierra < 0) continue;
+            var args = Partir(f, abre + 1, cierra, ',');
+            if (args.Count < 2) continue;
+            res.Add(new Sumidero(f, x.Index, cierra + 1, args[1].Ini, args[1].Fin,
+                TextoLiteral(f, args[0].Ini, args[0].Fin), "LogBus." + x.Groups[1].Value));
+        }
+        return res;
+    }
+
+    /// <summary>Cada «error = …» / «err = …»: el error que una superficie devuelve acaba en el log de quien la llama.</summary>
+    internal static List<Sumidero> ErroresDevueltos(Fuente f)
+    {
+        var res = new List<Sumidero>();
+        string m = new string(f.M);
+        foreach (Match x in AsignaError.Matches(m))
+        {
+            if (f.T[x.Index] != Codigo) continue;
+            int ini = x.Index + x.Length;
+            int prof = 0, j = ini;
+            for (; j < f.M.Length; j++)
+            {
+                char c = f.M[j];
+                if (f.T[j] != Codigo) continue;
+                if (c is '(' or '[' or '{') prof++;
+                else if (c is ')' or ']' or '}') { if (prof == 0) break; prof--; }
+                else if ((c == ';' || c == ',') && prof == 0) break;
+            }
+            res.Add(new Sumidero(f, x.Index, j, ini, j, null, x.Groups[1].Value + " ="));
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// Las llamadas a una forma de embudo (X(, X?.Invoke(, X.Invoke() con el mensaje en la posición dada. Con
+    /// ámbito, solo las de dentro de él: el «_sap» de ManoPorMundo y el de EscribirPorMundo viven en el mismo
+    /// archivo y son dos puertas distintas (aprendizaje nº16: dos cosas con el mismo nombre no son la misma).
+    /// </summary>
+    internal static List<Sumidero> LlamadasA(Fuente f, string nombre, int posicion, (Fuente F, int Ini, int Fin)? ambito = null)
+    {
+        var res = new List<Sumidero>();
+        if (ambito is { } a0 && a0.F != f) return res;
+        string m = new string(f.M);
+        var directa = new Regex(@"(?<![\w.])" + Regex.Escape(nombre) + @"\s*\(");
+        var invoca = new Regex(@"(?<![\w])" + Regex.Escape(nombre) + @"\s*\??\s*\.\s*Invoke\s*\(");
+        foreach (var (rx, esDirecta) in new[] { (directa, true), (invoca, false) })
+            foreach (Match x in rx.Matches(m))
+            {
+                if (f.T[x.Index] != Codigo) continue;
+                if (ambito is { } a && (x.Index < a.Ini || x.Index >= a.Fin)) continue;
+                if (esDirecta && EsDeclaracionOConstructor(f, x.Index)) continue;
+                int abre = x.Index + x.Length - 1;
+                int cierra = Cierra(f, abre);
+                if (cierra < 0) continue;
+                var args = Partir(f, abre + 1, cierra, ',');
+                if (args.Count <= posicion) continue;
+                var (ai, af) = Recorta(f, args[posicion].Ini, args[posicion].Fin);
+                if (ai >= af) continue;
+                res.Add(new Sumidero(f, x.Index, cierra + 1, ai, af, null, esDirecta ? nombre + "(" : nombre + ".Invoke("));
+            }
+        return res;
+    }
+
+    private static readonly HashSet<string> NoSonTipos = new(StringComparer.Ordinal)
+    {
+        "return", "await", "else", "throw", "in", "is", "as", "case", "yield", "when", "and", "or", "not",
+        "new", "using", "lock", "if", "while", "for", "foreach", "switch", "do", "try", "finally", "checked", "unchecked",
+    };
+
+    /// <summary>¿El nombre en i se está DECLARANDO (void L(…), string Log(…)) o construyendo (new X(…))?</summary>
+    private static bool EsDeclaracionOConstructor(Fuente f, int i)
+    {
+        int k = i - 1; while (k >= 0 && char.IsWhiteSpace(f.M[k])) k--;
+        if (k < 0) return false;
+        char p = f.M[k];
+        if (char.IsLetterOrDigit(p) || p == '_')
+        {
+            int e = k; while (e >= 0 && (char.IsLetterOrDigit(f.M[e]) || f.M[e] == '_')) e--;
+            string palabra = new string(f.M, e + 1, k - e);
+            if (palabra == "new") return true;
+            return !NoSonTipos.Contains(palabra);
+        }
+        if (p == '>') return k > 0 && f.M[k - 1] != '=';          // List<int> X( — no «=> X(»
+        if (p == ']') return true;                                  // int[] X(
+        if (p == '?') return k > 0 && (char.IsLetterOrDigit(f.M[k - 1]) || f.M[k - 1] == '>');   // string? X(
+        return false;
+    }
+
+    // ── Los embudos: lambdas cuyo cuerpo mete un parámetro en el log ─────────
+
+    /// <summary>Un embudo: el nombre por el que se le llama, la posición del mensaje, dónde nace y, si es un
+    /// parámetro o un campo, el cuerpo fuera del cual ese nombre es otra cosa.</summary>
+    internal sealed record Embudo(string Nombre, int Posicion, string Donde, Fuente? En = null, int Ini = 0, int Fin = 0)
+    {
+        public (Fuente F, int Ini, int Fin)? Ambito => En == null ? null : (En, Ini, Fin);
+    }
+
+    private static readonly Regex Palabra = new(@"^[A-Za-z_]\w*$", RegexOptions.Compiled);
+
+    private static string PalabraAntes(Fuente f, int fin, out int ini)
+    {
+        int k = fin - 1; while (k >= 0 && char.IsWhiteSpace(f.M[k])) k--;
+        int e = k; while (e >= 0 && (char.IsLetterOrDigit(f.M[e]) || f.M[e] == '_')) e--;
+        ini = e + 1;
+        return k >= ini ? new string(f.M, ini, k - ini + 1) : "";
+    }
+
+    private static int SaltaBlancoAtras(Fuente f, int i) { while (i >= 0 && char.IsWhiteSpace(f.M[i])) i--; return i; }
+
+    /// <summary>
+    /// Deriva los embudos: cada lambda cuyo cuerpo pasa uno de sus parámetros (entero, no su longitud) al
+    /// mensaje de un LogBus.Log se resuelve al nombre que la recibe. Lo que no se deja resolver vuelve en
+    /// SinSeguir, con archivo y línea: la 399 lo pone rojo en vez de dar por buena una puerta que no mira.
+    /// </summary>
+    internal static (List<Embudo> Embudos, List<string> SinSeguir, List<string> Externos) Embudos(List<Fuente> fuentes)
+    {
+        var embudos = new List<Embudo>();
+        var sinSeguir = new List<string>();
+        var externos = new List<string>();
+        foreach (var f in fuentes)
+        {
+            string m = new string(f.M);
+            for (int a = m.IndexOf("=>", StringComparison.Ordinal); a >= 0; a = m.IndexOf("=>", a + 2, StringComparison.Ordinal))
+            {
+                if (f.T[a] != Codigo || f.T[a + 1] != Codigo) continue;
+                if (a > 0 && f.M[a - 1] is '=' or '!' or '<' or '>') continue;
+                int k = SaltaBlancoAtras(f, a - 1);
+                if (k < 0) continue;
+
+                // Los parámetros y dónde empieza la lambda.
+                List<string> parametros; int inicio;
+                if (f.M[k] == ')')
+                {
+                    int abre = AbreAtras(f, k);
+                    if (abre < 0) continue;
+                    string antes = PalabraAntes(f, abre, out int pIni);
+                    if (antes.Length > 0 && antes != "async") continue;   // Describe(AgentAction a) => … es un método
+                    inicio = antes == "async" ? pIni : abre;
+                    parametros = Partir(f, abre + 1, k, ',', conAngulos: true)
+                        .Select(p => Regex.Match(f.Texto[p.Ini..p.Fin].Trim(), @"([A-Za-z_]\w*)\s*$").Groups[1].Value)
+                        .ToList();
+                }
+                else if (char.IsLetterOrDigit(f.M[k]) || f.M[k] == '_')
+                {
+                    string p = PalabraAntes(f, k + 1, out int pIni);
+                    if (!Palabra.IsMatch(p)) continue;
+                    string antes = PalabraAntes(f, pIni, out int aIni);
+                    int kk = SaltaBlancoAtras(f, pIni - 1);
+                    if (kk >= 0 && f.M[kk] == '.') continue;                       // a.B => … no es una lambda
+                    if (antes.Length > 0 && antes != "async" && antes != "return") continue;   // string Nombre => … es una propiedad
+                    inicio = antes == "async" ? aIni : pIni;
+                    parametros = new List<string> { p };
+                }
+                else continue;
+
+                // El cuerpo.
+                int c = a + 2; while (c < f.M.Length && char.IsWhiteSpace(f.M[c])) c++;
+                int finCuerpo;
+                if (c < f.M.Length && f.M[c] == '{') { finCuerpo = Cierra(f, c) + 1; if (finCuerpo <= 0) continue; }
+                else
+                {
+                    int prof = 0, j = c;
+                    for (; j < f.M.Length; j++)
+                    {
+                        char d = f.M[j];
+                        if (f.T[j] != Codigo) continue;
+                        if (d is '(' or '[' or '{') prof++;
+                        else if (d is ')' or ']' or '}') { if (prof == 0) break; prof--; }
+                        else if ((d == ',' || d == ';') && prof == 0) break;
+                    }
+                    finCuerpo = j;
+                }
+
+                // ¿Algún parámetro llega ENTERO al mensaje de un LogBus.Log del cuerpo?
+                var llegan = new SortedSet<int>();
+                foreach (var s in LlamadasAlLog(f).Where(s => s.Ini >= c && s.Fin <= finCuerpo))
+                    foreach (var h in s.Huecos())
+                        for (int pi = 0; pi < parametros.Count; pi++)
+                            if (parametros[pi].Length > 0 && parametros[pi] != "_" && NombraEntero(f, h.Ini, h.Fin, parametros[pi]))
+                                llegan.Add(pi);
+                if (llegan.Count == 0) continue;
+
+                string donde = f.Donde(inicio);
+                var nombres = Resolver(f, inicio, fuentes, out bool externo, out string porque);
+                if (externo) { externos.Add($"{donde} ({porque})"); continue; }
+                if (nombres.Count == 0) { sinSeguir.Add($"{donde}: {porque}"); continue; }
+                foreach (var n in nombres) foreach (int pi in llegan) embudos.Add(new Embudo(n.Nombre, pi, donde, n.En, n.Ini, n.Fin));
+            }
+        }
+        return (embudos, sinSeguir, externos);
+    }
+
+    /// <summary>
+    /// ¿El hueco [ini, fin) nombra la palabra entera, fuera de literales, fuera de una llamada a SinValor. o a
+    /// Linea…( y no como su longitud? Un valor que pasa por SinValor.Forma ya no llega al log: el parámetro
+    /// de una lambda que solo lo usa así deja de ser un embudo (sin esto, E9 arreglado seguía «embudando»).
+    /// </summary>
+    internal static bool NombraEntero(Fuente f, int ini, int fin, string palabra)
+        => Regex.IsMatch(SinFormas(f, ini, fin), @"(?<![\w])" + Regex.Escape(palabra) + @"(?!\w)(?!\s*\??\s*\.\s*Length\b)");
+
+    /// <summary>
+    /// La máscara de [ini, fin) con los argumentos de cada SinValor.X(…) y Linea…(…) en blanco, y «(x ?? "")»
+    /// como «x»: «(texto ?? "").Length» es su longitud igual que «texto.Length» (UiaSurface.cs:403, un precedente bueno).
+    /// </summary>
+    internal static string SinFormas(Fuente f, int ini, int fin)
+    {
+        var m = f.M[ini..fin];
+        foreach (Match x in Regex.Matches(new string(m), @"(?<![\w.])(SinValor\s*\.\s*\w+|Linea\w*)\s*\("))
+        {
+            int abre = ini + x.Index + x.Length - 1;
+            int cierra = Cierra(f, abre);
+            for (int k = abre; k <= Math.Min(cierra < 0 ? fin - 1 : cierra, fin - 1); k++) m[k - ini] = ' ';
+        }
+        return Regex.Replace(new string(m), @"\(\s*([A-Za-z_]\w*)\s*\?\?\s*(" + Tapado + @"+|string\s*\.\s*Empty)\s*\)", "$1");
+    }
+
+    /// <summary>El nombre (o nombres) que recibe la lambda que empieza en i.</summary>
+    private static List<(string Nombre, Fuente? En, int Ini, int Fin)> Resolver(Fuente f, int inicio, List<Fuente> fuentes, out bool externo, out string porque)
+    {
+        externo = false; porque = "";
+        var res = new List<(string Nombre, Fuente? En, int Ini, int Fin)>();
+        int k = SaltaBlancoAtras(f, inicio - 1);
+        if (k < 0) { porque = "no hay nada delante de la lambda"; return res; }
+        char c = f.M[k];
+
+        // X = s => …   ·   X += (_, m) => …
+        if (c == '=' && !(k > 0 && f.M[k - 1] is '=' or '!' or '<' or '>'))
+        {
+            int t = k - 1;
+            if (t >= 0 && f.M[t] is '+' or '-') t--;
+            string x = PalabraAntes(f, t + 1, out _);
+            if (!Palabra.IsMatch(x)) { porque = "se asigna a algo que no es un nombre"; return res; }
+            res.Add((x, null, 0, 0));
+            return res;
+        }
+
+        // Nombre: s => …  (argumento con nombre)  ·  ( s => …  ·  , s => …  (argumento por posición)
+        string? conNombre = null;
+        int desde = k;
+        if (c == ':')
+        {
+            string n = PalabraAntes(f, k, out int nIni);
+            int d = SaltaBlancoAtras(f, nIni - 1);
+            if (!Palabra.IsMatch(n) || d < 0 || f.M[d] is not ('(' or ',')) { porque = "un «:» que no es un argumento con nombre"; return res; }
+            conNombre = n; desde = d;
+        }
+        else if (c is not ('(' or ','))
+        {
+            porque = $"la lambda llega por «{c}», que el juez no sabe seguir";
+            return res;
+        }
+
+        // La llamada que la recibe, y en qué posición.
+        int prof = 0, comas = 0, abre = -1;
+        for (int j = desde; j >= 0; j--)
+        {
+            char d = f.M[j];
+            if (f.T[j] != Codigo) continue;
+            if (d is ')' or ']' or '}') prof++;
+            else if (d is '(' or '[' or '{')
+            {
+                if (prof == 0) { if (d != '(') { porque = "la lambda va dentro de un inicializador, no de una llamada"; return res; } abre = j; break; }
+                prof--;
+            }
+            else if (d == ',' && prof == 0) comas++;
+            else if (d == ';' && prof == 0) break;
+        }
+        if (abre < 0) { porque = "no encuentro la llamada que la recibe"; return res; }
+        int posicion = c == '(' && conNombre == null ? 0 : comas;
+        if (conNombre == null && c == ',') posicion = comas;
+
+        int g = SaltaBlancoAtras(f, abre - 1);
+        if (g >= 0 && f.M[g] == '>')
+        {
+            int angulos = 0;
+            for (; g >= 0; g--) { if (f.M[g] == '>') angulos++; else if (f.M[g] == '<' && --angulos == 0) { g--; break; } }
+        }
+        string llamado = PalabraAntes(f, g + 1, out int lIni);
+        if (!Palabra.IsMatch(llamado)) { porque = "la llamada que la recibe no tiene nombre"; return res; }
+        string previo = PalabraAntes(f, lIni, out _);
+        bool constructor = previo == "new" || (SaltaBlancoAtras(f, lIni - 1) is int q && q >= 0 && f.M[q] == '.' && EsNewCalificado(f, q));
+
+        var declaraciones = Declaraciones(fuentes, llamado, constructor);
+        if (declaraciones.Count == 0)
+        {
+            externo = true; porque = $"{llamado} no se declara en windows-client ni en windows-graph";
+            return res;
+        }
+        foreach (var (df, pAbre, pCierra, cuerpoIni, cuerpoFin) in declaraciones)
+        {
+            var nombres = Partir(df, pAbre + 1, pCierra, ',', conAngulos: true)
+                .Select(p => NombreDelParametro(df.Texto[p.Ini..p.Fin])).ToList();
+            string? p = conNombre != null
+                ? nombres.FirstOrDefault(n => n == conNombre)
+                : posicion < nombres.Count ? nombres[posicion] : null;
+            if (p == null || p.Length == 0) continue;
+            // El parámetro, dentro de su cuerpo; y el campo que lo guarda («_log = log», «_log = log ?? …»),
+            // dentro de su tipo.
+            if (cuerpoIni < 0) { res.Add((p, df, pAbre, pCierra + 1)); continue; }
+            Seguir(df, cuerpoIni, cuerpoFin + 1, p, fuentes, res, 0);
+        }
+        if (res.Count == 0) porque = $"{llamado} se declara pero ninguna firma tiene el parámetro {(conNombre ?? "nº" + (posicion + 1))}";
+        return res.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Un nombre que recibe el embudo, dentro de su cuerpo, y todo lo que lo recibe después: el campo que
+    /// lo guarda (dentro de su tipo) y el parámetro del método al que se pasa tal cual (dentro del suyo).
+    /// MiradaSubida.Real no invoca «anotar»: se lo pasa a SubirAOpenAI, que sí lo hace (medido el 2026-09-23).
+    /// </summary>
+    private static void Seguir(Fuente f, int ini, int fin, string nombre, List<Fuente> fuentes,
+        List<(string Nombre, Fuente? En, int Ini, int Fin)> res, int prof)
+    {
+        if (res.Any(r => r.Nombre == nombre && r.En == f && r.Ini == ini)) return;
+        res.Add((nombre, f, ini, fin));
+        if (prof >= 4) return;
+        string cuerpo = new string(f.M, ini, fin - ini);
+
+        // El campo que lo guarda: «_log = log», «_log = log ?? …».
+        var (ti, tf) = TipoQueContiene(f, ini);
+        foreach (Match a in Regex.Matches(cuerpo, @"(?<![\w.])([A-Za-z_]\w*)\s*=\s*" + Regex.Escape(nombre) + @"(?![\w(])"))
+            if (a.Groups[1].Value != nombre && f.T[ini + a.Index] == Codigo)
+                Seguir(f, ti, tf, a.Groups[1].Value, fuentes, res, prof + 1);
+
+        // El método al que se pasa tal cual: M(…, nombre, …) o M(…, param: nombre, …).
+        foreach (Match x in Regex.Matches(cuerpo, @"(?<![\w])([A-Za-z_]\w*)\s*\("))
+        {
+            int abre = ini + x.Index + x.Length - 1;
+            if (f.T[ini + x.Index] != Codigo) continue;
+            string llamado = x.Groups[1].Value;
+            if (NoSonTipos.Contains(llamado) || llamado == nombre) continue;
+            int cierra = Cierra(f, abre);
+            if (cierra < 0 || cierra > fin) continue;
+            var args = Partir(f, abre + 1, cierra, ',');
+            for (int pos = 0; pos < args.Count; pos++)
+            {
+                var (a, b) = Recorta(f, args[pos].Ini, args[pos].Fin);
+                string arg = f.Texto[a..b];
+                var conNombre = Regex.Match(arg, @"^([A-Za-z_]\w*)\s*:\s*" + Regex.Escape(nombre) + "$");
+                if (arg != nombre && !conNombre.Success) continue;
+                bool constructor = PalabraAntes(f, ini + x.Index, out _) == "new";
+                foreach (var (df, pAbre, pCierra, ci, cf) in Declaraciones(fuentes, llamado, constructor))
+                {
+                    var nombres = Partir(df, pAbre + 1, pCierra, ',', conAngulos: true)
+                        .Select(q => NombreDelParametro(df.Texto[q.Ini..q.Fin])).ToList();
+                    string? p = conNombre.Success ? nombres.FirstOrDefault(n => n == conNombre.Groups[1].Value)
+                        : pos < nombres.Count ? nombres[pos] : null;
+                    if (p is { Length: > 0 } && ci >= 0) Seguir(df, ci, cf + 1, p, fuentes, res, prof + 1);
+                }
+            }
+        }
+    }
+
+    /// <summary>El cuerpo del tipo más interno que contiene la posición (o el archivo entero).</summary>
+    private static (int Ini, int Fin) TipoQueContiene(Fuente f, int pos)
+    {
+        (int Ini, int Fin) mejor = (0, f.M.Length);
+        foreach (Match x in Regex.Matches(new string(f.M), @"(?<![\w.])(class|record|struct|interface)\s+[A-Za-z_]\w*"))
+        {
+            if (f.T[x.Index] != Codigo) continue;
+            int j = x.Index + x.Length;
+            while (j < f.M.Length && !((f.M[j] == '{' || f.M[j] == ';') && f.T[j] == Codigo)) j++;
+            if (j >= f.M.Length || f.M[j] != '{') continue;
+            int fin = Cierra(f, j);
+            if (fin < 0) continue;
+            if (j <= pos && pos <= fin && fin + 1 - j < mejor.Fin - mejor.Ini) mejor = (j, fin + 1);
+        }
+        return mejor;
+    }
+
+    private static bool EsNewCalificado(Fuente f, int punto)
+    {
+        // new Decision.InterruptorDelDecisor( — el «new» va delante del primer tramo del nombre.
+        int j = punto;
+        while (j >= 0 && (char.IsLetterOrDigit(f.M[j]) || f.M[j] is '_' or '.')) j--;
+        return PalabraAntes(f, j + 1, out _) == "new";
+    }
+
+    private static string NombreDelParametro(string p)
+    {
+        p = Regex.Replace(p, @"\[[^\]]*\]", " ");
+        int igual = p.IndexOf('=');
+        if (igual >= 0) p = p[..igual];
+        var m = Regex.Match(p.Trim(), @"([A-Za-z_]\w*)\s*$");
+        return m.Success ? m.Groups[1].Value : "";
+    }
+
+    /// <summary>Las declaraciones de un método (o constructor) por nombre: su lista de parámetros y su cuerpo.</summary>
+    private static List<(Fuente F, int Abre, int Cierra, int CuerpoIni, int CuerpoFin)> Declaraciones(List<Fuente> fuentes, string nombre, bool constructor)
+    {
+        var res = new List<(Fuente, int, int, int, int)>();
+        var rx = constructor
+            ? new Regex(@"(?<![\w.])(?:(?:public|internal|private|protected)\s+" + Regex.Escape(nombre) + @"|(?:class|record|struct)\s+" + Regex.Escape(nombre) + @")\s*\(")
+            : new Regex(@"(?<![\w.])([\w<>\[\],.?]+)\s+" + Regex.Escape(nombre) + @"\s*(?:<[^()]*>)?\s*\(");
+        foreach (var f in fuentes)
+        {
+            string m = new string(f.M);
+            foreach (Match x in rx.Matches(m))
+            {
+                if (f.T[x.Index] != Codigo) continue;
+                if (!constructor && NoSonTipos.Contains(x.Groups[1].Value)) continue;
+                int abre = x.Index + x.Length - 1;
+                int cierra = Cierra(f, abre);
+                if (cierra < 0) continue;
+                int j = cierra + 1; while (j < f.M.Length && char.IsWhiteSpace(f.M[j])) j++;
+                int ci = -1, cf = -1;
+                // El cuerpo: { … }, => …; o, en un constructor primario, el cuerpo del tipo.
+                int llave = -1;
+                for (int t = j; t < f.M.Length; t++)
+                {
+                    if (f.T[t] != Codigo) continue;
+                    if (f.M[t] == '{') { llave = t; break; }
+                    if (f.M[t] == ';') break;
+                    if (f.M[t] == '=' && t + 1 < f.M.Length && f.M[t + 1] == '>')
+                    {
+                        int fin = t; while (fin < f.M.Length && !(f.M[fin] == ';' && f.T[fin] == Codigo)) fin++;
+                        ci = t; cf = fin; break;
+                    }
+                }
+                if (llave >= 0 && ci < 0) { ci = llave; cf = Math.Max(llave, Cierra(f, llave)); }
+                res.Add((f, abre, cierra, ci, cf));
+            }
+        }
+        return res;
+    }
+
+    // ── Los canales y los censos ─────────────────────────────────────────────
+
+    /// <summary>Los TelemetryBus.Emit del ámbito: archivo, línea, kind y cada argumento con nombre, normalizados.</summary>
+    internal static List<(Fuente F, int Ini, string Kind, SortedDictionary<string, string> Args)> Emisiones(List<Fuente> fuentes)
+    {
+        string[] posicionales = { "kind", "phase", "appId", "surfaceUrl", "workflowId", "runId", "label", "detail" };
+        var res = new List<(Fuente, int, string, SortedDictionary<string, string>)>();
+        var rx = new Regex(@"TelemetryBus\s*\.\s*Emit\s*\(");
+        foreach (var f in fuentes)
+            foreach (Match x in rx.Matches(new string(f.M)))
+            {
+                if (f.T[x.Index] != Codigo) continue;
+                int abre = x.Index + x.Length - 1, cierra = Cierra(f, abre);
+                if (cierra < 0) continue;
+                var args = new SortedDictionary<string, string>(StringComparer.Ordinal);
+                int pos = 0;
+                foreach (var (ai, af) in Partir(f, abre + 1, cierra, ','))
+                {
+                    var (a, b) = Recorta(f, ai, af);
+                    if (a >= b) continue;
+                    var nm = Regex.Match(new string(f.M, a, b - a), @"^([A-Za-z_]\w*)\s*:(?!:)");
+                    if (nm.Success) args[nm.Groups[1].Value] = Norm(f.Texto[(a + nm.Length)..b]);
+                    else args[pos < posicionales.Length ? posicionales[pos] : "arg" + pos] = Norm(f.Texto[a..b]);
+                    pos++;
+                }
+                string kind = args.TryGetValue("kind", out var kd) ? kd : "";
+                args.Remove("kind");
+                res.Add((f, x.Index, kind, args));
+            }
+        return res;
+    }
+
+    /// <summary>Lo que el literal de una ruta /agent/ nombra: register, events, usage, turn…</summary>
+    internal static List<(Fuente F, int Ini, string Ruta)> RutasDelAgente(List<Fuente> fuentes)
+    {
+        var res = new List<(Fuente, int, string)>();
+        foreach (var f in fuentes)
+            foreach (var lit in f.Literales.Values)
+            {
+                string t = f.Texto[lit.Ini..lit.Fin];
+                foreach (Match x in Regex.Matches(t, @"/agent/([A-Za-z_]\w*)"))
+                    if (f.T[lit.Ini + x.Index] == EnLiteral) res.Add((f, lit.Ini + x.Index, x.Groups[1].Value));
+            }
+        return res;
+    }
+
+    /// <summary>Oyentes (+=) de LogBus.Anotado, AnotadoConMarca y Logged, y lectores de TodayFile() y Snapshot().</summary>
+    internal static List<(Fuente F, int Ini, string Que)> CanalesDelLog(List<Fuente> fuentes)
+    {
+        var res = new List<(Fuente, int, string)>();
+        var oyente = new Regex(@"LogBus\s*\.\s*(AnotadoConMarca|Anotado|Logged)\s*\+=");
+        var lector = new Regex(@"LogBus\s*\.\s*(TodayFile|Snapshot)\s*\(");
+        var dentro = new Regex(@"(?<![\w.])(AnotadoConMarca|Anotado|Logged)\s*\+=");
+        foreach (var f in fuentes)
+        {
+            string m = new string(f.M);
+            foreach (Match x in oyente.Matches(m)) if (f.T[x.Index] == Codigo) res.Add((f, x.Index, x.Groups[1].Value + " +="));
+            foreach (Match x in lector.Matches(m)) if (f.T[x.Index] == Codigo) res.Add((f, x.Index, x.Groups[1].Value + "()"));
+            if (f.Ruta.EndsWith("/LogBus.cs", StringComparison.Ordinal))
+                foreach (Match x in dentro.Matches(m)) if (f.T[x.Index] == Codigo) res.Add((f, x.Index, x.Groups[1].Value + " +="));
+        }
+        return res;
+    }
+
+    /// <summary>
+    /// LOS CENSOS DE LA 051, escritos como datos desde la spec (docs/specs/051-el-espejo-no-sube-lo-escrito.md) y
+    /// juzgados sobre las fuentes. Cambiar una fila es cambiar lo que la 394, la 395 o la 399 prometen: se hace en la
+    /// spec primero, con su lectura, y aquí después.
+    /// </summary>
+    internal static class Censo051
+    {
+        private const string C = "windows-client/src/";
+        private const string G = "windows-graph/src/";
+
+        /// <summary>Las catorce etiquetas de lo escrito, lo dicho, lo narrado y el objetivo: ninguna puede llevar un Publico.</summary>
+        internal static readonly string[] EtiquetasDeFuera =
+        {
+            "batch", "mapa-mcp", "sentido-sap", "agent", "voz-tiempo", "voz-viva", "recuerdo",
+            "recordatorio", "piloto", "piloto-err", "comprobar", "envio", "tramo", "freno",
+        };
+
+        // ── 399(a): los 35 sitios ────────────────────────────────────────────────
+
+        internal sealed record Sitio(string Id, string Archivo, string Ancla, int Veces, bool Brazo, params string[] Permitidos);
+
+        internal static readonly Sitio[] Sitios =
+        {
+            new("E1", C + "Clinical/RellenadorSap.cs", "LineaDeVacio(", 1, false),
+            new("E2", C + "Clinical/RellenadorSap.cs", "LineaDeEscrito(", 1, false),
+            new("E3", C + "Mcp/SurfaceMapTools.cs", "LineaDelRecorrido(", 1, false),
+            new("E4", C + "Mcp/SurfaceMapTools.cs", "LineaDeLlamada(", 1, false),
+            new("E5", C + "Mcp/SurfaceMapTools.cs", "LineaDeRespuesta(", 1, false),
+            new("E6", C + "Mcp/SurfaceMapTools.cs", "✓ tecleado", 1, false, "tituloVentana"),
+            new("E7", C + "Mcp/SurfaceMapTools.cs", "pero sin Enter", 1, false, "errEnter"),
+            new("E8", C + "Mcp/SurfaceMapTools.cs", "\"mapa-mcp\", $\"✓ escrito", 1, false, "selector"),
+            new("E9", C + "Ui/FaceWindow.xaml.cs", "\"sentido-sap\", $\"no pude escribir", 1, false, "porque"),
+            new("E10", C + "Agent/AgentLoop.cs", "\"type\" => $\"type (", 1, true, "a.X", "a.Y"),
+            new("E11", C + "Mcp/WorkflowMcpRunner.cs", "MCP invoca workflow_id=", 1, false, "workflowId"),
+            new("E12", C + "Voice/ConversacionEnVivo.cs", "\"voz-tiempo\", $\"{ms,6} ms", 1, false,
+                "ms,6", "tool", "(donde.Length > 0 ? $\" «{donde}»\" : \"\")"),
+            new("E13", G + "Surfaces/SapGuiSurface.cs", "no se quedó con lo puesto", 1, false),
+            new("E14", G + "Surfaces/SapGuiSurface.cs", "no es ni la clave ni el texto", 1, false, "etiqueta", "hay"),
+            new("E15", G + "Surfaces/UiaSurface.cs", "no se pudo seleccionar", 1, false),
+            new("E16", C + "Ui/WorkflowLibraryWindow.xaml.cs", "primer workflow crudo", 1, false),
+            new("E17", C + "Ui/FaceWindow.xaml.cs", "\"nucleo-http\", $\"no pude {accion}", 1, false, "accion", "e.Message"),
+            new("E18", C + "Agent/AgentLoop.cs", "en '{where}' →", 1, false, "Describe(a)", "where", "Short(SinValor.Tapar(result, …), 120)"),
+            new("D1", C + "Voice/ConversacionEnVivo.cs", "Ü dijo:", 1, false),
+            new("D2", C + "Voice/ConversacionEnVivo.cs", "usuario dijo:", 1, false),
+            new("D3", C + "Voice/ConversacionEnVivo.cs", "\"voz-viva\", $\"← ", 1, false, "tipo"),
+            new("D4", C + "Voice/ConversacionEnVivo.cs", "LECCIÓN PERDIDA", 1, false),
+            new("D5", C + "Voice/RecordatoriosEnVivo.cs", "entregado a las", 1, false, "DateTimeOffset.Now:HH:mm:ss"),
+            new("N1", C + "Piloto/ElPiloto.cs", "LineaDelPiloto(", 1, false),
+            new("N2", C + "Piloto/ElPiloto.cs", "LineaDelPiloto(", 1, false),
+            new("N3", C + "Piloto/ElPiloto.cs", "\"piloto-err\"", 1, false),
+            new("N4", C + "Ui/FaceWindow.xaml.cs", "\"comprobar\", $\"piloto:", 2, false),
+            new("N5", C + "Ui/FaceWindow.xaml.cs", "\"comprobar\", $\"piloto:", 2, false),
+            new("N6", C + "Ui/FaceWindow.xaml.cs", "\"envio\", $\"piloto terminó", 1, false,
+                "(r.Termino ? \"bien\" : $\"salida {r.Salida}\")", "reloj.ElapsedMilliseconds", "r.CostoUsd:0.000"),
+            new("N7", C + "Ui/ConsultaWindow.cs", "cuenta del envío", 1, false),
+            new("N8", C + "Agent/AgentLoop.cs", "■ fin", 1, false, "actions"),
+            new("O1", C + "Agent/AgentLoop.cs", "▶ objetivo", 1, false, "requireOrigin"),
+            new("O2", C + "Mcp/SurfaceMapTools.cs", "\"tramo\", $\"→ ", 1, false),
+            new("O3", C + "Mcp/SurfaceMapTools.cs", "ALTO:", 1, false),
+            new("O4", C + "Actions/Freno.cs", "alto pedido", 1, false, "porque"),
+            // REVISIÓN DEL 2026-09-24: ocho sitios más de las mismas clases, que el censo del 09-23 no contó. Los tres
+            // que anotan una cuenta o un relato ya sin valores (E22, E23, N10) permiten ese hueco porque su contenido
+            // se arregla donde nace y lo juzgan la 397(g) y la 400 con el productor real; la fila fija la sentencia.
+            new("E19", C + "Navigation/ServidorDelNucleo.cs", "\"escrito\" : \"elegido\"", 1, false, "etiqueta"),
+            new("E20", C + "Agent/AgentLoop.cs", "texto descartado", 1, false, "why"),
+            new("E21", C + "Ui/FaceWindow.xaml.cs", "plan del piloto:", 1, false, "Piloto.PlanDeComprobacion.LineaDelPlan(pasos)"),
+            new("E22", C + "Ui/FaceWindow.xaml.cs", "plan · PARÓ en el paso", 1, false, "i + 1", "id.ParaSenalar", "res.Cuenta"),
+            new("E23", C + "Ui/FaceWindow.xaml.cs", "\"aprendizajes\", \"← \"", 1, false, "res.Cuenta"),
+            new("N9", C + "Piloto/RegistroDeLaComprobacion.cs", "LineaDelCampo(", 1, false, "n"),
+            new("N10", C + "Ui/FaceWindow.xaml.cs", "\"comprobar\", $\"piloto terminó", 1, false,
+                "(r.Termino ? \"bien\" : $\"salida {r.Salida}\")", "reloj.ElapsedMilliseconds", "registro.Hechos", "registro.Total",
+                "r.CostoUsd:0.000", "final.Motivo"),
+            new("N11", C + "Ui/ConsultaWindow.cs", "\"aprendizajes\", $\"← ", 1, false),
+        };
+
+        internal static bool Permitido(string hueco, IEnumerable<string> permitidos)
+            => hueco.StartsWith("SinValor.", StringComparison.Ordinal)
+               || Regex.IsMatch(hueco, @"^Linea\w*\(")
+               || hueco.EndsWith(".Length", StringComparison.Ordinal)
+               || permitidos.Any(p => Casa(Norm(p), hueco));
+
+        /// <summary>«…» en una fila del censo es «lo que sea»; el resto, exacto.</summary>
+        private static bool Casa(string patron, string hueco)
+            => patron.Contains('…')
+                ? Regex.IsMatch(hueco, "^" + string.Join(".*", patron.Split('…').Select(Regex.Escape)) + "$")
+                : patron == hueco;
+
+        private static Sumidero? Brazo(Fuente f, int ancla)
+        {
+            int flecha = f.Texto.IndexOf("=>", ancla, StringComparison.Ordinal);
+            if (flecha < 0) return null;
+            int ini = flecha + 2, prof = 0, j = ini;
+            for (; j < f.M.Length; j++)
+            {
+                char c = f.M[j];
+                if (f.T[j] != Codigo) continue;
+                if (c is '(' or '[' or '{') prof++;
+                else if (c is ')' or ']' or '}') { if (prof == 0) break; prof--; }
+                else if ((c == ',' || c == ';') && prof == 0) break;
+            }
+            return new Sumidero(f, ancla, j, ini, j, null, "brazo");
+        }
+
+        /// <summary>399(a): cada sitio del censo, por su ancla, sin más huecos que los suyos.</summary>
+        internal static List<string> JuzgarSitios(List<Fuente> fuentes, out int bien)
+        {
+            var fallos = new List<string>();
+            bien = 0;
+            var porArchivo = new Dictionary<string, List<Sumidero>>();
+            foreach (var s in Sitios)
+            {
+                var f = fuentes.FirstOrDefault(x => x.Ruta == s.Archivo);
+                if (f == null) { fallos.Add($"{s.Id}: no encuentro {s.Archivo}"); continue; }
+                if (!porArchivo.TryGetValue(f.Ruta, out var sumideros))
+                    porArchivo[f.Ruta] = sumideros = LlamadasAlLog(f).Concat(ErroresDevueltos(f)).ToList();
+
+                var suyos = new List<Sumidero>();
+                for (int i = f.Texto.IndexOf(s.Ancla, StringComparison.Ordinal); i >= 0;
+                     i = f.Texto.IndexOf(s.Ancla, i + 1, StringComparison.Ordinal))
+                {
+                    if (f.T[i] == Comentario) continue;
+                    var su = s.Brazo ? Brazo(f, i)
+                        : sumideros.Where(x => x.Ini <= i && i < x.Fin).OrderBy(x => x.Fin - x.Ini).FirstOrDefault();
+                    if (su != null && !suyos.Any(x => x.Ini == su.Ini)) suyos.Add(su);
+                }
+                if (suyos.Count == 0) { fallos.Add($"{s.Id} ({s.Archivo}): falta el ancla «{s.Ancla}» en una sentencia que llegue al log"); continue; }
+                if (suyos.Count != s.Veces)
+                {
+                    fallos.Add($"{s.Id}: el ancla «{s.Ancla}» está en {suyos.Count} sentencia(s) y el censo dice {s.Veces} ({string.Join(", ", suyos.Select(x => x.Donde))})");
+                    continue;
+                }
+                var sobran = suyos.SelectMany(x => x.Huecos().Where(h => !Permitido(h.Texto, s.Permitidos)).Select(h => $"«{h.Texto}» en {x.Donde}")).ToList();
+                if (s.Id == "N2")
+                    foreach (var x in sumideros.Where(x => x.Etiqueta == "piloto"))
+                        foreach (var h in x.Huecos())
+                            if (!h.Texto.StartsWith("LineaDelPiloto(", StringComparison.Ordinal) && !h.Texto.StartsWith("SinValor.", StringComparison.Ordinal)
+                                && (NombraEntero(f, h.Ini, h.Fin, "texto") || Regex.IsMatch(h.Texto, @"(?<![\w.])e\.Data\b")))
+                                sobran.Add($"«{h.Texto}» en {x.Donde} (el piloto solo sale por LineaDelPiloto)");
+                if (sobran.Count > 0) fallos.Add($"{s.Id}: hueco(s) que sobran: {string.Join("; ", sobran.Distinct())}");
+                else bien++;
+            }
+            return fallos;
+        }
+
+        // ── 399(b): la regla, sobre todo el ámbito ───────────────────────────────
+
+        /// <summary>
+        /// ¿El hueco nombra «valor», «texto» o «dato» enteros, o lee un miembro «Texto», fuera de SinValor./Linea…( y
+        /// no como su .Length?
+        /// </summary>
+        /// <remarks>
+        /// «dato» y «Texto» ENTRARON EN LA REVISIÓN DEL 2026-09-24: la regla solo miraba «valor» y «texto», y tres
+        /// sitios vivos se le escapaban por el nombre —«{dato}» en ServidorDelNucleo.cs:221 y «{p.Texto}» en el plan del
+        /// piloto (FaceWindow.xaml.cs:3351)—, mientras el enunciado de la 399 prometía la regla general. «Texto» es el
+        /// miembro de lo que se teclea en este dominio (Paso, PasoDelPlan, EventoDeLaLeccion) y va con mayúscula: la
+        /// comparación distingue mayúsculas a propósito, y un «Texto(» es una LLAMADA, no el miembro —medido: la primera
+        /// versión de esta regla dio un falso en ClinicaClient.cs:92, «Texto(raiz, "status")», que lee el estado de un
+        /// encuentro—. NO entran «.Text» —en FaceWindow.xaml.cs:332 y :358 es el texto de un nodo del árbol de SAP, lo
+        /// leído (clase L, la 052)— ni «value»/«.Value», que medidos en la fase 0 daban 5 falsos de 15.
+        /// </remarks>
+        internal static bool NombraValorOTexto(Fuente f, Hueco h)
+            => NombraEntero(f, h.Ini, h.Fin, "valor") || NombraEntero(f, h.Ini, h.Fin, "texto")
+               || NombraEntero(f, h.Ini, h.Fin, "dato")
+               || Regex.IsMatch(SinFormas(f, h.Ini, h.Fin), @"(?<![\w])Texto(?!\w)(?!\s*\()(?!\s*\??\s*\.\s*Length\b)");
+
+        internal static List<string> JuzgarRegla(List<Fuente> fuentes, out int porEmbudos, out List<string> sinSeguir, out List<Embudo> embudos)
+        {
+            var (emb, sinSeg, _) = Embudos(fuentes);
+            sinSeguir = sinSeg;
+            embudos = emb;
+            var formas = emb.Select(e => (e.Nombre, e.Posicion, e.Ambito)).Distinct().ToList();
+            var fallos = new List<string>();
+            var vistos = new HashSet<(string, int, int)>();
+            porEmbudos = 0;
+            foreach (var f in fuentes)
+            {
+                var sumideros = LlamadasAlLog(f).Concat(ErroresDevueltos(f)).Concat(LlamadasA(f, "L", 0))
+                    .Concat(formas.SelectMany(x => LlamadasA(f, x.Nombre, x.Posicion, x.Ambito)));
+                foreach (var s in sumideros)
+                {
+                    if (!vistos.Add((f.Ruta, s.Ini, s.MsgIni))) continue;
+                    if (!s.Forma.StartsWith("LogBus.", StringComparison.Ordinal) && !s.Forma.EndsWith(" =", StringComparison.Ordinal)) porEmbudos++;
+                    foreach (var h in s.Huecos())
+                        if (NombraValorOTexto(f, h))
+                            fallos.Add($"{s.Donde} ({s.Forma}): el hueco «{h.Texto}» mete un valor o un texto entero");
+                }
+            }
+            return fallos;
+        }
+
+        // ── 394(c): el censo de LogBus.Publico ───────────────────────────────────
+
+        internal sealed record Publica(string Id, string Archivo, string Etiqueta, string Ancla, params string[] Huecos);
+
+        internal static readonly Publica[] Publicas =
+        {
+            new("P1", "windows-client/App.xaml.cs", "fatal", "Ü no pudo arrancar ·", "SinValor.Excepcion(ex)"),
+            new("P2", "windows-client/App.xaml.cs", "fatal", "Ü tropezó ·", "SinValor.Excepcion(ex.Exception)"),
+            new("P3", "windows-client/App.xaml.cs", "unobserved-task", "tarea sin observar ·", "SinValor.Excepcion(ex.Exception)"),
+            new("P4", C + "Update/Updater.cs", "update", "auto-update desactivado"),
+            new("P5", C + "Update/Updater.cs", "update", "no se pudo comprobar actualizaciones", "ex.GetType().Name"),
+            new("P6", C + "Update/Updater.cs", "update", "versión nueva disponible", "version"),
+            new("P7", C + "Update/Updater.cs", "update", "descargada y lista para aplicar", "version"),
+            new("P8", C + "Update/Updater.cs", "update", "aplicando actualización y reiniciando"),
+            new("P9", C + "Update/Updater.cs", "update", "no se pudo dejar la actualización aplicándose", "ex.GetType().Name"),
+            new("P10", C + "Ui/GuardiaDeInstancia.cs", "instancia", "segunda apertura ignorada"),
+            new("P11", C + "Clinical/ArranqueDeConsulta.cs", "arranque", "sesión restaurada del disco"),
+            new("P12", C + "Clinical/ArranqueDeConsulta.cs", "arranque", "ventana de consulta abierta"),
+            new("P13", C + "Telemetry/EspejoDelLog.cs", "espejo", "se está reflejando en el panel"),
+            new("P14", C + "Ui/FaceWindow.xaml.cs", "backend", "sonda de vida falló", "ex.GetType().Name"),
+            new("P15", C + "Clinical/Transcripcion/PoliticaDeReintento.cs", "reintento", "lanzó", "Intentos", "e.GetType().Name"),
+            new("P16", C + "Clinical/Transcripcion/PoliticaDeReintento.cs", "reintento", "se agotaron los", "Intentos"),
+            new("P17", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "el ejecutor no arranca"),
+            new("P18", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "ejecutor de exportaciones parado"),
+            new("P19", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "reclamado · workflow", "id", "workflow", "nota.Length"),
+            new("P20", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "campo(s) escritos", "id", "escritos.Count", "sinLlenar.Count"),
+            new("P21", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "reportado", "id", "desenlace"),
+            new("P22", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "el servidor rechazó el resultado", "id", "(int)res.StatusCode"),
+            new("P23", C + "Clinical/EjecutorDeExportaciones.cs", "exportar", "no pude reportar (intento", "id", "intento", "e.GetType().Name"),
+            new("P24", C + "Mcp/WorkflowMcpRunner.cs", "workflow", "MCP invoca workflow_id=", "workflowId", "SinValor.Forma(context)"),
+            new("P25", C + "Mcp/WorkflowMcpRunner.cs", "workflow", "resultado: ok=",
+                "result.Ok", "result.Tally", "result.AlignedConsciously", "fallo?.StepOrder", "fallo?.ActionType"),
+            new("P26", C + "Mcp/WorkflowMcpRunner.cs", "workflow", "aprendiendo alineación", "workflowId"),
+        };
+
+        private static string Lista(IEnumerable<string> x) { var l = x.ToList(); return l.Count == 0 ? "ninguno" : string.Join(", ", l); }
+
+        internal static List<string> JuzgarPublicas(List<Fuente> fuentes, out int censadas)
+        {
+            var fallos = new List<string>();
+            var usadas = new HashSet<string>();
+            censadas = 0;
+            foreach (var f in fuentes)
+                foreach (var s in LlamadasAlLog(f, "Publico"))
+                {
+                    censadas++;
+                    if (s.Etiqueta == null) { fallos.Add($"{s.Donde}: un LogBus.Publico cuya etiqueta no es un literal"); continue; }
+                    if (EtiquetasDeFuera.Contains(s.Etiqueta)) fallos.Add($"{s.Donde}: LogBus.Publico con «{s.Etiqueta}», una de las catorce etiquetas que no pueden subir enteras");
+                    var huecos = s.Huecos().Select(h => h.Texto).OrderBy(h => h, StringComparer.Ordinal).ToList();
+                    var candidatas = Publicas.Where(p => !usadas.Contains(p.Id) && p.Archivo == f.Ruta && p.Etiqueta == s.Etiqueta && s.Texto.Contains(p.Ancla)).ToList();
+                    var fila = candidatas.FirstOrDefault(p => p.Huecos.Select(Norm).OrderBy(h => h, StringComparer.Ordinal).SequenceEqual(huecos));
+                    if (fila != null) { usadas.Add(fila.Id); continue; }
+                    fallos.Add(candidatas.Count > 0
+                        ? $"{s.Donde}: {candidatas[0].Id} cambió sus huecos: el censo dice [{Lista(candidatas[0].Huecos.Select(Norm))}] y el código lleva [{Lista(huecos)}]"
+                        : $"{s.Donde}: LogBus.Publico(«{s.Etiqueta}») con huecos [{Lista(huecos)}] no está en el censo de la 051");
+                }
+            foreach (var p in Publicas.Where(p => !usadas.Contains(p.Id)))
+                fallos.Add($"falta {p.Id}: {p.Archivo}, LogBus.Publico(«{p.Etiqueta}») con «{p.Ancla}» y huecos [{Lista(p.Huecos.Select(Norm))}]");
+            return fallos;
+        }
+
+        // ── 395(b): el censo de TelemetryBus.Emit ────────────────────────────────
+
+        internal sealed record Emision(string Id, string Archivo, string Kind, params (string Nombre, string Expr)[] Args);
+
+        internal static readonly Emision[] Emisiones =
+        {
+            new("S1", C + "Telemetry/EspejoDelLog.cs", "\"log\"",
+                ("phase", "etiqueta"),
+                ("label", "publica ? texto : Cadencia(etiqueta, texto)"),
+                ("detail", "publica ? (object)new { tag = etiqueta, text = texto } : new { tag = etiqueta, largo = texto.Length }")),
+            new("S2", C + "Agent/AgentLoop.cs", "\"conscious_run_start\"", ("runId", "runId"), ("label", "SinValor.Forma(goal)")),
+            new("S3", C + "Agent/AgentLoop.cs", "\"conscious_run_end\"", ("phase", "\"error\""), ("runId", "runId"), ("label", "e.GetType().Name")),
+            new("S4", C + "Agent/AgentLoop.cs", "\"conscious_run_end\"", ("runId", "runId"), ("label", "SinValor.Forma(summary)")),
+            new("S5", C + "Agent/AgentLoop.cs", "\"analyze\"", ("runId", "runId"),
+                ("appId", "loc != null ? AppAligner.ProcessFromOrigin(loc.Origin) : \"\""), ("surfaceUrl", "loc?.Id ?? \"\"")),
+            new("S6", C + "Agent/AgentLoop.cs", "\"mcp\"", ("runId", "runId"), ("label", "a.Tool ?? \"\"")),
+            new("S7", C + "Agent/AgentLoop.cs", "\"action\"", ("runId", "runId"), ("label", "a.Kind"), ("detail", "new { x = a.X, y = a.Y }")),
+            new("S8", C + "Mcp/WorkflowMcpRunner.cs", "\"workflow_start\"", ("workflowId", "workflowId"), ("runId", "runId"), ("label", "SinValor.Forma(context)")),
+            new("S9", C + "Mcp/WorkflowMcpRunner.cs", "\"workflow_step\"", ("workflowId", "workflowId"), ("runId", "runId"),
+                ("phase", "outcome.Ok ? \"ok\" : \"error\""), ("label", "$\"paso {outcome.StepOrder} · {outcome.ActionType}\"")),
+            new("S10", C + "Mcp/WorkflowMcpRunner.cs", "\"workflow_end\"", ("workflowId", "workflowId"), ("runId", "runId"),
+                ("phase", "result.Ok ? \"ok\" : \"error\""),
+                ("label", "result.Ok ? $\"completado ({result.Tally})\" : $\"se paró en el paso {fallo?.StepOrder} ({fallo?.ActionType})\""),
+                ("detail", "new { completed = result.Completed, omitted = result.Omitted, steps = result.Total, aligned = result.AlignedConsciously }")),
+        };
+
+        private static string Firma(string kind, IEnumerable<(string, string)> args)
+            => Norm(kind) + " · " + string.Join(" · ", args.OrderBy(a => a.Item1, StringComparer.Ordinal).Select(a => $"{a.Item1}: {Norm(a.Item2)}"));
+
+        internal static List<string> JuzgarEmisiones(List<Fuente> fuentes, out int enElCodigo)
+        {
+            var fallos = new List<string>();
+            var usadas = new HashSet<string>();
+            var codigo = Fuentes051.Emisiones(fuentes);
+            enElCodigo = codigo.Count;
+            foreach (var (f, ini, kind, args) in codigo)
+            {
+                string firma = Firma(kind, args.Select(a => (a.Key, a.Value)));
+                var fila = Emisiones.FirstOrDefault(e => !usadas.Contains(e.Id) && e.Archivo == f.Ruta && Firma(e.Kind, e.Args) == firma);
+                if (fila != null) { usadas.Add(fila.Id); continue; }
+                fallos.Add($"{f.Donde(ini)}: TelemetryBus.Emit({firma}) no está en el censo de la 051");
+            }
+            foreach (var e in Emisiones.Where(e => !usadas.Contains(e.Id)))
+                fallos.Add($"falta {e.Id}: {e.Archivo}, TelemetryBus.Emit({Firma(e.Kind, e.Args)})");
+            return fallos;
+        }
+
+        // ── 395(c): los canales ──────────────────────────────────────────────────
+
+        internal static readonly (string Que, string Archivo)[] Canales =
+        {
+            ("AnotadoConMarca +=", C + "Telemetry/EspejoDelLog.cs"),
+            ("Logged +=", C + "Ui/LogWindow.xaml.cs"),
+            ("Snapshot()", C + "Ui/LogWindow.xaml.cs"),
+            ("/agent/register", C + "Telemetry/Telemetry.cs"),
+            ("/agent/events", C + "Telemetry/Telemetry.cs"),
+            ("/agent/usage", C + "Ui/FaceWindow.xaml.cs"),
+            ("/agent/turn", C + "Backend/BackendClient.cs"),
+            ("/agent/claves", C + "Credenciales/ClavesDelBackend.cs"),
+        };
+
+        internal static List<string> JuzgarCanales(List<Fuente> fuentes)
+        {
+            var hay = CanalesDelLog(fuentes).Select(x => (x.Que, x.F.Ruta, Donde: x.F.Donde(x.Ini)))
+                .Concat(RutasDelAgente(fuentes).Select(x => ("/agent/" + x.Ruta, x.F.Ruta, Donde: x.F.Donde(x.Ini))))
+                .ToList();
+            var fallos = new List<string>();
+            var pendientes = Canales.ToList();
+            foreach (var (que, archivo, donde) in hay)
+            {
+                int i = pendientes.FindIndex(c => c.Que == que && c.Archivo == archivo);
+                if (i >= 0) { pendientes.RemoveAt(i); continue; }
+                fallos.Add($"{donde}: {que} no es un canal censado");
+            }
+            foreach (var (que, archivo) in pendientes) fallos.Add($"falta el canal {que} en {archivo}");
+            return fallos;
+        }
+
+        // ── 401(d): los servidores locales, sus prefijos y sus rutas ─────────────
+
+        private const string Nucleo8792 = C + "Navigation/ServidorDelNucleo.cs";
+
+        /// <summary>
+        /// Lo que escucha en esta máquina, medido el 2026-09-24: dos HttpListener (8790 y 8792), sus prefijos y las
+        /// rutas que el del núcleo sirve. Una ruta nueva es una salida nueva del proceso: se lee antes de entrar aquí.
+        /// </summary>
+        internal static readonly (string Que, string Archivo)[] ServidoresLocales =
+        {
+            ("new HttpListener", C + "Mcp/ServidorMcp.cs"),
+            ("prefijo /mcp/", C + "Mcp/ServidorMcp.cs"),
+            ("new HttpListener", Nucleo8792),
+            ("prefijo /", Nucleo8792),
+            ("ruta /visor", Nucleo8792), ("ruta /nucleo", Nucleo8792), ("ruta /terreno", Nucleo8792), ("ruta /batches", Nucleo8792),
+            ("ruta /ir", Nucleo8792), ("ruta /escribir", Nucleo8792), ("ruta /elegir", Nucleo8792), ("ruta /reglas", Nucleo8792),
+            ("ruta /reglas-mapeador", Nucleo8792), ("ruta /mapeador", Nucleo8792),
+        };
+
+        internal static List<string> JuzgarServidores(List<Fuente> fuentes)
+        {
+            var fallos = new List<string>();
+            var hay = new List<(string Que, string Archivo, string Donde)>();
+            var oreja = new Regex(@"new\s+(System\s*\.\s*Net\s*\.\s*)?HttpListener\s*\(");
+            var puerta = new Regex(@"PuertaLocal\s*\.\s*Admite\s*\(");
+            var prefijo = new Regex(@"^\$""http://127\.0\.0\.1:\{[^}]*\}(/[\w/-]*)""$");
+            var ruta = new Regex(@"^""(/[a-z][\w-]*)""$");
+            foreach (var f in fuentes)
+            {
+                string m = new string(f.M);
+                foreach (var lit in f.Literales.Values)
+                {
+                    string t = f.Texto[lit.Ini..lit.Fin];
+                    int k = t.IndexOf("Access-Control-Allow-Origin", StringComparison.OrdinalIgnoreCase);
+                    if (k >= 0 && f.T[lit.Ini + k] == EnLiteral)
+                        fallos.Add($"{f.Donde(lit.Ini)}: un literal «Access-Control-Allow-Origin» abre la puerta a otro origen");
+                }
+                var orejas = oreja.Matches(m).Cast<Match>().Where(x => f.T[x.Index] == Codigo).ToList();
+                if (orejas.Count == 0) continue;
+                foreach (var x in orejas) hay.Add(("new HttpListener", f.Ruta, f.Donde(x.Index)));
+                foreach (var lit in f.Literales.Values)
+                {
+                    string t = f.Texto[lit.Ini..lit.Fin];
+                    if (prefijo.Match(t) is { Success: true } p) hay.Add(("prefijo " + p.Groups[1].Value, f.Ruta, f.Donde(lit.Ini)));
+                    if (!lit.Interpolado && ruta.Match(t) is { Success: true } r) hay.Add(("ruta " + r.Groups[1].Value, f.Ruta, f.Donde(lit.Ini)));
+                }
+                if (!puerta.Matches(m).Cast<Match>().Any(x => f.T[x.Index] == Codigo))
+                    fallos.Add($"{f.Donde(orejas[0].Index)}: escucha en un puerto de esta máquina y no pasa sus peticiones por PuertaLocal.Admite");
+            }
+            var distintos = hay.GroupBy(h => (h.Que, h.Archivo)).Select(g => g.First()).ToList();
+            foreach (var h in distintos.Where(h => !ServidoresLocales.Contains((h.Que, h.Archivo))))
+                fallos.Add($"{h.Donde}: {h.Que} no está en el censo de los servidores locales");
+            foreach (var (que, archivo) in ServidoresLocales.Where(c => !distintos.Any(h => h.Que == c.Que && h.Archivo == c.Archivo)))
+                fallos.Add($"falta {que} en {archivo}");
+            return fallos;
+        }
     }
 }

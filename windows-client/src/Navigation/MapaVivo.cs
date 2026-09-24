@@ -1,5 +1,6 @@
 using Mapeador;
 using U.WindowsClient.Diagnostics;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Navigation;
 
@@ -506,10 +507,15 @@ public sealed class MapaVivo : IDisposable
                     await System.Threading.Tasks.Task.Delay(500);
                     var jpeg = Voice.CapturaDePantalla.Capturar();
                     if (jpeg == null) return;
-                    string que = Actions.Freno.Tarea.Length > 0 ? Actions.Freno.Tarea : "pasando por aquí";
+                    string tarea = Actions.Freno.Tarea;
+                    string que = tarea.Length > 0 ? tarea : "pasando por aquí";
                     var ficha = album.Guardar(jpeg, ahora, que);
+                    // La tarea, por su forma (spec 051, clase O, hallazgo de la fase 5): la de un tramo es «tramo:
+                    // {objetivo}», y el objetivo lo escribe el modelo de voz con lo que dijo la persona. El álbum la
+                    // guarda entera en disco, que es donde se usa para recordar; el log no la necesita.
                     if (ficha != null)
-                        LogBus.Log("album", $"mirada de «{ahora}» guardada al llegar ({jpeg.Length} bytes) · mientras: {que}");
+                        LogBus.Log("album", $"mirada de «{ahora}» guardada al llegar ({jpeg.Length} bytes) · mientras: "
+                            + (tarea.Length > 0 ? $"una tarea {SinValor.Forma(tarea)}" : que));
                 }
                 catch (Exception e) { LogBus.Log("album", $"no pude guardar la mirada al llegar: {e.Message}"); }
             });

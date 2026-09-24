@@ -40,11 +40,15 @@ public sealed class ServidorDelNucleo : IDisposable
     private readonly Func<string, string, bool> _escribir;  // (selector, texto) → ¿se escribió?
     private readonly Func<string, string, bool> _elegir;    // (selector, opción) → ¿se eligió?
     private readonly PasoDelNucleo _paso;
+    private readonly int _puerto;
     private HttpListener? _oreja;
 
+    /// <param name="puerto">El de siempre, <see cref="Puerto"/>; otro solo para que el contrato lo arranque de
+    /// verdad sin pisar la app viva (promesa 401).</param>
     public ServidorDelNucleo(Nucleo.Grafo grafo, Func<string> donde,
         Func<string, string, bool> pulsar, Func<string, bool> enfocar,
-        Func<string, string, bool>? escribir = null, Func<string, string, bool>? elegir = null)
+        Func<string, string, bool>? escribir = null, Func<string, string, bool>? elegir = null,
+        int puerto = Puerto)
     {
         _grafo = grafo;
         _donde = donde;
@@ -53,6 +57,7 @@ public sealed class ServidorDelNucleo : IDisposable
         _escribir = escribir ?? ((_, _) => false);
         _elegir = elegir ?? ((_, _) => false);
         _paso = new PasoDelNucleo(grafo, donde, pulsar, enfocar);
+        _puerto = puerto;
     }
 
     /// <summary>El rastro de los batches (promesa 76), puesto por quien los corre. Nulo = sin pestaña.</summary>
@@ -63,15 +68,15 @@ public bool Arrancar()
         try
         {
             _oreja = new HttpListener();
-            _oreja.Prefixes.Add($"http://127.0.0.1:{Puerto}/");
+            _oreja.Prefixes.Add($"http://127.0.0.1:{_puerto}/");
             _oreja.Start();
             _ = Task.Run(Atender);
-            LogBus.Log("nucleo-http", $"escuchando en http://127.0.0.1:{Puerto}/");
+            LogBus.Log("nucleo-http", $"escuchando en http://127.0.0.1:{_puerto}/");
             return true;
         }
         catch (Exception e)
         {
-            LogBus.Log("nucleo-http", $"no pude escuchar en {Puerto}: {e.Message}");
+            LogBus.Log("nucleo-http", $"no pude escuchar en {_puerto}: {e.Message}");
             return false;
         }
     }
@@ -84,15 +89,27 @@ public bool Arrancar()
             try { ctx = await _oreja.GetContextAsync(); }
             catch { return; }   // se cerró: no es un fallo
 
+            // LA PUERTA, ANTES DE LEER NADA (promesa 401). Hasta el 2026-09-24 aquí se contestaba con
+            // CORS abierto —«quien pregunta es una página abierta con file://, y escucha SOLO en
+            // 127.0.0.1, así que abierto significa esta máquina»—, y el razonamiento tenía un hueco: el
+            // navegador del médico TAMBIÉN es esta máquina. Cualquier página podía leer /batches, que
+            // citaba lo escrito en SAP, y mandar POST a /escribir e /ir. Ya no hay cabeceras CORS: el
+            // visor se sirve desde /visor, que es este mismo origen y no las necesita.
+            var puerta = PuertaLocal.Admite(ctx.Request.Headers["Origin"], ctx.Request.Headers["Host"], _puerto);
             string cuerpo, tipo;
-            try { (cuerpo, tipo) = Responder(ctx.Request); }
-            catch (Exception e) { (cuerpo, tipo) = (Json(new { error = e.Message }), Json_); }
+            if (!puerta.Pasa)
+            {
+                LogBus.Log("nucleo-http", $"rechazada {ctx.Request.HttpMethod} {ctx.Request.Url?.AbsolutePath}: {puerta.Porque}");
+                ctx.Response.StatusCode = 403;
+                (cuerpo, tipo) = (Json(new { error = "este servidor solo atiende a esta máquina y a su propia página", porque = puerta.Porque }), Json_);
+            }
+            else
+            {
+                try { (cuerpo, tipo) = Responder(ctx.Request); }
+                catch (Exception e) { (cuerpo, tipo) = (Json(new { error = e.Message }), Json_); }
+            }
 
             var bytes = Encoding.UTF8.GetBytes(cuerpo);
-            // CORS abierto porque quien pregunta es una página local abierta con file://, que no
-            // tiene origen. Escucha SOLO en 127.0.0.1, así que abierto aquí significa «esta máquina».
-            ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
-            ctx.Response.Headers["Access-Control-Allow-Headers"] = "content-type";
             ctx.Response.ContentType = tipo;
             try
             {
@@ -217,9 +234,12 @@ public bool Arrancar()
             if (selector.Length == 0) return Json(new { ok = false, porque });
 
             bool hecho = esEscribir ? _escribir(selector, dato) : _elegir(selector, dato);
+            // LO ESCRITO, POR SU LONGITUD (spec 051, E19). Esta línea corre en CADA /escribir y /elegir,
+            // salga bien o mal; la de la excepción de las manos (E17) ya iba por su forma y esta no —el
+            // censo del 2026-09-23 contó la rama rara y se dejó la de siempre—.
             LogBus.Log("nucleo-http", hecho
-                ? $"{(esEscribir ? "escrito" : "elegido")} «{dato}» en «{etiqueta}»"
-                : $"NO pude {(esEscribir ? "escribir" : "elegir")} «{dato}» en «{etiqueta}»");
+                ? $"{(esEscribir ? "escrito" : "elegido")} {SinValor.Forma(dato)} en «{etiqueta}»"
+                : $"NO pude {(esEscribir ? "escribir" : "elegir")} {SinValor.Forma(dato)} en «{etiqueta}»");
             return Json(new
             {
                 ok = hecho, elemento = etiqueta, selector, dato,

@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Voice;
 
@@ -84,7 +85,11 @@ public sealed class MiradaSubida
             peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", clave);
             using var r = await Red.SendAsync(peticion);
             string texto = await r.Content.ReadAsStringAsync();
-            if (!r.IsSuccessStatusCode) { anotar?.Invoke($"no pude subir la mirada: {(int)r.StatusCode} {Corto(texto)}"); return ""; }
+            // EL CUERPO DEL ERROR, POR SU LONGITUD (spec 051: la 399(b) lo encontró por el embudo «anotar»). Es
+            // texto ajeno, su contenido no está en el código, y el log salía del equipo por el espejo. El código
+            // HTTP dice lo que hay que saber —401 la clave, 429 la cuota, 413 el tamaño—; para leer el cuerpo,
+            // se repite la subida a mano.
+            if (!r.IsSuccessStatusCode) { anotar?.Invoke($"no pude subir la mirada: {(int)r.StatusCode} · cuerpo {SinValor.Forma(texto)}"); return ""; }
 
             string id = JsonDocument.Parse(texto).RootElement.TryGetProperty("id", out var i) ? i.GetString() ?? "" : "";
             anotar?.Invoke($"mirada subida: {jpeg.Length} bytes → {id}");
@@ -106,6 +111,4 @@ public sealed class MiradaSubida
         }
         catch (Exception e) { anotar?.Invoke($"no pude borrar la mirada {id}: {e.Message}"); }
     }
-
-    private static string Corto(string t) => t.Length <= 160 ? t : t[..160];
 }

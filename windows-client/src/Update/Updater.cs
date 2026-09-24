@@ -106,7 +106,7 @@ public sealed class Updater
     {
         if (!Enabled)
         {
-            LogBus.Log("update", "auto-update desactivado (no es una instalación Velopack; normal en dotnet run)");
+            LogBus.Publico("update", "auto-update desactivado (no es una instalación Velopack; normal en dotnet run)");
             return;
         }
         _ = PollLoopAsync();
@@ -125,7 +125,9 @@ public sealed class Updater
             {
                 // Quedarse sin internet, o el bucket caído, no es motivo para molestar al usuario:
                 // la carita sigue funcionando con la versión que tiene.
-                LogBus.Log("update", $"no se pudo comprobar actualizaciones: {ex.Message}");
+                // Al panel el tipo; el mensaje, en el log local (spec 051, P5).
+                LogBus.Publico("update", $"no se pudo comprobar actualizaciones: {ex.GetType().Name}");
+                LogBus.Log("update", $"el motivo de no poder comprobar: {ex.Message}");
             }
             if (_ready != null) break;
             await Task.Delay(PollInterval);
@@ -138,12 +140,12 @@ public sealed class Updater
         if (info == null) return; // null = estamos al día. No es error.
 
         string version = info.TargetFullRelease.Version.ToString();
-        LogBus.Log("update", $"versión nueva disponible: {version} — descargando…");
+        LogBus.Publico("update", $"versión nueva disponible: {version} — descargando…");
         await _mgr.DownloadUpdatesAsync(info);
 
         _ready = info.TargetFullRelease;
         _readyMessage = await LeerMensajeAsync(version);
-        LogBus.Log("update", $"versión {version} descargada y lista para aplicar");
+        LogBus.Publico("update", $"versión {version} descargada y lista para aplicar");
         UpdateReady?.Invoke(new UpdateReadyInfo(version, _readyMessage));
     }
 
@@ -204,7 +206,7 @@ public sealed class Updater
     public void ApplyAndRestart()
     {
         if (_ready == null) return;
-        LogBus.Log("update", "aplicando actualización y reiniciando");
+        LogBus.Publico("update", "aplicando actualización y reiniciando");
         _mgr.ApplyUpdatesAndRestart(_ready); // no retorna: mata el proceso
     }
 
@@ -223,7 +225,8 @@ public sealed class Updater
         catch (Exception ex)
         {
             // Fallar aquí solo significa que seguirá en la versión vieja y lo reintentará al arrancar.
-            LogBus.Log("update", $"no se pudo dejar la actualización aplicándose al salir: {ex.Message}");
+            LogBus.Publico("update", $"no se pudo dejar la actualización aplicándose al salir: {ex.GetType().Name}");
+            LogBus.Log("update", $"el motivo de no poder dejarla aplicándose: {ex.Message}");
         }
     }
 

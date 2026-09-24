@@ -128,7 +128,7 @@ internal sealed class GuardiaDeInstancia : IDisposable
                 if (hwnd == IntPtr.Zero || EscritorioVirtual.EscritorioDe(hwnd) != escritorio) continue;
                 ShowWindow(hwnd, 9); // SW_RESTORE
                 SetForegroundWindow(hwnd);
-                LogBus.Log("instancia", "segunda apertura ignorada: se enfocó la carita existente");
+                LogBus.Publico("instancia", "segunda apertura ignorada: se enfocó la carita existente");
                 return;
             }
             catch { }

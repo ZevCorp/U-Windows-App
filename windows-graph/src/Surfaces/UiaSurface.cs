@@ -1539,7 +1539,7 @@ public sealed class UiaSurface : IUiSurface
             return true;
         }
 
-        error = $"no se pudo seleccionar «{value}»: la opción no existe o el control no lo permite";
+        error = $"no se pudo seleccionar {SinValor.Forma(value)}: la opción no existe o el control no lo permite";
         return false;
     }
 

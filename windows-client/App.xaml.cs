@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Threading;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Ui;
+using U.Graph;
 using U.Graph.Surfaces;
 using Velopack;
 
@@ -58,6 +59,9 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
+            // Al panel, por su tipo y su sitio; el mensaje y la pila, en el log local (spec 051: un
+            // ToString() lleva el Message, y el de BackendClient lleva el cuerpo de la respuesta).
+            LogBus.Publico("fatal", $"Ü no pudo arrancar · {SinValor.Excepcion(ex)}");
             LogBus.Log("fatal", ex.ToString());
             MessageBox.Show($"Ü no pudo arrancar: {ex.Message}", "Ü", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -77,6 +81,7 @@ public partial class App : Application
         // Nunca dejar caer la carita por una excepción no capturada: es un overlay permanente.
         DispatcherUnhandledException += (_, ex) =>
         {
+            LogBus.Publico("fatal", $"Ü tropezó · {SinValor.Excepcion(ex.Exception)}");
             LogBus.Log("fatal", ex.Exception.ToString());
             MessageBox.Show($"Ü tropezó: {ex.Exception.Message}", "Ü", MessageBoxButton.OK, MessageBoxImage.Warning);
             ex.Handled = true;
@@ -87,6 +92,7 @@ public partial class App : Application
         // exactamente lo que ocultó el primer error real de la enseñanza por video.
         TaskScheduler.UnobservedTaskException += (_, ex) =>
         {
+            LogBus.Publico("unobserved-task", $"tarea sin observar · {SinValor.Excepcion(ex.Exception)}");
             LogBus.Log("unobserved-task", ex.Exception.ToString());
             ex.SetObserved();
         };

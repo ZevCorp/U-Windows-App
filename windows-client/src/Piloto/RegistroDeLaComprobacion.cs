@@ -1,3 +1,4 @@
+using U.Graph;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Navigation;
 using U.WindowsClient.Teach;
@@ -26,6 +27,8 @@ public sealed class RegistroDeLaComprobacion
     private readonly Leccion _leccion;
     private readonly Func<string, string?>? _valorActual;
     private readonly Dictionary<int, VeredictoDeEvento> _veredictos = new();
+    /// <summary>El motivo de cada campo tecleado SIN sus valores: el que va al log y al relato final (promesa 400).</summary>
+    private readonly Dictionary<int, string> _formas = new();
     private readonly object _candado = new();
 
     public RegistroDeLaComprobacion(Leccion leccion) { _leccion = leccion; }
@@ -160,15 +163,31 @@ public sealed class RegistroDeLaComprobacion
         {
             // UN CAMPO TECLEADO SE JUZGA LEYÉNDOLO, no creyéndole a quien dice que lo escribió.
             string? ahora = null;
-            try { ahora = _valorActual?.Invoke(e.Selector); } catch { }
+            string sinLeer = "";
+            if (_valorActual == null) sinLeer = "no hay con qué leerlo";
+            else
+            {
+                try
+                {
+                    ahora = _valorActual(e.Selector);
+                    if (ahora == null) sinLeer = "la lectura no devolvió nada";
+                }
+                // NO CALLA (patrón nº3): «no pude leer» sin el porqué no distinguía «no hay con qué leer» de
+                // «la lectura reventó». El tipo, nunca el mensaje: el de una lectura de SAP puede citar el campo.
+                catch (Exception ex) { sinLeer = $"leerlo lanzó {ex.GetType().Name}"; }
+            }
             string que = e.Etiqueta.Length > 0 ? e.Etiqueta : e.Selector;
+            // DOS MOTIVOS, DOS LECTORES (spec 051, promesa 400). Al PILOTO se le siguen nombrando los dos
+            // valores —la 175 lo exige, y trabaja con la lección delante—; al LOG y al relato final va la
+            // forma. Hasta el 2026-09-24 el log decía ««Talla» dice «17» y la demo tecleó «170»»: la clase
+            // de E2 (RellenadorSap), arreglada allí en la fase 1 y no aquí.
             VeredictoDeEvento vt = ahora == null
-                ? new VeredictoDeEvento(n, false, e.Texto, "", $"no pude leer «{que}» para comprobar que dice «{e.Texto}»")
+                ? new VeredictoDeEvento(n, false, e.Texto, "", $"no pude leer «{que}» ({sinLeer}) para comprobar que dice «{e.Texto}»")
                 : LoMismoTecleado(e.Texto, ahora)
                     ? new VeredictoDeEvento(n, true, e.Texto, ahora, $"«{que}» dice «{ahora}», lo que la demo tecleó")
                     : new VeredictoDeEvento(n, false, e.Texto, ahora, $"«{que}» dice «{ahora}» y la demo tecleó «{e.Texto}»");
-            lock (_candado) _veredictos[n] = vt;
-            LogBus.Log("comprobar", $"evento {n}: {(vt.Aterrizo ? "HECHO" : "NO hecho")} · {vt.Motivo}");
+            lock (_candado) { _veredictos[n] = vt; _formas[n] = LineaDelCampo(que, e.Texto, ahora, sinLeer); }
+            LogBus.Log("comprobar", $"evento {n}: {(vt.Aterrizo ? "HECHO" : "NO hecho")} · {LineaDelCampo(que, e.Texto, ahora, sinLeer)}");
             return vt;
         }
 
@@ -203,13 +222,39 @@ public sealed class RegistroDeLaComprobacion
         return salida;
     }
 
+    /// <summary>
+    /// El motivo de un campo tecleado SIN sus valores: la etiqueta, la longitud de lo que dice y si es lo que
+    /// tecleó la demo, o por qué no se pudo leer (spec 051, promesa 400).
+    /// <c>«Talla» = ‹2 car.›, distinto de lo que tecleó la demo (‹3 car.›)</c>.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ NO <see cref="SinValor.Contraste"/> TAL CUAL: compara letra a letra, y este juez compara números
+    /// (<see cref="LoMismoTecleado"/>: «82» y «82,000» son lo mismo). Diría «distinto» junto a un «HECHO», y una
+    /// línea que contradice a su propio veredicto manda la investigación al sitio equivocado (patrón nº2).
+    /// </remarks>
+    public static string LineaDelCampo(string que, string tecleado, string? leido, string sinLeer = "")
+    {
+        tecleado ??= "";
+        if (leido == null)
+            return $"«{que}» no se pudo leer ({(sinLeer.Length > 0 ? sinLeer : "sin motivo")}): sin comprobar lo que tecleó la demo ({SinValor.Forma(tecleado)})";
+        if (!LoMismoTecleado(tecleado, leido))
+            return $"«{que}» = {SinValor.Forma(leido)}, distinto de lo que tecleó la demo ({SinValor.Forma(tecleado)})";
+        bool alaLetra = string.Equals(tecleado.Trim(), leido.Trim(), StringComparison.OrdinalIgnoreCase);
+        return $"«{que}» = {SinValor.Forma(leido)}, lo que tecleó la demo" + (alaLetra ? "" : $" con otro formato ({SinValor.Forma(tecleado)})");
+    }
+
     /// <summary>El veredicto final, por la misma compuerta de la promesa 131.</summary>
+    /// <remarks>
+    /// EL RELATO VA SIN VALORES (promesa 400): lo anota FaceWindow («piloto terminó … · {final.Motivo}») y vuelve
+    /// a la consulta. De un campo tecleado se cuenta su forma; de uno que navega, su motivo, que nombra pantallas.
+    /// </remarks>
     public LaComprobacion.Veredicto Final()
     {
         var cuentan = EventosQueCuentan(_leccion);
         int hechos; lock (_candado) hechos = cuentan.Count(e => _veredictos.TryGetValue(e.N, out var v) && v.Aterrizo);
         string relato;
-        lock (_candado) relato = string.Join("; ", _veredictos.Values.OrderBy(v => v.N).Select(v => $"{v.N}: {(v.Aterrizo ? "ok" : v.Motivo)}"));
+        lock (_candado) relato = string.Join("; ", _veredictos.Values.OrderBy(v => v.N)
+            .Select(v => $"{v.N}: {(v.Aterrizo ? "ok" : _formas.TryGetValue(v.N, out var forma) ? forma : v.Motivo)}"));
         return LaComprobacion.Juzgar(hechos, cuentan.Count, relato);
     }
 }

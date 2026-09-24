@@ -54,7 +54,7 @@ public sealed class ArranqueDeConsulta
         try
         {
             hayMedico = _restaurarSesion();
-            LogBus.Log("arranque", hayMedico
+            LogBus.Publico("arranque", hayMedico
                 ? "sesión restaurada del disco: no hace falta la contraseña"
                 : "no había sesión guardada: se pide la contraseña");
         }
@@ -87,7 +87,7 @@ public sealed class ArranqueDeConsulta
         try
         {
             _abrirLaVentana();
-            LogBus.Log("arranque", "ventana de consulta abierta");
+            LogBus.Publico("arranque", "ventana de consulta abierta");
             return true;
         }
         catch (Exception e)

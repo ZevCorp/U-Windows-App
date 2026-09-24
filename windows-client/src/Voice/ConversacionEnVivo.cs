@@ -5,6 +5,7 @@ using System.Text.Json;
 using U.WindowsClient.Diagnostics;
 using U.WindowsClient.Mcp;
 using Voz.Realtime;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Voice;
 
@@ -1322,9 +1323,21 @@ public sealed class ConversacionEnVivo : IDisposable
         string donde = args.TryGetValue("surface", out var s) && s.Length > 0 ? s
                      : args.TryGetValue("path", out var p) && p.Length > 0 ? p
                      : args.TryGetValue("app", out var a) ? a : "";
-        string linea = resultado.Split('\n')[0].Trim();
-        if (linea.Length > 90) linea = linea[..90] + "…";
-        LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {linea}");
+        LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {LineaDelResultado(resultado, args)}");
+    }
+
+    /// <summary>
+    /// La primera línea del resultado, con lo escrito tapado y DESPUÉS recortada a 90 (promesa 397).
+    /// </summary>
+    /// <remarks>
+    /// Para escribir, la primera línea es «escribí «…» y confirmé con Enter»: hasta el 2026-09-24 el valor
+    /// quedaba aquí además de en la línea «←» del mapa. Tapar antes de recortar, o un valor partido por el
+    /// corte ya no se reconoce y su mitad sale entera.
+    /// </remarks>
+    private static string LineaDelResultado(string resultado, IReadOnlyDictionary<string, string> args)
+    {
+        string linea = U.Graph.SinValor.Tapar(resultado.Split('\n')[0].Trim(), SurfaceMapTools.ValoresEscritos(args));
+        return linea.Length > 90 ? linea[..90] + "…" : linea;
     }
 
     /// <summary>La cola de una superficie, que es la parte que una persona reconoce.</summary>
@@ -1864,8 +1877,12 @@ public sealed class ConversacionEnVivo : IDisposable
 
         if (hechos.Count == 0 && SeVuelcaCrudo(doc.RootElement))
         {
-            string plano = System.Text.RegularExpressions.Regex.Replace(json, @"\s+", " ");
-            LogBus.Log("voz-viva", "← " + (plano.Length > 400 ? plano[..400] + "…" : plano));
+            // POR SU TIPO Y SU LONGITUD, NO CRUDO (spec 051, D3). Lo que no se traduce lleva a veces lo dicho
+            // —una nota en unas instrucciones añadidas, el texto de un delegado—, y el log salía del equipo por
+            // el espejo. Lo que la línea servía para ver, qué llegó sin traducir, lo dice el tipo, que es
+            // vocabulario del servidor; los 400 primeros caracteres del cuerpo eran una copia de la conversación.
+            string tipo = TipoDelVolcado(doc.RootElement);
+            LogBus.Log("voz-viva", $"← {tipo} · {SinValor.Forma(json)}");
         }
 
         foreach (var hecho in hechos) Reaccionar(hecho, ct);
@@ -1891,6 +1908,19 @@ public sealed class ConversacionEnVivo : IDisposable
         if (tipo == "session.output_audio.delta") return false;
         if (tipo != "response.event" || !mensaje.TryGetProperty("event", out var ev)) return true;
         return !Tipo(ev).EndsWith(".delta", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// El «type» de un mensaje que se vuelca, y si es un <c>response.event</c> también el del evento que envuelve:
+    /// el de fuera solo dice «un evento», el de dentro dice cuál (spec 051, D3).
+    /// </summary>
+    private static string TipoDelVolcado(JsonElement mensaje)
+    {
+        string tipo = Tipo(mensaje);
+        if (tipo.Length == 0) return "(sin type)";
+        return tipo == "response.event" && mensaje.TryGetProperty("event", out var ev) && Tipo(ev).Length > 0
+            ? $"{tipo} › {Tipo(ev)}"
+            : tipo;
     }
 
     /// <summary>El «type» si es texto; vacío si falta o no es un objeto (patrón nº9: lo de la red se normaliza).</summary>
@@ -1935,8 +1965,11 @@ public sealed class ConversacionEnVivo : IDisposable
 
             case Hecho.CierraElTurno:
                 TurnoCerrado?.Invoke();
-                if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {_fraseU}");
-                if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {_fraseUsuario}");
+                // LO DICHO, POR SU LONGITUD (spec 051, D1 y D2). La frase sigue en la conversación
+                // (Conversacion?.Agregar, aquí abajo); en el log era una segunda copia, y el log salía del equipo por el espejo.
+                // En esta máquina, 17 logs guardaban 107 «usuario dijo:» y 92 «Ü dijo:» enteros (2026-09-23).
+                if (_fraseU.Length > 0) LogBus.Log("voz-viva", $"Ü dijo: {SinValor.Forma(_fraseU.ToString())}");
+                if (_fraseUsuario.Length > 0) LogBus.Log("voz-viva", $"usuario dijo: {SinValor.Forma(_fraseUsuario.ToString())}");
                 GuardarPeticionPersonalSiLaPidio(_fraseUsuario.ToString());
                 GuardarDetallePersonalSiEsRelevante(_fraseUsuario.ToString());
                 Conversacion?.Agregar("usuario", _fraseUsuario.ToString());
@@ -2412,8 +2445,9 @@ public sealed class ConversacionEnVivo : IDisposable
         }
         if (perdida.Length == 0 || !Viva) return;
 
-        string corta = perdida.Length > 60 ? perdida[..60] + "…" : perdida;
-        LogBus.Log("recuerdo", $"LECCIÓN PERDIDA: «{corta}» sonaba a enseñanza y no se creó ningún "
+        // La frase es de la persona: por su longitud (spec 051, D4). El modelo, que es quien puede arreglarlo,
+        // no la necesita en el aviso de abajo; quien lee el log sabe que hubo una y cuánto medía.
+        LogBus.Log("recuerdo", $"LECCIÓN PERDIDA: {SinValor.Forma(perdida)} sonaba a enseñanza y no se creó ningún "
                              + "recuerdo. Se lo recuerdo al modelo.");
         Accion?.Invoke("⚠ te enseñó algo y no lo guardé", true);
 

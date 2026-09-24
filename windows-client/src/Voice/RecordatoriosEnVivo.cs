@@ -1,4 +1,5 @@
 using U.WindowsClient.Diagnostics;
+using SinValor = U.Graph.SinValor;
 
 namespace U.WindowsClient.Voice;
 
@@ -26,7 +27,9 @@ public sealed class RecordatoriosEnVivo : IDisposable
             {
                 string mensaje = $"Te debía recordar: {recordatorio.Text}. ¿Quieres que haga algo?";
                 if (!_memoria.MarcarEntregado(recordatorio.Id)) continue;
-                LogBus.Log("recordatorio", $"entregado a las {DateTimeOffset.Now:HH:mm:ss}: {recordatorio.Text}");
+                // El recordatorio lo dictó la persona: por su longitud (spec 051, D5). El texto se le dice a ella
+                // por _avisar; al log le basta saber que se entregó y cuándo.
+                LogBus.Log("recordatorio", $"entregado a las {DateTimeOffset.Now:HH:mm:ss}: {SinValor.Forma(recordatorio.Text)}");
                 _avisar(mensaje);
             }
         }
