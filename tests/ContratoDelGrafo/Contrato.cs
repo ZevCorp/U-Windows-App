@@ -905,7 +905,7 @@ internal static class Contrato
         Prueba("371. la paleta de Jev es la del plano y se juzga sin pincel: cada token guarda su ARGB exacto, su significado y si es cromático —saturación HSL de 0,25 o más—, dos tokens cromáticos con distinto significado distan al menos 30° de tono salvo los tres pares aceptados por escrito —los azules entre sí—, los neutros y los acromáticos se juzgan solo por su valor, no hay token para lo que no existe —el cian del OCR—, y el overlay de Jev y el inspector no se encienden a la vez: la regla es pura, el inspector y la vista de Jev la consultan antes de encenderse y ponen su bandera, que se lee en sus fuentes, y un overlay impedido no se da por visible", LaPaletaDeJevEsLaDelPlano);
         Prueba("372. el panel de Jev sale de un modelo puro: dado un ciclo —objetivo, paso, candidatas, decisión, lo pulsado y tiempos— produce exactamente lo que se pinta: la cabecera «paso k» «· N detectados» «{ms}ms», los medidores cumplido y ausente, y cinco barras como mucho ordenadas de mayor a menor probabilidad con su valor a dos decimales y la etiqueta sola —numerada solo si dos de las cinco la comparten—; la resaltada es la pulsada por su id —la elegida solo mientras no se conozca la pulsada—, nunca una por parecido de texto; y si la mano pulsó otra que la elegida, el ticker lo dice", ElPanelDeJevSaleDeUnModeloPuro);
         Prueba("373. sin distribución no hay gráfico: con Luna, con la regla local o con una respuesta sin probabilidades no se pintan cabecera, medidores ni barras; el coste es el acumulado de la tarea a partir de los tokens facturados que devuelva el cliente, con cinco decimales, y sin tokens se enseña «—» y no crece; el ms de la cabecera es el de decidir; y un medidor sin dato enseña «—», nunca 0", SinDistribucionNoHayGrafico);
-        Prueba("374. los textos del panel describen el paso y no concluyen: cada estado tiene su cadena exacta, el motivo con que el tramo para se enseña tal cual llega —sin reescribirlo—, «Jev cree que ya está» nunca se convierte en «listo» ni en «terminado», pulsar la segunda mejor se dice como lo que es, una decisión vetada se dice vetada con el porqué del veto tal cual —nunca «pulsando» ni «no estoy seguro»— y sin barra resaltada, y el punto del ticker va a 0,82 mientras el tramo sigue y a 0,42 cuando para", LosTextosDelPanelDescribenElPasoYNoConcluyen);
+        Prueba("374. los textos del panel describen el paso y no concluyen: cada estado tiene su cadena exacta, el motivo con que el tramo para se enseña tal cual llega —sin reescribirlo—, «Jev cree que ya está» nunca se convierte en «listo» ni en «terminado», pulsar la segunda mejor se dice como lo que es, una decisión vetada se dice vetada con el porqué del veto tal cual —nunca «pulsando» ni «no estoy seguro»— y sin barra resaltada, una pulsación que la mano no llegó a hacer se dice «No pude pulsar» —nunca «pulsando»— y sin barra resaltada, y el punto del ticker va a 0,82 mientras el tramo sigue y a 0,42 cuando para", LosTextosDelPanelDescribenElPasoYNoConcluyen);
         Prueba("375. el overlay pinta exactamente la lista que se ofreció al decisor: una caja por candidata con caja leída y ninguna más, en su orden, con su etiqueta sola; una candidata sin caja se ofrece pero no se pinta y se cuenta; la rosa es la de lo pulsado —por su id, o por la caja que la mano dice haber pulsado— y nunca la elegida antes de pulsar ni una por etiqueta —dos «Buscar» dan una sola rosa—; y las cajas caducan al cambiar la ventana de delante: la caducidad es pura y el gancho que la dispara se lee en el fuente del overlay", ElOverlayPintaExactamenteLoQueSeOfrecio);
         Prueba("376. el panel de Jev mide lo que dice el plano y su alto sale de sus partes y de un mínimo declarado, no del contenido: 340 de ancho, 64 sin resultados —el mínimo, que calca los 63,7 del vídeo; las partes suman 57,6— y 198,6 con cinco barras; el XAML medido sin pantalla da lo mismo y la zona de resultados recibe sus 314 enteros porque el borde no ocupa sitio; y si WPF no mide en el arnés, la promesa queda SIN JUZGAR, ni verde ni roja", ElPanelDeJevMideLoQueDiceElPlano);
         Prueba("377. el panel se pone donde no estorba, y se calcula sin pantalla: junto a la carita a (56, 32) de su borde por la escala —un ancla-punto es una carita de 0×0—, probando las cuatro esquinas en orden, sin tapar la carita ni los 22 de alrededor —el cuadrado de 44 de un ancla-punto—, a 12 del borde del área de trabajo, sin cruzar el notch ni ningún obstáculo ni la caja de lo pulsado si alguna esquina cabe, y si ninguna cabe se va a la esquina opuesta; nunca se sale del área de trabajo", ElPanelSePoneDondeNoEstorba);
@@ -913,7 +913,7 @@ internal static class Contrato
         Prueba("379. el overlay de Jev es una ventana por monitor en píxeles físicos, transparente, click-through, no activable, de herramienta y excluida de la captura —las máscaras son puras y el overlay las aplica, que se lee en su fuente—, y por defecto está apagado: lo enciende U_JEV_OVERLAY=si al encender Jev, la configuración es pura y dice por qué quedó como quedó, y el estado de la vista lo nombra", ElOverlayDeJevEsUnaVentanaPorMonitorYPorDefectoApagado);
         Prueba("380. todo lo de Jev se dibuja por Pantallas: la inversa —de físicos a la unidad de un monitor concreto, restando su origen— existe y con la ida da la identidad, un monitor secundario con otra escala convierte bien, no hay ninguna conversión a mano nueva bajo Ui/Jev, y al cambiar el DPI el overlay vuelve a aplicar el rect calculado y no el sugerido: la regla es pura y su llamada desde OnDpiChanged se lee en el fuente", TodoLoDeJevSeDibujaPorPantallas);
         Prueba("381. la flecha vuela a lo pulsado con la duración del plano y no cuando la app no está delante: la duración es la distancia entre 520 por la escala, acotada entre 1,05 y 2,2 s; aterriza a 42 por la escala del centro de lo pulsado; el camino sale y llega parado y no se devuelve; con la ventana de trabajo detrás de otra no hay vuelo; y quién está delante se le pregunta a Windows, no se da por hecho, que se lee en el fuente de la vista", LaFlechaVuelaALoPulsadoConLaDuracionDelPlano);
-        Prueba("382. nada de la vista bloquea el ciclo: la vista oye cada paso decidido por el evento del mapa —AlDecidir, con la decisión ya vetada— y no envuelve ni reasigna el decisor, oírlo dos veces se suscribe una, y un oyente que lanza no sale al paso y queda en el log con su tipo y su mensaje; del evento sale el ciclo que se pinta —la pulsada es la del paso, solo si la mano terminó, y la caja de una candidata solo si el paso no cambió lo que se ve— y la línea que llega pegada a él pinta las mismas cajas; publicar un ciclo solo encola y nunca ejecuta en el acto —con un despachador que lanza si se le pide ejecutar ya, publicar no lanza—, con la cola sin vaciar se pinta solo el último ciclo, una excepción al pintar no sale al ciclo y queda en el log con su tipo y su mensaje, y el único BeginInvoke de la vista vive en su adaptador a WPF", NadaDeLaVistaBloqueaElCiclo);
+        Prueba("382. nada de la vista bloquea el ciclo: la vista oye cada paso decidido por el evento del mapa —AlDecidir, con la decisión ya vetada— y no envuelve ni reasigna el decisor, oírlo dos veces se suscribe una, y un oyente que lanza no sale al paso y queda en el log con su tipo y su mensaje; del evento sale el ciclo que se pinta —la pulsada es la del paso, solo si la mano terminó, y si no terminó el panel dice que no pudo pulsar y no resalta la elegida; sin decisión, dice el porqué del paso; y la caja de una candidata solo si el paso no cambió lo que se ve— y la línea que llega pegada a él pinta las mismas cajas, y ninguna si el paso no tenía ninguna; publicar un ciclo solo encola y nunca ejecuta en el acto —con un despachador que lanza si se le pide ejecutar ya, publicar no lanza—, con la cola sin vaciar se pinta solo el último ciclo, una excepción al pintar no sale al ciclo y queda en el log con su tipo y su mensaje, y el único BeginInvoke de la vista vive en su adaptador a WPF", NadaDeLaVistaBloqueaElCiclo);
         Prueba("383. apagar Jev cierra las tres ventanas —overlay, panel y flecha— y Escape o soltar lo señalado vacían el overlay, esconden la flecha y dejan el panel sin corrida: la máquina es pura y sus dos ganchos se leen en el parcial; el interruptor del decisor sigue apagando el catálogo byte a byte", ApagarJevCierraLasTresVentanas);
         Prueba("384. una sola cosa vuela por clic: mientras corre un tramo con Jev la carita ni viaja al clic ni sigue al cursor sintético, fuera de tramo sigue haciéndolo, y la carita no cambia de tamaño: la regla es pura y sus dos llamadas en FaceWindow se cuentan en el fuente", UnaSolaCosaVuelaPorClic);
         Prueba("385. el panel de Jev nunca toma el ratón ni el foco ni sale en las capturas —click-through, no activable y excluido de la captura siempre—, nace al encender Jev sin tocar el atajo de invocar a Ü —InvocarPorAtajo sigue abriendo el globo y no sabe de Jev, que se lee en su fuente—, y se aparta de lo pulsado en cuanto lo conoce, con el alto que pinta", ElPanelDeJevNuncaTomaElRatonNiElFoco);
@@ -16382,6 +16382,7 @@ internal static class Contrato
         public int? TokensFacturados;
         public string Fase = "decidido";
         public string? Linea;
+        public bool? NoSePulso;   // null = no se pone (y CicloDeJev no necesita tenerlo); true = el paso terminó y la mano no pulsó (374)
 
         public string Id(int i) => $"{i + 1}) {Etiquetas[i]} ({Tipos[i]})";
 
@@ -16414,6 +16415,7 @@ internal static class Contrato
                 ("Pulsada", Pulsada), ("CajaPulsada", CajaPulsada), ("MsDecidir", MsDecidir),
                 ("TokensFacturados", TokensFacturados), ("Fase", Fase), ("Linea", Linea),
             };
+            if (NoSePulso != null) campos.Add(("NoSePulso", NoSePulso.Value));
             return Crear(tCiclo, campos.ToArray());
         }
     }
@@ -16854,6 +16856,29 @@ internal static class Contrato
             Dice(new CicloDeMentira { Actuar = false, Puerta = "", Probabilidades = null, Cumplido = 0, Peligro = 0,
                     Porque = "Jev eligió «Grabar» (4) y está vetada: " + veto, Veto = veto },
                 "Vetada: " + veto, 0.42, "la elegida vetada, sin distribución");
+        }
+        // UNA PULSACIÓN QUE LA MANO NO LLEGÓ A HACER SE DICE «NO PUDE PULSAR» (revisión de la fusión de A, B, C y D,
+        // 2026-09-24). Con el puente, el ciclo decidido salía AL DECIDIR y «sin pulsada» era «todavía no se sabe»: «Pulsando»
+        // y la elegida resaltada eran verdad. Con el evento de C el ciclo sale cuando el paso YA TERMINÓ, y sin pulsada es
+        // que la mano no pulsó —la elegida no estaba y no hubo segunda, homónimos, el tope—; decir «Pulsando «Buscar» (6)»
+        // con su barra resaltada es el «acciona» sobre algo que no se accionó, la misma clase que la vetada (patrón nº8).
+        // «No pude» y no «no estaba»: «no terminó» tiene tres causas y la línea del tramo dice cuál (aprendizaje nº2).
+        if (t.Ciclo.GetProperty("NoSePulso") == null)
+            Pendiente("Ui.Jev.CicloDeJev.NoSePulso: el ciclo del evento sabe que la mano no pulsó, y no lo confunde con «todavía no se sabe»", "374", "049");
+        else
+        {
+            var noPudo = new CicloDeMentira { NoSePulso = true };
+            Dice(noPudo, "No pude pulsar «Buscar» (6)", 0.42, "Jev actuó sobre la elegida y la mano no llegó a pulsarla");
+            var barrasNoPudo = Elementos(PropDe(PropDe(Pinta(t, noPudo), "Resultados") ?? new object(), "Barras"));
+            Debe(barrasNoPudo.Count > 0 && !barrasNoPudo.Any(b => Cierto(b, "Resaltada")),
+                $"y con la mano que no pulsó hay barras ({barrasNoPudo.Count}) pero ninguna resaltada: la elegida no se pulsó, y ya se sabe");
+            // Y LA LÍNEA QUE LO CUENTA —«· no pudo»— se enseña tal cual, también sin barra resaltada.
+            var lineaNoPudo = new CicloDeMentira { NoSePulso = true, Fase = "linea", Linea = "paso 2: «Buscar» (6) conf 0.52 · no pudo" };
+            Dice(lineaNoPudo, "paso 2: «Buscar» (6) conf 0.52 · no pudo", 0.82, "la línea del paso que no pudo, tal cual");
+            Debe(!Elementos(PropDe(PropDe(Pinta(t, lineaNoPudo), "Resultados") ?? new object(), "Barras")).Any(b => Cierto(b, "Resaltada")),
+                "y con esa línea tampoco queda la elegida resaltada");
+            // SIN NoSePulso (la traducción pura, un ciclo que no viene de un paso terminado) sigue siendo «todavía no se sabe».
+            Dice(new CicloDeMentira { NoSePulso = false }, "Pulsando «Buscar» (6)", 0.82, "sin pulsada y sin saber que no se pulsó");
         }
         var parado = new CicloDeMentira { Fase = "linea", Linea = "tramo: 3 paso(s) · se agotó el tope de 4 paso(s)." };
         Dice(parado, "se agotó el tope de 4 paso(s).", 0.42, "el tramo paró");
@@ -17864,7 +17889,8 @@ internal static class Contrato
             var args = new Dictionary<string, string> { ["objetivo"] = "crear el triage" };
             const string CrearTriage = "2) Crear Triage Administrativo (Button)";
             // La mano: cada llamada contesta lo que diga «mano» con su número de llamada (1, 2…).
-            SurfaceMapTools Mapa(U.WindowsClient.Decision.DecisionDeUnPaso decision, Func<int, RecorrerSegunElNucleo.Resultado> mano)
+            SurfaceMapTools Mapa(U.WindowsClient.Decision.DecisionDeUnPaso? decision, Func<int, RecorrerSegunElNucleo.Resultado> mano,
+                Func<string, string, IReadOnlyList<string>, U.WindowsClient.Decision.DecisionDeUnPaso>? decisor = null)
             {
                 var loc = new U.WindowsClient.Uia.SurfaceLocator.SurfaceLocation(A, "sap", "");
                 var mapa = new SurfaceMapTools(() => loc);
@@ -17878,7 +17904,7 @@ internal static class Contrato
                 pLee.SetValue(mapa, Devuelve(pLee.PropertyType, _ => Observacion(tObs, tEl, (IntPtr)1, A, ahora, true, vistos)));
                 int llamadas = 0;
                 mapa.RecorrerPorElNucleo = pasos => mano(++llamadas);
-                pDecisor.SetValue(mapa, Decide((_, _, _) => decision));
+                pDecisor.SetValue(mapa, decisor ?? Decide((_, _, _) => decision!));
                 return mapa;
             }
             RecorrerSegunElNucleo.Resultado CambiaDeSitio(int _) => new(1, 1, "uia://sap/NV2000", true,
@@ -17965,6 +17991,18 @@ internal static class Contrato
                         $"y la línea de ese paso pinta las mismas {deLaLinea.Count} cajas con la misma rosa: [{string.Join(" · ", rosasLinea)}]");
                     Debe(delCiclo.Invoke(null, new[] { Activator.CreateInstance(tCiclo)! }) == null,
                         "y un ciclo sin paso —el de «Mirando la pantalla»— no toca el overlay");
+                    // LA LÍNEA DE UN PASO SIN NADA TAMBIÉN ES DE UN PASO (revisión de la fusión, 2026-09-24): sin decisión y sin
+                    // candidatas —nada accionable, pantalla sin nombre, decisor apagado— el decidido vacía el overlay, pero llega
+                    // pegado a su línea y el conector pinta solo la línea. Si la línea no se reconoce como de un paso, el overlay se
+                    // queda con las cajas del paso anterior: la caja que miente (patrón nº8). Lo que la hace de un paso es venir
+                    // de un decidido, no llevar decisión o candidatas.
+                    var sinNada = conLaLinea.Invoke(null, new object?[] { Crear(tCiclo, ("Fase", "decidido"), ("Paso", 2)), "crear el triage",
+                        "paso 2: sin acción · no veo ningún elemento accionable" })!;
+                    var cajasSinNada = delCiclo.Invoke(null, new[] { sinNada });
+                    Debe(cajasSinNada != null && Elementos(PropDe(cajasSinNada, "Cajas")).Count == 0,
+                        $"y la línea de un paso sin nada que ofrecer vacía el overlay, no lo deja como estaba: {(cajasSinNada == null ? "null (no lo toca)" : Elementos(PropDe(cajasSinNada, "Cajas")).Count + " caja(s)")}");
+                    Debe(delCiclo.Invoke(null, new[] { conLaLinea.Invoke(null, new object?[] { null, "crear el triage", "tramo: 0 paso(s) · paraste tú con Escape; no sigo." })! }) == null,
+                        "y una línea sin paso decidido detrás —la parada antes del primero— no toca el overlay");
                 }
             }
             var vista = FuenteDelRepo("windows-client/src/Ui/Jev/VistaDeJev.cs", "382");
@@ -17985,6 +18023,33 @@ internal static class Contrato
             var noTermino = OyeYDecide(Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), NoEsta));
             Debe(noTermino.Count == 1 && PropDe(noTermino[0], "Pulsada") == null,
                 $"con la mano que no encontró la elegida y sin segunda, el ciclo no trae pulsada: [{string.Join(" · ", noTermino.Select(c => PropDe(c, "Pulsada") ?? "null"))}]");
+            // Y TAMPOCO «PULSANDO» (revisión de la fusión de A, B, C y D, 2026-09-24). El evento sale cuando el paso terminó:
+            // aquí «sin pulsada» ya no es «todavía no se sabe», es «no se pulsó». El panel decía «Pulsando «Crear Triage
+            // Administrativo» (2)» con la barra de la elegida resaltada —con map_decidir fuera de tramo, lo último que se
+            // veía—. Es la misma clase que la vetada: «acciona» sobre algo que no se accionó (patrón nº8, aprendizaje nº7).
+            if (noTermino.Count == 1)
+            {
+                var pN = PintaCiclo(noTermino[0]);
+                Debe(Texto(pN, "Ticker") == "No pude pulsar «Crear Triage Administrativo» (2)" && Math.Abs(Numero(pN, "Punto") - 0.42) < 0.001,
+                    $"y el panel dice que no pudo pulsar, no «Pulsando»: «{Texto(pN, "Ticker")}» con el punto a {Numero(pN, "Punto"):0.00}");
+            }
+            // CON DISTRIBUCIÓN, NINGUNA BARRA RESALTADA: la segunda (0,05) no llega a SegundaMejorMinima y no se prueba.
+            var noTerminoConReparto = OyeYDecide(Mapa(DecisionCon(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."),
+                new[] { (CrearTriage, 0.93), ("3) Salir (Button)", 0.05), ("1) Buscar (Edit)", 0.02) }, cumplido: 0.02, peligro: 0.0), NoEsta));
+            Debe(noTerminoConReparto.Count == 1, $"con distribución, la mano que no terminó también es UN ciclo: llegaron {noTerminoConReparto.Count}");
+            if (noTerminoConReparto.Count == 1)
+            {
+                var pR = PintaCiclo(noTerminoConReparto[0]);
+                Debe(Texto(pR, "Ticker") == "No pude pulsar «Crear Triage Administrativo» (2)" && Barras(pR).Count > 0 && !Barras(pR).Any(b => Cierto(b, "Resaltada")),
+                    $"y con distribución hay barras ({Barras(pR).Count}) pero ninguna resaltada, y el ticker dice «{Texto(pR, "Ticker")}»");
+                var conLaLineaN = tCiclo.GetMethod("ConLaLinea");
+                if (conLaLineaN != null)
+                {
+                    var lineaN = conLaLineaN.Invoke(null, new object?[] { noTerminoConReparto[0], "crear el triage", "paso 1: «Crear Triage Administrativo» (2) conf 0.93 · no pudo" })!;
+                    Debe(!Barras(PintaCiclo(lineaN)).Any(b => Cierto(b, "Resaltada")),
+                        "y la línea «· no pudo» que llega pegada tampoco resalta la elegida");
+                }
+            }
 
             // 6. UN OYENTE QUE LANZA NO SALE AL PASO, y queda en el log con su tipo y su mensaje (patrón nº3).
             var mapaL = Mapa(Decision("Si", CrearTriage, 0.93, $"Jev eligió «{CrearTriage}» con confianza 0.93."), NoCambia);
@@ -17997,6 +18062,22 @@ internal static class Contrato
                 $"y el paso sigue y cuenta lo que hizo la mano: «{cuenta}»");
             Debe(U.WindowsClient.Diagnostics.LogBus.Snapshot().Any(l => l.Contains("InvalidOperationException", StringComparison.Ordinal) && l.Contains("el pintor de la 382 revienta al oír", StringComparison.Ordinal)),
                 "y el log lo dice con su tipo y su mensaje");
+
+            // 7. SIN DECISIÓN, EL PORQUÉ DEL PASO (revisión de la fusión, 2026-09-24; patrón nº10). Decisor apagado, pantalla sin
+            // nombre, nada accionable o el decisor lanzó: el ciclo sale sin decisión y el ticker quedaba EN BLANCO. En un tramo
+            // lo tapaba la línea «sin acción · …»; con map_decidir no llega ninguna línea, y el panel no decía por qué no hizo
+            // nada. El porqué es el del paso, tal cual: ya distingue sus causas (aprendizaje nº2).
+            var sinDecision = OyeYDecide(Mapa(null, NoCambia, Decide((_, _, _) => throw new InvalidOperationException("el decisor de la 382 no contesta"))));
+            Debe(sinDecision.Count == 1 && PropDe(sinDecision[0], "Decision") == null && PropDe(sinDecision[0], "Pulsada") == null,
+                $"con el decisor que lanza, llega UN ciclo sin decisión ni pulsada: llegaron {sinDecision.Count}");
+            if (sinDecision.Count == 1)
+            {
+                var pS = PintaCiclo(sinDecision[0]);
+                string tS = Texto(pS, "Ticker");
+                Debe(tS.Contains("el decisor falló", StringComparison.Ordinal) && tS.Contains("el decisor de la 382 no contesta", StringComparison.Ordinal)
+                        && Math.Abs(Numero(pS, "Punto") - 0.42) < 0.001,
+                    $"y el panel dice el porqué del paso, no un ticker en blanco: «{tS}» con el punto a {Numero(pS, "Punto"):0.00}");
+            }
         }
         finally
         {
