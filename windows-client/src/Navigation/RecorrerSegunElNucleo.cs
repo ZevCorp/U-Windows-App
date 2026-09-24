@@ -232,7 +232,7 @@ public sealed class RecorrerSegunElNucleo
                 string partida = LaDePartida(paso);
                 bool escrito;
                 try { escrito = _escribir(paso.Exit, paso.Texto); }
-                finally { LaManoVolvio($"escribir en «{(paso.Exit.Length > 0 ? paso.Exit : "el campo con el foco")}»"); }
+                finally { LaManoVolvio($"escribir en «{(paso.Exit.Length > 0 ? U.WindowsClient.Decision.PoliticaDeLoQueViaja.SelectorParaContar(paso.Exit) : "el campo con el foco")}»"); }
                 if (!escrito)
                     return Parcial(i, pasos.Count,
                         $"no pude escribir «{paso.Texto}»"
@@ -315,7 +315,7 @@ public sealed class RecorrerSegunElNucleo
             // 2 (escribir y teclear) y este, el del clic, seguía juzgando `r.Hasta` en el acto sobre una asentada que podía llegar
             // a los ~480 ms, antes que una web lenta.
             try { r = _pulsar.PulsaParaLlegar(elegido.Que.Selector, elegido.Que.Etiqueta, paso.Llegada); }
-            finally { LaManoVolvio($"pulsar «{elegido.Que.Etiqueta}» en el recorrido"); }
+            finally { LaManoVolvio($"pulsar «{U.WindowsClient.Decision.PoliticaDeLoQueViaja.EtiquetaParaContar(elegido.Que.Etiqueta, elegido.Que.Tipo)}» en el recorrido"); }
             if (!r.SePudo)
                 return Parcial(i, pasos.Count, r.Cuenta, conVivos: true);
             ultimoPulso = r;
@@ -715,6 +715,8 @@ public sealed class RecorrerSegunElNucleo
         //    y se pulsa esa.
         // Vieja, de otra pantalla o sin ella: la 264 y la 299 tal cual, y se dice por qué no contó (patrón nº2).
         {
+            // EL SELECTOR DE UNA FILA NO VA AL DIARIO (350 + 048, al juntar C): lleva su texto. Un nombre, para las 4 líneas de abajo.
+            string nombre = U.WindowsClient.Decision.PoliticaDeLoQueViaja.SelectorParaContar(exit);
             string aquiAhora = _donde() ?? "";
             string? porQueNoCuenta = PorQueLaVistaNoCuenta(paso.Vista, aquiAhora, out var vista);
             if (vista != null)
@@ -728,7 +730,7 @@ public sealed class RecorrerSegunElNucleo
                     _grafo.Observar(aquiAhora, puertas);
                     miradas = 1;
                     huellaDeLaPrimera = HuellaDeLaCompuerta(aquiAhora);
-                    Diario?.Invoke($"«{exit}»: usé lo que el paso acababa de leer (observación v{vista.Version} de «{aquiAhora}», "
+                    Diario?.Invoke($"«{nombre}»: usé lo que el paso acababa de leer (observación v{vista.Version} de «{aquiAhora}», "
                         + $"{edad} ms de edad, {crudos.Count} crudo(s) → {puertas.Count} puerta(s) con la criba del latido): 0 miradas pagadas");
                 }
                 else
@@ -743,17 +745,17 @@ public sealed class RecorrerSegunElNucleo
                             .FirstOrDefault(a => a.Que.Selector.Equals(exit, StringComparison.Ordinal));
                         if (recordada != null)
                         {
-                            Diario?.Invoke($"«{exit}»: usé lo que el paso acababa de leer (pregunté por este selector en «{aquiAhora}», "
+                            Diario?.Invoke($"«{nombre}»: usé lo que el paso acababa de leer (pregunté por este selector en «{aquiAhora}», "
                                 + $"{edad} ms de edad): la doy por viva sin tocar la lista de vivos, 0 miradas pagadas");
                             return (recordada, nada, null, aquiAhora);
                         }
                     }
                     else
-                        Diario?.Invoke($"«{exit}»: el paso traía la respuesta de preguntar por un selector, pero no era este ({string.Join(",", vista.Elementos.Select(e => e.Selector))}); miro como hoy");
+                        Diario?.Invoke($"«{nombre}»: el paso traía la respuesta de preguntar por un selector, pero no era este ({string.Join(",", vista.Elementos.Select(e => U.WindowsClient.Decision.PoliticaDeLoQueViaja.SelectorParaContar(e.Selector)))}); miro como hoy");
                 }
             }
             else if (paso.Vista != null)
-                Diario?.Invoke($"«{exit}»: el paso traía una observación pero no cuenta ({porQueNoCuenta}); miro como hoy");
+                Diario?.Invoke($"«{nombre}»: el paso traía una observación pero no cuenta ({porQueNoCuenta}); miro como hoy");
         }
 
         for (int ido = 0; ; ido = (int)compasVida.Transcurrido, vueltas++)

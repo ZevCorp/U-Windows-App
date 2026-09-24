@@ -468,7 +468,7 @@ public sealed class SurfaceMapTools
         // ventana de SAP es el Pane opaco —contado en la compuerta, dejaba muertas las puertas de SAP (363)—.
         if (U.Graph.Surfaces.SapSelector.Owns(salida))
         {
-            LogBus.Log("lectura", $"«{salida}»: sin situarme, sin preguntar y sin observación (selector de SAP: se resuelve por su API); la compuerta decide como hoy");
+            LogBus.Log("lectura", $"«{Decision.PoliticaDeLoQueViaja.SelectorParaContar(salida)}»: sin situarme, sin preguntar y sin observación (selector de SAP: se resuelve por su API); la compuerta decide como hoy");
             _ultimaPregunta = "sin preguntar: selector de SAP";
             return null;
         }
@@ -483,7 +483,7 @@ public sealed class SurfaceMapTools
         // de UIA de una ventana de SAP, y preguntar por UIA dentro del Pane sería un camino que nadie ha medido.
         if (aqui.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase))
         {
-            LogBus.Log("lectura", $"«{salida}»: sin preguntar y sin observación en «{aqui}» (en SAP se resuelve por su API; lo que UIA ve de su Pane no cuenta) · {situarse}");
+            LogBus.Log("lectura", $"«{Decision.PoliticaDeLoQueViaja.SelectorParaContar(salida)}»: sin preguntar y sin observación en «{aqui}» (en SAP se resuelve por su API; lo que UIA ve de su Pane no cuenta) · {situarse}");
             _ultimaPregunta = $"sin preguntar: SAP · {situarse}";
             return null;
         }
@@ -501,23 +501,25 @@ public sealed class SurfaceMapTools
     private (Uia.Observacion? DeUno, string ComoFue) PreguntarSiHaceFalta(string salida, string aqui, Uia.Observacion? compartida, string situarse)
     {
         (Uia.Observacion?, string) Sin(string linea, string corta) { LogBus.Log("lectura", $"{linea} · {situarse}"); return (null, corta); }
+        // EL SELECTOR DE UNA FILA NO VA AL LOG (350 + 048, al juntar C): lleva su texto. Un nombre, para las 8 líneas de abajo.
+        string nombre = Decision.PoliticaDeLoQueViaja.SelectorParaContar(salida);
 
         if (!UiaSelector.Owns(salida))
-            return Sin($"«{salida}»: sin preguntar (no es un selector de UIA); la compuerta decide como hoy", "sin preguntar: no es de UIA");
+            return Sin($"«{nombre}»: sin preguntar (no es un selector de UIA); la compuerta decide como hoy", "sin preguntar: no es de UIA");
         if (aqui.Length == 0)
-            return Sin($"«{salida}»: sin preguntar (no sé dónde estoy); la compuerta mira como hoy", "sin preguntar: no sé dónde estoy");
+            return Sin($"«{nombre}»: sin preguntar (no sé dónde estoy); la compuerta mira como hoy", "sin preguntar: no sé dónde estoy");
 
         // VIVA EN EL GRAFO: la MISMA lista y la MISMA comparación que la compuerta —las vivas de DesdeAqui, por
         // selector y por ordinal—, y en el MISMO dónde (aprendizaje nº16): si aquí se dijera «viva» y allí no, se
         // saltaría la pregunta que hacía falta.
         var vivas = PuertasVivas?.Invoke(aqui) ?? Array.Empty<(string Selector, string Etiqueta, string Tipo)>();
         if (vivas.Any(p => p.Selector.Equals(salida, StringComparison.Ordinal)))
-            return Sin($"«{salida}» viva en el grafo, sin preguntar ni leer: la compuerta la encuentra como hoy", "viva en el grafo, sin preguntar");
+            return Sin($"«{nombre}» viva en el grafo, sin preguntar ni leer: la compuerta la encuentra como hoy", "viva en el grafo, sin preguntar");
 
         // YA LEÍDA POR EL PASO (363): si la observación que el paso acaba de leer la tiene, la compuerta la cuenta
         // como su mirada sin pagar nada. Preguntar sería pagar 60-107 ms por lo que ya se sabe.
         if (compartida is { Completa: true } && compartida.Elementos.Any(e => e.Selector.Equals(salida, StringComparison.Ordinal)))
-            return Sin($"«{salida}» está en la observación v{compartida.Version} que el paso acaba de leer: sin preguntar, la compuerta la cuenta como su mirada",
+            return Sin($"«{nombre}» está en la observación v{compartida.Version} que el paso acaba de leer: sin preguntar, la compuerta la cuenta como su mirada",
                 "en la observación del paso, sin preguntar");
 
         // LA VENTANA, SOLO PARA PREGUNTAR: sin ventana de trabajo fijada es otro «dónde» entero (VentanaObjetivo →
@@ -527,7 +529,7 @@ public sealed class SurfaceMapTools
         cronoVentana.Stop();
         string hallarLaVentana = $"hallar la ventana {cronoVentana.ElapsedMilliseconds} ms";
         if (ventana == IntPtr.Zero)
-            return Sin($"«{salida}»: sin preguntar (no hay ventana de trabajo · {hallarLaVentana}); la compuerta mira como hoy", "sin preguntar: sin ventana de trabajo");
+            return Sin($"«{nombre}»: sin preguntar (no hay ventana de trabajo · {hallarLaVentana}); la compuerta mira como hoy", "sin preguntar: sin ventana de trabajo");
 
         var crono = System.Diagnostics.Stopwatch.StartNew();
         Uia.Observacion? respuesta;
@@ -538,7 +540,7 @@ public sealed class SurfaceMapTools
             string causa = "";
             for (var x = e; x != null; x = x.InnerException)
                 causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
-            return Sin($"no pude preguntar por «{salida}» en la ventana de trabajo ({causa}) · {crono.ElapsedMilliseconds} ms · {hallarLaVentana}; la compuerta mira como hoy",
+            return Sin($"no pude preguntar por «{nombre}» en la ventana de trabajo ({causa}) · {crono.ElapsedMilliseconds} ms · {hallarLaVentana}; la compuerta mira como hoy",
                 $"no pude preguntar · {crono.ElapsedMilliseconds} ms · {hallarLaVentana}");
         }
         crono.Stop();
@@ -546,7 +548,7 @@ public sealed class SurfaceMapTools
         string como = string.IsNullOrWhiteSpace(respuesta?.ComoSeLeyo) ? "sin decir cómo" : respuesta!.ComoSeLeyo;
         var suyo = respuesta?.Elementos.Where(e => e.Selector.Equals(salida, StringComparison.Ordinal)).ToList() ?? new List<Uia.ElementoVisto>();
         if (suyo.Count == 0)
-            return Sin($"pregunté por «{salida}» en la ventana de trabajo ({como}): no está · {ms} ms · {hallarLaVentana}; la compuerta mira como hoy",
+            return Sin($"pregunté por «{nombre}» en la ventana de trabajo ({como}): no está · {ms} ms · {hallarLaVentana}; la compuerta mira como hoy",
                 $"pregunté: no está · {ms} ms · {hallarLaVentana}");
 
         // SELLADA CON EL DÓNDE DE TRABAJO, siempre: es el que la compuerta compara (PorQueLaVistaNoCuenta). Sellada con
@@ -559,7 +561,7 @@ public sealed class SurfaceMapTools
             Elementos = suyo,
             Completa = false,
         };
-        LogBus.Log("lectura", $"pregunté por «{salida}» en la ventana de trabajo ({como}): está · {ms} ms · {hallarLaVentana}; "
+        LogBus.Log("lectura", $"pregunté por «{nombre}» en la ventana de trabajo ({como}): está · {ms} ms · {hallarLaVentana}; "
             + $"el paso la lleva como observación de uno de «{aqui}», sin leer la ventana entera · {situarse}");
         return (deUno, $"pregunté: está · {ms} ms · {hallarLaVentana}");
     }
@@ -742,10 +744,10 @@ public sealed class SurfaceMapTools
     /// </summary>
     private Navigation.ElTramo.Paso DecidirYPulsar(string objetivo, string decir, string recuerdo, LoQueSeDecide? anotado)
     {
-        Navigation.ElTramo.Paso Sin(string cuenta, string porque, double conf = 0, bool cumplido = false)
+        Navigation.ElTramo.Paso Sin(string cuenta, string porque, double conf = 0, bool cumplido = false, string tiempos = "")
         {
             _ultimaMano = new Mano(false, false, Intento: false);
-            return new Navigation.ElTramo.Paso(false, false, false, "", "", "", conf, cuenta, porque, cumplido);
+            return new Navigation.ElTramo.Paso(false, false, false, "", "", "", conf, cuenta, porque, cumplido, tiempos);
         }
         if (Decisor == null) return Sin("todavía no sé decidir: el decisor está apagado.", "el decisor está apagado");
 
@@ -804,6 +806,11 @@ public sealed class SurfaceMapTools
         if (anotado != null) anotado.Ofrecidas = ids.AsReadOnly();
 
         var reloj = System.Diagnostics.Stopwatch.StartNew();
+        // EL PASO QUE NO PULSA TAMBIÉN CUENTA SUS LECTURAS (362 + 390, al juntar C, 2026-09-24). «El mapa cuenta por paso
+        // cuántas lecturas fueron nuevas y cuántas reutilizadas», y desde la 390 un paso decidido puede acabar sin pulsar
+        // —vetado, o Jev no se atreve—: volvía por Sin() con la cuenta de tiempos vacía, y el juez de la 362 lo vio con
+        // «Guardar». Lo mismo que el paso que pulsa, sin «pulsar» y sin la pregunta de Take, que aquí no hubo (patrón nº10).
+        string TiemposSinPulsar() => $"leer {relojLeer.ElapsedMilliseconds} ms · decidir {reloj.ElapsedMilliseconds} ms · {lecturas}";
         Decision.DecisionDeUnPaso d;
         try { d = Decisor(aqui, objetivo, etiquetas); }
         catch (Exception e)
@@ -815,7 +822,7 @@ public sealed class SurfaceMapTools
                 causa += $"{x.GetType().Name}: {x.Message}" + (x.InnerException != null ? " ← " : "");
             LogBus.Log("decisor", $"✘ en «{aqui}» el decisor lanzó: {causa}");
             if (anotado != null) anotado.MsDecidir = reloj.ElapsedMilliseconds;
-            return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})");
+            return Sin($"no se acciona: el decisor falló ({causa}). Decide Luna.", $"el decisor falló ({causa})", tiempos: TiemposSinPulsar());
         }
         reloj.Stop();
         if (anotado != null) { anotado.Decision = d; anotado.MsDecidir = reloj.ElapsedMilliseconds; }
@@ -879,7 +886,7 @@ public sealed class SurfaceMapTools
             LogBus.Log("decisor", $"✋ «{aqui}» · vetada la elegida «{vetada.Nombre}» ({NumeroDe(elegidaId)}) conf={conf}: {d.Veto}");
             return Sin($"no se acciona: Jev eligió «{vetada.Nombre}» ({NumeroDe(elegidaId)}) con confianza {conf}, y {d.Veto} "
                      + $"Lo irreversible no se pulsa por decisión. [{senal}]",
-                d.Porque, d.Confianza);
+                d.Porque, d.Confianza, tiempos: TiemposSinPulsar());
         }
 
         // «JEV CREE QUE YA ESTÁ» LO DECIDE EL NÚMERO, NO EL TEXTO DEL PORQUÉ (promesa 386, spec 046). Hasta el 2026-09-22
@@ -887,7 +894,7 @@ public sealed class SurfaceMapTools
         // el tramo por «ya está». El porqué es prosa para leer; lo que Jev contestó a la pregunta es el número.
         if (!d.Actuar)
             return Sin($"no se acciona: {d.Porque} [{senal}]", d.Porque, d.Confianza,
-                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo);
+                cumplido: d.Cumplido >= Decision.ElDecisor.CumplidoMinimo, tiempos: TiemposSinPulsar());
 
         // LA ELEGIDA, Y COMO MUCHO LA SEGUNDA MEJOR (promesa 288): si la primera no está viva al ir a pulsarla,
         // se prueba la siguiente por probabilidad si llega al mínimo. Sin otra llamada a Jev: las
@@ -918,7 +925,7 @@ public sealed class SurfaceMapTools
             var (id, prob) = candidatos[k];
             if (!selectorDe.TryGetValue(id, out var puerta))
                 return Sin($"no se acciona: el decisor contestó «{id}», que no es ninguna de las {ids.Count} puertas ofrecidas. Decide Luna. [{senal}]",
-                    $"contestó «{id}», que no se ofreció", d.Confianza);
+                    $"contestó «{id}», que no se ofreció", d.Confianza, tiempos: TiemposSinPulsar());
             string numero = id.Substring(0, id.IndexOf(')'));
             var relojPulsar = System.Diagnostics.Stopwatch.StartNew();
             string cuenta = SinTextoDeFilas(Take(puerta.Selector, "", decir, recuerdo));
@@ -3231,7 +3238,7 @@ public sealed class SurfaceMapTools
         }
         // EN CUANTO LA MANO VUELVE, la observación de antes ya no describe lo que hay delante (promesa 362).
         // También si la mano lanzó: una excepción a medio pulsar es, si acaso, más motivo para releer.
-        finally { InvalidarPorAccionar($"map_take «{salida}»"); }
+        finally { InvalidarPorAccionar($"map_take «{Decision.PoliticaDeLoQueViaja.SelectorParaContar(salida)}»"); }
     }
 
     /// <summary>
@@ -3297,7 +3304,7 @@ public sealed class SurfaceMapTools
         // EN CUANTO LA MANO VUELVE de escribir, la observación de antes ya no vale (promesa 362): un campo que
         // cambió de valor, una edición en línea que se cerró, o el Enter que navegó.
         try { return EscribirDeVerdad(texto, target, decir, recuerdo); }
-        finally { InvalidarPorAccionar($"map_type en «{(target.Length > 0 ? target : "el campo con el foco")}»"); }
+        finally { InvalidarPorAccionar($"map_type en «{(target.Length > 0 ? Decision.PoliticaDeLoQueViaja.SelectorParaContar(target) : "el campo con el foco")}»"); }
     }
 
     private string EscribirDeVerdad(string texto, string target, string decir, string recuerdo)

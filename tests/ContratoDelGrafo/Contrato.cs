@@ -14051,6 +14051,29 @@ internal static class Contrato
         Debe(conTexto == null, $"y ninguna línea del log de esa llamada lleva el texto de la fila, tampoco «mapa-mcp ←» («{Recorte(conTexto ?? "")}»)");
         Debe(pulsos.Count == 1 && pulsos[0] == $"uia:name={Fila};ct=GuiGridFila", $"y la mano recibe el SELECTOR de la fila (recibió [{string.Join(" · ", pulsos)}])");
 
+        // 2b. EL SELECTOR DE UNA FILA TAMPOCO SE ESCRIBE (350 + 048, al juntar C, 2026-09-24). La 048 añadió líneas de log y
+        // motivos de invalidación que nombran el elemento por su SELECTOR —«pregunté por «…»», «invalidada: accionar (map_take
+        // «…»)», «usé lo que el paso acababa de leer»—, y el de una fila lleva su texto: en UIA en su nombre, en SAP en los pares
+        // columna=valor de «#row=». Lo de arriba lo juzga por el camino del operador con una fila de UIA; esto juzga el
+        // reconocedor entero, con las dos formas de SAP, que ningún juez sin SAP recorre por el camino del operador.
+        var paraContar = tPol.GetMethod("SelectorParaContar", BindingFlags.Public | BindingFlags.Static);
+        if (paraContar == null) Pendiente("PoliticaDeLoQueViaja.SelectorParaContar", "350", "046 + 048");
+        else
+        {
+            string Nombra(string s) => (string)paraContar.Invoke(null, new object[] { s })!;
+            string uiaFila = Nombra($"uia:name={Fila};ct=GuiGridFila");
+            string sapFila = Nombra("sap:wnd[0]/usr/cntlGRID1/shellcont/shell#row=PACIENTE=GIRALDO HERNAN;CASO=2394346");
+            string sapNodo = Nombra("sap:wnd[0]/usr/cntlTREE1/shellcont/shell#node=GIRALDO HERNAN");
+            string boton = Nombra("uia:name=Nuevo;ct=Button");
+            string barra = Nombra("sap:wnd[0]/usr/cntlGRID1/shellcont/shell#tbbtn=NV44");
+            Debe(uiaFila == "fila (GuiGridFila)"
+                 && sapFila.Contains("fila", StringComparison.Ordinal) && !sapFila.Contains("GIRALDO", StringComparison.Ordinal) && !sapFila.Contains("2394346", StringComparison.Ordinal)
+                 && sapNodo.Contains("fila", StringComparison.Ordinal) && !sapNodo.Contains("GIRALDO", StringComparison.Ordinal),
+                $"el selector de una fila se nombra sin su texto —de UIA, de rejilla de SAP y de árbol de SAP— («{uiaFila}» · «{sapFila}» · «{sapNodo}»)");
+            Debe(boton == "uia:name=Nuevo;ct=Button" && barra == "sap:wnd[0]/usr/cntlGRID1/shellcont/shell#tbbtn=NV44",
+                $"y el de lo que no es una fila se escribe tal cual, porque es con lo que se diagnostica («{boton}» · «{barra}»)");
+        }
+
         // 3. EL TRAMO: la línea «paso 1:», al log y al notch, tampoco lleva el texto. Y cuando la mano NO termina, el tramo
         // para con «la mano no pudo: {la cuenta del paso}» —al log («← tramo…») y al notch—: con una mano que, como la real,
         // cuenta por la etiqueta y deja detrás lo que sigue vivo, ni la fila pulsada ni las otras filas salen por su texto

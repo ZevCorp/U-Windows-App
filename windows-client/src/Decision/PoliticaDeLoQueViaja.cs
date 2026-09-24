@@ -211,4 +211,39 @@ public sealed class PoliticaDeLoQueViaja
         if (!EsFila(id, out string numero, out string tipo)) return etiqueta;
         return numero.Length > 0 ? $"fila {numero} ({tipo})" : $"fila ({tipo})";
     }
+
+    /// <summary>
+    /// CÓMO SE NOMBRA UN SELECTOR EN LO QUE SE REGISTRA (350 + 048): tal cual, y si apunta a una fila, «fila (tipo)».
+    /// </summary>
+    /// <remarks>
+    /// NACE AL JUNTAR C (2026-09-24). La 048 añadió líneas de log y motivos de invalidación que nombran el elemento por su
+    /// SELECTOR —«pregunté por «…»», «invalidada: accionar (map_take «…»)», «usé lo que el paso acababa de leer»—, y el de
+    /// una fila lleva su texto: en UIA en el nombre («uia:name=GIRALDO HERNAN · 2394346;ct=GuiGridFila»), en SAP en los
+    /// pares columna=valor de «#row=». Juntas A y C, el juez de la 350 las vio en el log de un map_decidir y de un tramo.
+    /// La fila se reconoce por los MISMOS tipos que <see cref="EsFila"/> (<see cref="TiposDeFila"/>, exactos) cuando el
+    /// selector los trae (UIA, «ct=»), y por la marca con que SAP la construye cuando no: «#row=» es siempre una
+    /// GuiGridFila (<c>MundoQueToca</c>, <c>FaceWindow</c>); «#node=» es hoja o carpeta, y el selector no dice cuál, así
+    /// que se dice eso y no se adivina (patrón nº8). Lo que no es una fila se escribe tal cual: es con lo que se diagnostica.
+    /// </remarks>
+    public static string SelectorParaContar(string selector)
+    {
+        string s = selector ?? "";
+        if (U.Graph.Surfaces.SapSelector.Owns(s))
+        {
+            if (s.Contains(U.Graph.Surfaces.SapSelector.RowMark, StringComparison.Ordinal)) return "fila (GuiGridFila)";
+            if (s.Contains(U.Graph.Surfaces.SapSelector.NodeMark, StringComparison.Ordinal)) return "fila de árbol (GuiTreeFila o GuiTreeCarpeta)";
+            return s;
+        }
+        return U.Graph.Surfaces.UiaSelector.Parse(s).TryGetValue("ct", out string? ct) && EsTipoDeFila(ct) ? $"fila ({ct})" : s;
+    }
+
+    /// <summary>La etiqueta de un elemento del que se sabe el tipo: la de una fila es su texto, y no se escribe (350 + 048).</summary>
+    public static string EtiquetaParaContar(string etiqueta, string tipo) => EsTipoDeFila(tipo) ? $"fila ({tipo})" : etiqueta ?? "";
+
+    private static bool EsTipoDeFila(string tipo)
+    {
+        foreach (var t in TiposDeFila)
+            if (string.Equals(tipo, t, StringComparison.Ordinal)) return true;
+        return false;
+    }
 }
