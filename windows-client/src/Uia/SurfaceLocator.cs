@@ -79,10 +79,25 @@ public sealed class SurfaceLocator : IDisposable
     public bool Active { get; private set; }
     public event Action<SurfaceLocation>? Changed;
 
+    /// <summary>
+    /// La memoria de 400 ms bajo <see cref="DondeEstoy"/> (promesa 369), EN SOMBRA salvo <c>U_DONDE_MEMORIA=si</c>:
+    /// calcula siempre y cuenta cuántas respuestas habrían salido de memoria, y cuántas de esas habrían mentido.
+    /// </summary>
+    private readonly MemoriaDeUbicacion _memoria;
+
     public SurfaceLocator()
     {
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
         _timer.Tick += (_, __) => Probe();
+
+        // EN SOMBRA POR DEFECTO, y no es prudencia de estilo (spec 048, regla 10): no está medido cuántas de las 25
+        // llamadas a DondeEstoy() caen dentro de 400 ms de otra, ni cuántas de esas habrían servido un sitio viejo.
+        // Encenderla sin ese número sería una promesa que no compra nada y puede mentir. Lo decide el nivel 4.
+        bool encendida = MemoriaDeUbicacion.EncendidaEnElEntorno();
+        _memoria = new MemoriaDeUbicacion(cuenta: l => LogBus.Log("donde", l)) { EnSombra = !encendida };
+        LogBus.Log("donde", encendida
+            ? $"memoria del dónde ENCENDIDA por U_DONDE_MEMORIA: misma ventana y mismo título, menos de {MemoriaDeUbicacion.VigenciaMs} ms y sin accionar → no se vuelve a calcular"
+            : $"memoria del dónde en sombra: se calcula siempre y se cuenta cuántas habrían salido de memoria ({MemoriaDeUbicacion.VigenciaMs} ms); U_DONDE_MEMORIA=si la enciende");
     }
 
     public void Start()
@@ -179,7 +194,14 @@ public sealed class SurfaceLocator : IDisposable
 
             var sb = new StringBuilder(512);
             GetWindowText(hwnd, sb, sb.Capacity);
-            return ConVentana(Compute(hwnd, proc, sb.ToString()), hwnd);
+            string titulo = sb.ToString();
+            // LO BARATO DECIDE SI HACE FALTA LO CARO (promesa 369): hwnd + título cuestan dos llamadas Win32; Compute
+            // cuesta 12-194 ms (UIA para la URL del navegador o la sección seleccionada, COM para SAP). Con SAP
+            // delante se calcula siempre, por la misma razón que Probe no se salta su tick: el dynpro cambia sin
+            // que el título se mueva. Identificar(hwnd) NO pasa por aquí: fijar la ventana de trabajo (233) pregunta
+            // por UNA ventana concreta y en el acto.
+            IntPtr ventana = hwnd;
+            return _memoria.Sirve(ventana, titulo, IsSap(proc), () => ConVentana(Compute(ventana, proc, titulo), ventana));
         }
         catch { return Current; }
     }
@@ -627,5 +649,201 @@ public sealed class SurfaceLocator : IDisposable
     // común y preguntárselo a Windows a secas las llama a todas igual.
     private static string ProcessName(IntPtr hwnd) => AppAligner.ProcesoDe(hwnd);
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        _memoria.Dispose();   // lo que quede del último minuto se dice al cerrar
+    }
+}
+
+/// <summary>
+/// DÓNDE ESTOY, UNA VEZ POR INSTANTE (spec 048, promesa 369).
+/// </summary>
+/// <remarks>
+/// MEDIDO (spec 048, 2026-09-22): 25 llamadas a <c>DondeEstoy()</c> sin memoria —24 en <c>FaceWindow</c>, 1 aquí—,
+/// cada una de 12 a 194 ms; y ráfagas de «descarté una vuelta» en el mapa vivo tras cada salto. Cuántas caen dentro
+/// de 400 ms de otra NO está medido, y por eso esto nace EN SOMBRA: calcula siempre y cuenta.
+///
+/// La regla: se sirve la última calculada mientras la ventana de delante y su título sean los mismos, tenga menos
+/// de <see cref="VigenciaMs"/> y NADIE HAYA ACCIONADO desde que se calculó —ni <see cref="Olvida"/> ni
+/// <see cref="Observatorio.Invalida"/>, que es la llamada de Take y Type al volver la mano—. Con SAP delante se
+/// calcula siempre. Es la misma idea que <c>DondeTrabajo</c> (promesa 246) con la invalidación que a aquella le
+/// faltaba cuando la pregunta se hace desde fuera: la refutación nº5 de la spec mostró que, sin olvidar al accionar,
+/// <c>SeguirElFoco</c> olvidaba lo suyo y recogía de aquí lo viejo.
+///
+/// En sombra cuenta también cuántas de las que habrían salido de memoria traían OTRA respuesta: «habría servido»
+/// no dice si lo servido era verdad, y una memoria que miente es peor que ninguna (patrón nº8). Ese número, junto
+/// al de cuántas habrían salido, es el que decide en el nivel 4 si se enciende.
+///
+/// Pura y con reloj inyectable, para que el contrato la juzgue sin pantalla. Segura entre hilos: la preguntan el
+/// hilo de la interfaz y el reloj de ubicación del mapa vivo; el cálculo corre FUERA del cerrojo.
+/// </remarks>
+public sealed class MemoriaDeUbicacion : IDisposable
+{
+    /// <summary>
+    /// Cuánto vale una ubicación calculada. La misma cifra que <c>DondeTrabajo</c> (promesa 246), y no está medida
+    /// por este camino: la spec 040 midió que la ubicación cambia 405-510 ms después de un clic que navega.
+    /// </summary>
+    public const int VigenciaMs = 400;
+
+    private sealed record Recordada(IntPtr Ventana, string Titulo, long Cuando, long Olvidos, long Acciones,
+                                    SurfaceLocator.SurfaceLocation Ubicacion);
+
+    /// <summary>Lo contado en un tramo: el minuto en curso o todo desde el arranque.</summary>
+    private sealed class Tramo
+    {
+        public int Calculadas, DeMemoria, EnSombra, ConOtraRespuesta, ConSap;
+        public bool Vacio => Calculadas == 0 && DeMemoria == 0;
+    }
+
+    private readonly object _cerrojo = new();
+    private readonly Func<long> _reloj;
+    private Recordada? _recordada;
+    private long _olvidos;
+    private readonly Tramo _desdeElArranque = new();
+    private Tramo _minuto = new();
+    private long _inicioDelMinuto;
+
+    /// <param name="reloj">ms monotónicos; null = el de la máquina. El contrato pone el suyo.</param>
+    /// <param name="cuenta">Por dónde se dice el resumen por minuto. Entra por el constructor, como en el proyector de
+    /// Neo4j (366): lo que se cuenta antes de que alguien escuche no lo oye nadie.</param>
+    public MemoriaDeUbicacion(Func<long>? reloj = null, Action<string>? cuenta = null)
+    {
+        _reloj = reloj ?? (() => Environment.TickCount64);
+        Cuenta = cuenta;
+    }
+
+    /// <summary>Por dónde se dice el resumen por minuto.</summary>
+    public Action<string>? Cuenta { get; set; }
+
+    /// <summary>
+    /// EN SOMBRA: cada llamada calcula, y solo se cuenta cuántas habrían salido de memoria. Recién construida está
+    /// encendida; el localizador la pone en sombra salvo <c>U_DONDE_MEMORIA=si</c>.
+    /// </summary>
+    public bool EnSombra { get; set; }
+
+    /// <summary>¿El entorno la enciende? <c>U_DONDE_MEMORIA=si</c> (o sí, 1, true). Vacío es no (patrón nº9).</summary>
+    public static bool EncendidaEnElEntorno()
+    {
+        string v = Environment.GetEnvironmentVariable("U_DONDE_MEMORIA") ?? "";
+        return !string.IsNullOrWhiteSpace(v) && v.Trim().ToLowerInvariant() is "si" or "sí" or "1" or "true";
+    }
+
+    /// <summary>Cuántas se calcularon desde el arranque (en sombra, todas).</summary>
+    public int Calculadas { get { lock (_cerrojo) return _desdeElArranque.Calculadas; } }
+
+    /// <summary>Cuántas se sirvieron de memoria sin volver a calcular (en sombra, ninguna).</summary>
+    public int DeMemoria { get { lock (_cerrojo) return _desdeElArranque.DeMemoria; } }
+
+    /// <summary>En sombra: cuántas habrían salido de memoria.</summary>
+    public int HabrianSidoDeMemoria { get { lock (_cerrojo) return _desdeElArranque.EnSombra; } }
+
+    /// <summary>En sombra: de las que habrían salido de memoria, cuántas traían otra respuesta al calcularlas.</summary>
+    public int HabrianMentido { get { lock (_cerrojo) return _desdeElArranque.ConOtraRespuesta; } }
+
+    /// <summary>
+    /// La ubicación para la ventana de delante <paramref name="ventana"/> con título <paramref name="titulo"/>: la
+    /// recordada si vale, o la que traiga <paramref name="calcula"/>. Una respuesta nula no se recuerda: no es una
+    /// ubicación, es «no se pudo», y quien pregunta cae a lo último confirmado.
+    /// </summary>
+    public SurfaceLocator.SurfaceLocation? Sirve(IntPtr ventana, string titulo, bool esSap,
+                                                 Func<SurfaceLocator.SurfaceLocation?> calcula)
+    {
+        if (calcula == null) throw new ArgumentNullException(nameof(calcula));
+        titulo ??= "";
+        long ahora = _reloj();
+        // Se toman ANTES de calcular: si se acciona mientras el cálculo está en vuelo, lo calculado nace caducado.
+        long acciones = Observatorio.Invalidaciones;
+        long olvidos;
+        Recordada? valdria;
+        bool sombra;
+        var decir = new List<string>(1);
+        lock (_cerrojo)
+        {
+            CerrarElMinutoSiToca(ahora, decir);
+            olvidos = _olvidos;
+            sombra = EnSombra;
+            valdria = !esSap
+                      && _recordada is { } r
+                      && r.Ventana == ventana
+                      && string.Equals(r.Titulo, titulo, StringComparison.Ordinal)
+                      && ahora - r.Cuando < VigenciaMs
+                      && r.Olvidos == olvidos
+                      && r.Acciones == acciones
+                ? r : null;
+            foreach (var t in new[] { _desdeElArranque, _minuto })
+            {
+                if (valdria != null && !sombra) { t.DeMemoria++; continue; }
+                t.Calculadas++;
+                if (esSap) t.ConSap++;
+                if (valdria != null) t.EnSombra++;
+            }
+        }
+        foreach (var l in decir) Cuenta?.Invoke(l);
+        if (valdria != null && !sombra) return valdria.Ubicacion;
+
+        var calculada = calcula();
+
+        if (valdria != null)
+        {
+            // EN SOMBRA, LO RECORDADO NO SE RENUEVA: la memoria encendida habría servido esto sin calcular, así que
+            // su reloj habría seguido corriendo desde el cálculo de antes. Renovarlo contaría de más.
+            if (!string.Equals(calculada?.Id, valdria.Ubicacion.Id, StringComparison.Ordinal))
+                lock (_cerrojo) { _desdeElArranque.ConOtraRespuesta++; _minuto.ConOtraRespuesta++; }
+            return calculada;
+        }
+        if (!esSap && calculada != null)
+            lock (_cerrojo) _recordada = new Recordada(ventana, titulo, ahora, olvidos, acciones, calculada);
+        return calculada;
+    }
+
+    /// <summary>Acabamos de accionar: lo recordado ya no vale, aunque no hayan pasado los 400 ms.</summary>
+    public void Olvida()
+    {
+        lock (_cerrojo)
+        {
+            _olvidos++;
+            _recordada = null;
+        }
+    }
+
+    /// <summary>Todo lo contado desde el arranque, con el mismo formato que la línea por minuto.</summary>
+    public string Resumen()
+    {
+        lock (_cerrojo) return $"{Decir(_desdeElArranque)} — desde el arranque, {Modo()}";
+    }
+
+    private string Modo() => EnSombra ? "en sombra (U_DONDE_MEMORIA=si la enciende)" : "encendida";
+
+    private static string Decir(Tramo t)
+    {
+        string s = $"dónde: {t.Calculadas} calculadas · {t.DeMemoria} de memoria · {t.EnSombra} en sombra";
+        if (t.EnSombra > 0) s += $" ({t.ConOtraRespuesta} con otra respuesta)";
+        if (t.ConSap > 0) s += $" · {t.ConSap} con SAP delante, que se calcula siempre";
+        return s;
+    }
+
+    /// <summary>
+    /// EL RESUMEN POR MINUTO, dicho al llegar la primera pregunta después de cumplirse el minuto y con lo que pasó
+    /// antes de ella, diciendo cuánto duró de verdad el tramo (el mismo criterio que el proyector de Neo4j, 366): un
+    /// minuto sin preguntas no dice nada, y un «último minuto» que fueron diez sería una cifra que miente.
+    /// </summary>
+    private void CerrarElMinutoSiToca(long ahora, List<string> decir)
+    {
+        if (_minuto.Vacio) { _inicioDelMinuto = ahora; return; }
+        if (ahora - _inicioDelMinuto < 60_000) return;
+        decir.Add($"{Decir(_minuto)} — en los últimos {(ahora - _inicioDelMinuto) / 1000} s, {Modo()}");
+        _minuto = new Tramo();
+        _inicioDelMinuto = ahora;
+    }
+
+    /// <summary>Lo que quede del último minuto se dice al cerrar: las corridas cortas del nivel 4 también cuentan.</summary>
+    public void Dispose()
+    {
+        string? ultimo = null;
+        lock (_cerrojo)
+            if (!_minuto.Vacio)
+                ultimo = $"{Decir(_minuto)} — al cerrar, en los últimos {(_reloj() - _inicioDelMinuto) / 1000} s, {Modo()}";
+        if (ultimo != null) Cuenta?.Invoke(ultimo);
+    }
 }
