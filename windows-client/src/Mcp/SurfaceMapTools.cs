@@ -2161,13 +2161,33 @@ public sealed class SurfaceMapTools
         // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
         // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
-        // LAS RESPUESTAS DEL TRAMO CITAN SU OBJETIVO sin que venga en los argumentos: map_tramo_estado y map_alto
-        // no traen ninguno, y la de map_tramo cita el del tramo que ya corría (spec 051, clase O, hallazgo de la
-        // fase 5). Solo para esas tres: tapar el objetivo en todas dejaría un «Descargas» en ‹9 car.› toda la sesión.
-        string anotada = tool is "map_tramo" or "map_alto" or "map_tramo_estado" ? SinValor.Tapar(r, _tramo?.Objetivo) : r;
+        string anotada = RespuestaParaElLog(tool, r, _tramo?.Objetivo);
         LogBus.Log("mapa-mcp", LineaDeRespuesta(reloj.ElapsedMilliseconds, anotada, args));
         return r;
     }
+
+    /// <summary>
+    /// Lo que de una respuesta del mapa puede ir a su línea «←». <see cref="LineaDeRespuesta"/> tapa lo que viene
+    /// en los argumentos; esto se ocupa de las respuestas que citan lo que NO viene en ellos (spec 051).
+    /// </summary>
+    /// <remarks>
+    /// DOS CLASES, CONTADAS:
+    ///   · Las del tramo citan su objetivo: map_tramo_estado y map_alto no traen ninguno, y la de map_tramo cita
+    ///     el del tramo que ya corría (clase O, fase 5). Solo para esas tres se tapa el objetivo: tapándolo en
+    ///     todas, un «Descargas» quedaría en ‹9 car.› toda la sesión.
+    ///   · Las de la comprobación y la pregunta citan lo que la persona contestó (voz_preguntar: «la persona
+    ///     dijo: «…»») y lo que el juez leyó en el campo y la demo tecleó (leccion_llegue, y leccion_plan con los
+    ///     pendientes). Van ENTERAS por su longitud (revisión del 2026-09-24): lo que su «←» enseñaba ya lo
+    ///     anotan sin valores el juez («comprobar: evento N: …»), el plan y la voz («usuario dijo: ‹N car.›»),
+    ///     y tapar por la forma del texto —lo que va entre «»— daría falso para la forma que no se me ocurrió
+    ///     (aprendizaje nº16). La respuesta que se DEVUELVE al piloto no se toca: la necesita entera.
+    /// </remarks>
+    internal static string RespuestaParaElLog(string tool, string respuesta, string? objetivoDelTramo) => tool switch
+    {
+        "map_tramo" or "map_alto" or "map_tramo_estado" => SinValor.Tapar(respuesta ?? "", objetivoDelTramo),
+        "voz_preguntar" or "leccion_llegue" or "leccion_plan" => SinValor.Forma(respuesta),
+        _ => respuesta ?? "",
+    };
 
     /// <summary>
     /// Los argumentos que dicen DÓNDE, no QUÉ: con ellos se reconstruye el camino, y ninguno lleva lo
@@ -2221,10 +2241,12 @@ public sealed class SurfaceMapTools
     /// </summary>
     /// <remarks>
     /// POR QUÉ LAS HOJAS. <c>map_batch</c> trae los textos dentro de <c>pasos</c> y <c>map_skill_run</c> dentro
-    /// de <c>datos</c> (<c>{"peso":"68"}</c>), y sus respuestas los citan uno a uno —«no pude escribir «68»»,
-    /// «escribí «68»» (<c>RecorrerSegunElNucleo.cs:180, 337</c>)—. Tapar solo el JSON entero no taparía
-    /// ninguno. Si el valor no es JSON válido, el valor entero ya está en la lista: no hay otra lectura de ese
-    /// fallo que perder, y por eso el <c>catch</c> solo atrapa <see cref="System.Text.Json.JsonException"/>.
+    /// de <c>datos</c> (<c>{"peso":"68"}</c>), y sus respuestas los citaban uno a uno —«no pude escribir «68»»,
+    /// «escribí «68»»—. Tapar solo el JSON entero no taparía ninguno. Desde la revisión del 2026-09-24 esa
+    /// cuenta ya nace sin ellos (<c>RecorrerSegunElNucleo</c>, promesa 397(g)), así que esto queda de segundo
+    /// cinturón: una respuesta que mañana vuelva a citar una hoja sale tapada igual. Si el valor no es JSON
+    /// válido, el valor entero ya está en la lista: no hay otra lectura de ese fallo que perder, y por eso el
+    /// <c>catch</c> solo atrapa <see cref="System.Text.Json.JsonException"/>.
     /// </remarks>
     internal static string?[] ValoresEscritos(IReadOnlyDictionary<string, string>? args)
     {

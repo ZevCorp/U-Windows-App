@@ -265,8 +265,10 @@ public sealed class AgentLoop
                 string why = $"acción «{a.Kind}» NO ejecutada: el primer plano es "
                     + $"«{(here.Length > 0 ? here : "desconocido")}» y esta tarea es de «{requireOrigin}». "
                     + "Trae esa aplicación al frente antes de volver a intentarlo.";
+                // Lo que iba a teclear, por su longitud (spec 051, E20): es la hermana de E10 en este mismo
+                // método, y la revisión del 2026-09-24 la encontró sin tapar —la clase tenía dos sitios aquí, no uno—.
                 LogBus.Log("agent", $"✋ {why}"
-                    + (a.Kind == "type" ? $" · texto descartado='{Short(a.Text, 40)}'" : ""));
+                    + (a.Kind == "type" ? $" · texto descartado {SinValor.Forma(a.Text)}" : ""));
                 return why;
             }
         }

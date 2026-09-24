@@ -11,8 +11,8 @@ verdes: lo dicho, lo narrado y el objetivo por su forma, y el censo cerrado, 35 
 del 2026-09-24** (fase 6: diez hallazgos de un crítico sobre la fase 5, los diez ciertos y dos de ellos
 repetidos): ocho sitios más en el censo (35 → **43**), la cuenta del recorrido por lotes y el juez de
 la comprobación arreglados donde nacen, los dos servidores locales cerrados a otros orígenes, y dos
-promesas nuevas, **400** (el juez de la comprobación) y **401** (los servidores locales) · falta la
-compuerta (`verificar.ps1`) y el nivel 4 · Spec 051 · 2026-09-23 ·
+promesas nuevas, **400** (el juez de la comprobación) y **401** (los servidores locales), **las ocho
+en verde** (306 cumplidas, 0 rojas) · falta la compuerta (`verificar.ps1`) y el nivel 4 · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–401**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -361,7 +361,7 @@ es lo que se promete.
 | Solo tapar al guardar en el rastro | Cierra `/batches` y deja las dos puertas de escritura abiertas: el crítico lo nombra de pasada («esa página también puede hacer POST a /escribir e /ir») y el MCP ni lo nombra. |
 | Solo quitar el CORS | Impide **leer**, no **actuar**: el `POST` simple llega igual. |
 | Un token por petición | El visor y `ci-terreno.ps1` tendrían que conocerlo; el piloto y el Agent SDK ya lo tendrían que recibir por otro canal. Mucha maquinaria para lo que resuelve una regla de una línea. |
-| **Mirar `Origin` y `Host`** | Un navegador **siempre** manda `Origin` en una petición de otro origen (y en todo `POST`), y no deja a una página falsificarlo. Quien no es navegador —el piloto en Node, el Agent SDK, PowerShell, la propia app— no lo manda. Así que: sin `Origin`, se atiende; con `Origin`, solo si es la página del propio servidor (`http://127.0.0.1:PUERTO`, que es desde donde se sirve el visor, `/visor`). `null` —`file://`, un iframe con sandbox— no lo es. El `Host` tiene que ser esta máquina en ese puerto (un `Host` ajeno es un nombre que alguien resolvió a 127.0.0.1); http.sys ya lo rechaza antes de llegar al código porque el prefijo es explícito **(D, documentado)**, y se comprueba igual, porque esa protección vive en una configuración que no es de este archivo. |
+| **Mirar `Origin` y `Host`** | Un navegador **siempre** manda `Origin` en una petición de otro origen (y en todo `POST`), y no deja a una página falsificarlo. Quien no es navegador —el piloto en Node, el Agent SDK, PowerShell, la propia app— no lo manda. Así que: sin `Origin`, se atiende; con `Origin`, solo si es la página del propio servidor (`http://127.0.0.1:PUERTO`, que es desde donde se sirve el visor, `/visor`). `null` —`file://`, un iframe con sandbox— no lo es. El `Host` tiene que ser esta máquina en ese puerto: un `Host` ajeno es un nombre que alguien resolvió a 127.0.0.1 (DNS rebinding), y con él la página ajena pasa a ser «del mismo origen» y el `Origin` deja de delatarla. La primera versión de esta decisión decía que http.sys ya rechazaba ese `Host` porque el prefijo es explícito **(D)**: **es falso, medido** en el sabotaje de la 401 —con la puerta quitada, un `POST` con `Host: pagina-ajena.example:PUERTO` contestó 200 y escribió—. La comprobación del `Host` no es un segundo cinturón: es la única. |
 
 Una sola regla en un solo sitio, `Navigation/PuertaLocal.Admite(origen, host, puerto)`, que los dos
 servidores llaman **antes** de leer el cuerpo: lo rechazado contesta 403, anota «rechazada … : el
@@ -456,7 +456,7 @@ pura puede estar intacta y nadie llamarla. Los dos se ven rojos, verificados por
 | 398 (revisión) | **(e)** `new SurfaceMapTools(() => null) { Preguntar = _ => "la persona dijo: «Paciente Inventado Cero mide 170»" }.Call("voz_preguntar", { texto: "¿qué talla tiene?" })` con `LogBus.Anotado` escuchando: al piloto le llega la respuesta entera (precondición), la «←» es de la forma exacta `← (N ms) ‹51 car.›` y ninguna línea contiene «Paciente Inventado Cero». El veredicto que vuelve a la consulta (N11) lo juzga el censo | **Cableado:** en `SurfaceMapTools.Call`, la «←» anota `r` en vez de `RespuestaParaElLog(…)` → (e) roja, y la 400(c) también |
 | 399 (revisión) | **(a)** El censo pasa a **43** filas: las 35 y E19–E23, N9–N11 (§*El censo*), con las mismas reglas de ancla y huecos. **(b)** La regla nombra además `dato` (identificador entero) y el **miembro** `Texto` —con mayúscula, y no seguido de `(`: `Texto(raiz, "status")` es una llamada que lee el estado de un encuentro (`ClinicaClient.cs:92`), el único falso que dio la primera versión—. **No** entran `.Text` (en `FaceWindow.xaml.cs:332, 358` es el texto de un nodo del árbol de SAP, clase L) ni `value`/`.Value` (5 falsos de 15 en la fase 0). Medido sobre `00dcd42` con el juez de fuentes **(M)**: `dato` y `Texto` encuentran **3** huecos en **2** sentencias —`ServidorDelNucleo.cs:220` (dos `{dato}`) y `FaceWindow.xaml.cs:3350` (`p.Texto`)—, los tres de lo escrito, y **0 falsos** tras excluir la llamada. El enunciado dice ahora exactamente eso —lo que la regla nombra, y que lo demás solo lo juzga el censo—, porque el de antes («ningún … interpola un valor ni un texto sueltos») prometía una regla general que su juez no miraba (aprendizaje nº18) | **Función:** en `FaceWindow.xaml.cs:3350`, la línea vuelve a `escribir «{p.Texto}»` → (a) roja por E21 y (b) roja por `p.Texto`: la regla ampliada ve lo que antes solo veía el censo |
 | 400 | **(a)** Por el productor real, `RegistroDeLaComprobacion.Llegue`, sobre una lección de un campo tecleado («Talla», `wnd[0]/usr/txtZZ-051`) con una lectura falsa, cada línea `comprobar` por **igualdad exacta**: leído «ZZ-OTRO-051» → `evento 1: NO hecho · «Talla» = ‹11 car.›, distinto de lo que tecleó la demo (‹16 car.›)`; leído «zz-inventado-051» → `evento 1: HECHO · «Talla» = ‹16 car.›, lo que tecleó la demo`; tecleado «170», leído «170,000» → `evento 1: HECHO · «Talla» = ‹7 car.›, lo que tecleó la demo con otro formato (‹3 car.›)`; lectura nula → `evento 1: NO hecho · «Talla» no se pudo leer (la lectura no devolvió nada): sin comprobar lo que tecleó la demo (‹16 car.›)`; lectura que lanza → `… (leerlo lanzó InvalidOperationException): …`. En cada caso, `Final().Motivo` no contiene ni lo leído ni lo tecleado, y ninguna línea anotada tampoco. **(b)** El `Motivo` que se le dice al piloto sí nombra los dos (la 175). **(c)** Por el despacho real, `Call("leccion_llegue", { n: "1" })` y `Call("leccion_plan", { pasos: "[]" })` con delegados que devuelven la forma de `FaceWindow` (llegada y relato del plan con los pendientes del juez): al piloto le llega lo leído (precondición), la «←» es exactamente `← (N ms) ‹M car.›` y ninguna línea lleva lo leído ni lo tecleado | **Función:** `LineaDelCampo` devuelve el `Motivo` de antes (con los dos valores) → (a) roja |
-| 401 | **(d)** Las fuentes: ningún literal del ámbito contiene `Access-Control-Allow-Origin`; cada archivo con un `new HttpListener(` en el código llama a `PuertaLocal.Admite(`; y los servidores, sus prefijos (`$"http://127.0.0.1:{…}/…"`) y sus rutas (literales `"/…"` de esos archivos) son exactamente los 14 del censo —2 `HttpListener`, `/mcp/`, `/`, y las 10 rutas del núcleo—, nombrando archivo y línea de cada sobra o falta. **(a)** `PuertaLocal.Admite`, pura, en 10 casos: sin `Origin`, vacío, la propia página por `127.0.0.1` y por `localhost` → atiende; una página ajena, `null`, otra página de esta máquina en otro puerto, un `Host` ajeno, sin `Host` y el `Host` de otro puerto → rechaza. **(b)** El servidor del núcleo **de verdad**, en un puerto libre, con un grafo de un campo «Talla» vivo: `POST /escribir` desde una página ajena → 403 y no escribe; desde `null` → 403; con un `Host` ajeno → 4xx sin escribir (http.sys lo corta antes); `GET /batches` desde una página ajena → 403, sin el rastro; sin `Origin` → 200, el valor llega entero a las manos y la línea `nucleo-http` es exactamente `escrito ‹16 car.› en «Talla»`; la propia página y quien llega sin `Origin` leen `/batches`; y **ninguna** respuesta lleva `Access-Control-Allow-Origin`. **(c)** El servidor MCP de verdad, con una herramienta que solo cuenta: desde una página ajena → 403 y 0 despachos; sin `Origin` → 200 y 1; sin CORS. Si un servidor no arranca: «NO PUDE JUZGARLA», incumplida | **Cableado:** en `ServidorDelNucleo.Atender`, la llamada a `PuertaLocal.Admite` se sustituye por un veredicto que siempre atiende → (b) roja (y la (d), que ya no la encuentra) |
+| 401 | **(d)** Las fuentes: ningún literal del ámbito contiene `Access-Control-Allow-Origin`; cada archivo con un `new HttpListener(` en el código llama a `PuertaLocal.Admite(`; y los servidores, sus prefijos (`$"http://127.0.0.1:{…}/…"`) y sus rutas (literales `"/…"` de esos archivos) son exactamente los 14 del censo —2 `HttpListener`, `/mcp/`, `/`, y las 10 rutas del núcleo—, nombrando archivo y línea de cada sobra o falta. **(a)** `PuertaLocal.Admite`, pura, en 10 casos: sin `Origin`, vacío, la propia página por `127.0.0.1` y por `localhost` → atiende; una página ajena, `null`, otra página de esta máquina en otro puerto, un `Host` ajeno, sin `Host` y el `Host` de otro puerto → rechaza. **(b)** El servidor del núcleo **de verdad**, en un puerto libre, con un grafo de un campo «Talla» vivo: `POST /escribir` desde una página ajena → 403 y no escribe; desde `null` → 403; con un `Host` ajeno → 4xx sin escribir (medido en el sabotaje: sin la puerta, 200 y escribe; http.sys no lo corta); `GET /batches` desde una página ajena → 403, sin el rastro; sin `Origin` → 200, el valor llega entero a las manos y la línea `nucleo-http` es exactamente `escrito ‹16 car.› en «Talla»`; la propia página y quien llega sin `Origin` leen `/batches`; y **ninguna** respuesta lleva `Access-Control-Allow-Origin`. **(c)** El servidor MCP de verdad, con una herramienta que solo cuenta: desde una página ajena → 403 y 0 despachos; sin `Origin` → 200 y 1; sin CORS. Si un servidor no arranca: «NO PUDE JUZGARLA», incumplida | **Cableado:** en `ServidorDelNucleo.Atender`, la llamada a `PuertaLocal.Admite` se sustituye por un veredicto que siempre atiende → (b) roja (y la (d), que ya no la encuentra) |
 
 **Dos sabotajes por promesa, y se comprueba el sabotaje** (CLAUDE.md, 2026-08-21): el diff contra la
 copia de seguridad tiene que enseñar la línea cambiada antes de contar la roja, y el build no se
@@ -818,6 +818,45 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   veredicto (roto sigue siendo roto), pero el número no dice lo que afirma (aprendizaje nº2). Es del
   arnés, no de esta spec: se anota y no se toca aquí.
 
+- **2026-09-24 · Fase 6 (revisión): las cinco promesas tocadas en verde a la primera, y el contrato
+  INTACTO.** Rojo primero **(M)**: con la spec y el contrato solos, `CONTRATO ROTO` por exactamente
+  397–401 —la cuenta del recorrido con «ZZ-INVENTADO-051» dentro, `LineaDelPlan` pendiente, la «←» de
+  `voz_preguntar` con la respuesta entera, 38 de 43 sitios (E19, E20, E21, N9, N11), la línea del juez
+  con los dos valores, `PuertaLocal.Admite` y los constructores con `puerto` pendientes, y la (d) de la
+  401 nombrando `ServidorDelNucleo.cs:94` (el CORS) y los dos servidores sin la puerta— y 301 cumplidas,
+  ninguna anterior tocada. La primera versión de la 399(b) ampliada dio un falso, `Texto(raiz,
+  "status")` en `ClinicaClient.cs:92`, una llamada; se excluyó `Texto(` y la (b) quedó en los 3 huecos
+  de lo escrito. Después, el código: la cuenta del recorrido (`RecorrerSegunElNucleo.cs`, 2 sentencias),
+  el juez de la comprobación (`LineaDelCampo`, el relato de `Final()` y el `catch { }` mudo de su lectura,
+  que ahora dice el tipo de la excepción), `LineaDelPlan`, `RespuestaParaElLog` (3 herramientas), E19,
+  E20, E21, N11, `PuertaLocal` y los dos servidores. Contrato: 301 → **306** cumplidas, **0** rojas,
+  `CONTRATO INTACTO`; la 399(a), **43 de 43** **(M)**. Sabotajes, **uno por promesa tocada, los cinco a
+  la vez** porque tocan archivos y jueces disjuntos, aplicados por reemplazo de bytes (la CRLF intacta,
+  vista con `file`), cada uno visto por `diff` contra una copia (**una** línea), juzgados, y restaurados
+  por copia con `cmp` idéntico **(M)**: (397, cableado) `RecorrerSegunElNucleo.cs:186`, la cuenta vuelve a
+  «no pude escribir «{paso.Texto}»» → la 397 roja solo por (g), con el valor en la cuenta; (398, función)
+  `voz_preguntar` fuera de `RespuestaParaElLog` → la 398 roja solo por (e), «← (0 ms) la persona dijo:
+  «Paciente Inventado Cero mide 170»»; (399, función) el plan del piloto vuelve a
+  `string.Join(" → ", pasos.Select(p => p.Texto))` → la 399 roja por (a), 42 de 43 nombrando E21, **y**
+  por (b), `FaceWindow.xaml.cs:3352`: la regla ampliada ve ahora lo que antes solo veía el censo; (400,
+  función) `LineaDelCampo` devuelve el motivo con los dos valores → la 400 roja por (a) —la línea, el
+  relato final y «ninguna línea lleva…»— y por (c), porque la llegada que juzga el mapa pasa por el mismo
+  juez; (401, cableado) `ServidorDelNucleo.cs:98`, la puerta sustituida por un veredicto que siempre
+  atiende → la 401 roja por (d), «no pasa sus peticiones por PuertaLocal.Admite», y por (b): la página
+  ajena, `null` **y el `Host` ajeno** contestan 200 y escriben, y `/batches` se le sirve a una página
+  ajena. En el sabotaje, 301 cumplidas: ninguna otra promesa cambió. Restaurado: **306**, INTACTO.
+- **2026-09-24 · http.sys no corta un `Host` ajeno, y la spec decía que sí.** Visto en el sabotaje de la
+  401 **(M)**: con el prefijo explícito `http://127.0.0.1:PUERTO/` y la puerta quitada, un `POST` con
+  `Host: pagina-ajena.example:PUERTO` llegó al código, contestó 200 y escribió. La primera versión de
+  §*Decisión 5* y el comentario de `PuertaLocal` lo daban por hecho **(D)** y llamaban a la comprobación
+  del `Host` «segundo cinturón»; es la única. Es el aprendizaje nº13 otra vez: se le preguntó a la API
+  —aquí, con un sabotaje— y contestó distinto de lo que decía el código.
+- **2026-09-24 · La 175 y la 400 no se pisan, a propósito.** La 175 exige que el motivo de un campo
+  tecleado «nombra los dos valores» (`Contrato.cs`, `LaAppJuzgaCadaLlegada`); taparlo en origen, como pedía
+  el hallazgo 4, la habría roto. Se partió en dos lectores (§*Decisión 6*): el piloto sigue recibiendo
+  los valores, el log y el relato final no. La 400(b) lo juzga, para que arreglar el log no deje un día
+  al piloto sin saber qué hay en el campo.
+
 ## Revisiones
 
 **2026-09-23 · El crítico, nueve refutaciones.** Las nueve se comprobaron contra `043addc` antes de
@@ -862,7 +901,7 @@ al 5). Los números de línea son los de `00dcd42`.
 
 - [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), y el de la voz intacto — 2026-09-24, fase 5: 304 cumplidas, 0 rojas; VOZ ÍNTEGRA
 - [x] Dos sabotajes por promesa —función y cableado—, vistos rojos y verificados por diff — fases 1–5, uno de cada por promesa (394–399), en §*Hallazgos*
-- [ ] Revisión del 2026-09-24 (fase 6): 394–401 verdes, un sabotaje por promesa tocada visto rojo
+- [x] Revisión del 2026-09-24 (fase 6): 394–401 verdes, un sabotaje por promesa tocada visto rojo — 306 cumplidas, 0 rojas; los cinco sabotajes en §*Hallazgos*
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
 - [ ] Nivel 4 en ≥2 pantallas, con nombre: triage (`SAPLY000`) y admisión (`NV2000`)
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)

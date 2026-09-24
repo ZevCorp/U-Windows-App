@@ -1,3 +1,5 @@
+using U.Graph;
+
 namespace U.WindowsClient.Navigation;
 
 /// <summary>
@@ -175,9 +177,13 @@ public sealed class RecorrerSegunElNucleo
             {
                 if (_escribir == null)
                     return Parcial(i, pasos.Count, "todavía no sé escribir dentro de un batch.", conVivos: false);
+                // LO ESCRITO, POR SU LONGITUD, AQUÍ Y NO EN CADA SALIDA (spec 051, revisión del 2026-09-24):
+                // esta cuenta tenía cinco —la respuesta al modelo, la «←» del batch, el rastro que sirve
+                // /batches, el «plan · PARÓ» de la comprobación y la «←» de mostrar— y solo una tapada. El
+                // modelo no pierde nada: la cuenta contesta a los pasos que él mandó, y nombra el campo.
                 if (!_escribir(paso.Exit, paso.Texto))
                     return Parcial(i, pasos.Count,
-                        $"no pude escribir «{paso.Texto}»"
+                        $"no pude escribir {SinValor.Forma(paso.Texto)}"
                         + (paso.Exit.Length > 0 ? $" en «{paso.Exit}»." : "."), conVivos: true);
 
                 // ESCRIBIR NO NAVEGA; la tecla que va detrás, sí. Por eso el Enter viaja pegado al
@@ -334,7 +340,8 @@ public sealed class RecorrerSegunElNucleo
         }
         while (compasLlegada.Respira(120));
 
-        string que = paso.Texto.Length > 0 ? $"escribí «{paso.Texto}»" : $"pulsé «{paso.Tecla}»";
+        // Lo escrito por su longitud, como arriba (spec 051): esta cuenta sale por las mismas cinco puertas.
+        string que = paso.Texto.Length > 0 ? $"escribí {SinValor.Forma(paso.Texto)}" : $"pulsé «{paso.Tecla}»";
         desvio = $"{que} y quedé en «{donde}», pero la demostración llegaba a «{paso.Llegada}»: eso "
                + "NO es haberlo hecho, y no sigo sobre una pantalla que no es la del plan.";
         return false;

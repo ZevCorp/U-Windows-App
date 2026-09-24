@@ -1,4 +1,5 @@
 using System.Text.Json;
+using U.Graph;
 
 namespace U.WindowsClient.Piloto;
 
@@ -66,6 +67,23 @@ public static class PlanDeComprobacion
         catch (Exception ex) { return new(pasos, $"no entendí `pasos` como JSON: {ex.Message}"); }
         if (pasos.Count == 0) return new(pasos, "la lista de pasos vino vacía.");
         return new(pasos, "");
+    }
+
+    /// <summary>
+    /// La línea del plan para el log: cuántos pasos, cada salida por su nombre y cada texto por su longitud
+    /// (spec 051, promesa 397). <c>2 paso(s) → escribir ‹16 car.› en «Talla» → «Guardar»</c>.
+    /// </summary>
+    /// <remarks>
+    /// La comprobación anotaba el plan con lo que el piloto iba a teclear —«escribir «38,5» en «Talla»»—, y el
+    /// piloto lo saca de la lección, que es una demostración hecha con los datos de alguien. Es la clase del
+    /// recorrido por lotes (E3); aquí, E21 (revisión del 2026-09-24).
+    /// </remarks>
+    public static string LineaDelPlan(IReadOnlyList<PasoDelPlan> pasos)
+    {
+        pasos ??= Array.Empty<PasoDelPlan>();
+        return $"{pasos.Count} paso(s) → " + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0
+            ? $"escribir {SinValor.Forma(p.Texto)} en «{p.Exit}»"
+            : $"«{p.Exit}»"));
     }
 
     /// <summary>

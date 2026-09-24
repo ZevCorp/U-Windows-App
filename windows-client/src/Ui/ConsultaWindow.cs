@@ -1716,7 +1716,11 @@ public sealed partial class ConsultaWindow : Window
             string cuenta = await PuenteDeAprendizajes.Mostrar!(anunciada.Archivo,
                 new Progress<string>(Estado), CancellationToken.None);
             Estado(cuenta);
-            LogBus.Log("aprendizajes", $"← {cuenta}");
+            // El veredicto, por su longitud (spec 051, N11). Por la rama «comprobar» lleva el relato del juez y
+            // lo último que narró el piloto (FaceWindow, ComprobarConElPilotoAsync), que trabaja con la nota
+            // delante; y las dos ramas ya anotan su veredicto sin valores en su propia línea («comprobar: piloto
+            // terminó…», «aprendizajes: ← …» de mostrar). En pantalla sigue entero: es de quien está delante.
+            LogBus.Log("aprendizajes", $"← {SinValor.Forma(cuenta)}");
         }
         catch (Exception e)
         {

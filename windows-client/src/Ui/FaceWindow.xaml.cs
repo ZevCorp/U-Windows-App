@@ -3347,8 +3347,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
         if (lectura.Error.Length > 0) return lectura.Error;
         if (_mapaDeMano?.RecorrerPorElNucleo == null) return "todavía no sé recorrer un plan.";
         var pasos = lectura.Pasos;
-        LogBus.Log("comprobar", $"plan del piloto: {pasos.Count} paso(s) → "
-            + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}» en «{p.Exit}»" : $"«{p.Exit}»")));
+        // Lo que el plan escribe, por su longitud (spec 051, E21): es la clase del recorrido por lotes (E3), que la
+        // fase 4 arregló en SurfaceMapTools y no aquí.
+        LogBus.Log("comprobar", $"plan del piloto: {Piloto.PlanDeComprobacion.LineaDelPlan(pasos)}");
         var reloj = System.Diagnostics.Stopwatch.StartNew();
         int hechos = 0;
         for (int i = 0; i < pasos.Count; i++)
