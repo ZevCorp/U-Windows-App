@@ -295,4 +295,26 @@ public static class Mundos
     /// </summary>
     public static bool EsSapVistoPorUia(string url) =>
         (url ?? "").StartsWith("uia://saplogon.exe/", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// ¿Es una sesión de SAP, en cualquiera de sus DOS identidades? <c>sapgui://</c> cuando el Scripting contesta, y
+    /// «uia://sap….exe/…» cuando no —SAP Busy, <c>Identity()</c> sin contestar— y <c>SurfaceLocator</c> cae al esquema
+    /// uia://. Es la misma sesión y, desde UIA, el mismo Pane opaco.
+    /// </summary>
+    /// <remarks>
+    /// NACE AL JUNTAR A Y B (2026-09-24), por el aprendizaje nº16. La 046 lo descubrió para la política de lo que viaja
+    /// (393) y lo resolvió dentro de ella; la 047 excluía SAP de la espera por huella con <see cref="EsSap"/>, que solo ve
+    /// sapgui://. Juntas, «uia://saplogon.exe/…» salía «asentada» en el primer respiro con SAP aún ocupado: la carrera del
+    /// Busy. El proceso se reconoce con el criterio que acuñó esa identidad (<c>SurfaceLocator.IsSap</c>: empieza por
+    /// «sap»), no con una lista de versiones: <see cref="EsSapVistoPorUia"/> solo conoce saplogon.exe, y se queda como
+    /// está porque <c>Leccion</c> la usa para otra cosa (tirar una llegada vista por el ojo equivocado).
+    /// </remarks>
+    public static bool EsSesionDeSap(string url)
+    {
+        string u = url ?? "";
+        if (EsSap(u)) return true;
+        if (!u.StartsWith("uia://", StringComparison.OrdinalIgnoreCase)) return false;
+        string origin = U.Graph.SurfacePlace.OriginOf(u);
+        return origin.Length > "uia://".Length && Uia.SurfaceLocator.IsSap(origin["uia://".Length..]);
+    }
 }

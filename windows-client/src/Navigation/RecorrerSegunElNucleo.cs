@@ -569,8 +569,13 @@ public sealed class RecorrerSegunElNucleo
         if (partida.Length == 0) return "no supe dónde estaba antes de actuar (la ubicación llegó vacía), y sin la de partida no se distingue «aún no se pintó» de «se fue a otra»";
         // SAP: desde UIA una sesión es un Pane opaco; lo de dentro no cambiaría nunca y toda pantalla saldría «asentada».
         // Con el presupuesto en el techo no cambiaría nada; el día que la medida (d) lo baje, SAP no puede quedar debajo.
-        if (Teach.Mundos.EsSap(partida) || Teach.Mundos.EsSap(llegada))
-            return "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)";
+        // En sus dos identidades (al juntar A y B, 2026-09-24): «uia://saplogon.exe/…» es la misma sesión cuando el Scripting
+        // no contesta. Este sitio no lo juzga ninguna aserción —la 356 no nombra SAP—; es el segundo de los 2 que tenían la
+        // clase de error (patrón nº5), y el de Pulsa lo juzga el caso 4b de la 351.
+        if (Teach.Mundos.EsSesionDeSap(partida))
+            return PulsarSegunElNucleo.LaUbicacionEsDeSap(partida);
+        if (Teach.Mundos.EsSesionDeSap(llegada))
+            return PulsarSegunElNucleo.LaUbicacionEsDeSap(llegada);
         return "";
     }
 

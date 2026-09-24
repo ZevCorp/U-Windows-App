@@ -14358,6 +14358,16 @@ internal static class Contrato
         var sap = Pulsa047(gSap, () => Sap, Ir047.Selector, "Ir", _ => Huella047(Sap, "w", new[] { "b" }))!;
         Debe(sap.Ms >= Techo047 - 100, $"en sapgui:// la huella no manda: se espera el techo ({sap.Ms} ms de {Techo047})");
 
+        // 4b. SAP VISTO POR UIA ES SAP (al juntar A y B, 2026-09-24). Cuando el Scripting no da identidad —SAP Busy, Identity()
+        // sin contestar— SurfaceLocator acuña «uia://saplogon.exe/…» (lo midió la 046 para la 393). Es la MISMA sesión y el
+        // mismo Pane opaco: lo de dentro no cambiaría nunca y la espera saldría «asentada» con SAP aún ocupado, que es la
+        // carrera del Busy. B miraba solo sapgui:// y A solo lo sabía en la política de lo que viaja: juntas, la ubicación
+        // «es de SAP» en sus dos identidades. En rojo antes de su código.
+        const string SapPorUia = "uia://saplogon.exe/sap-easy-access";
+        var gSapPorUia = new Nucleo.Grafo(); gSapPorUia.Observar(SapPorUia, new[] { Ir047 });
+        var sapPorUia = Pulsa047(gSapPorUia, () => SapPorUia, Ir047.Selector, "Ir", _ => Huella047(SapPorUia, "w", new[] { "b" }))!;
+        Debe(sapPorUia.Ms >= Techo047 - 100, $"en uia://saplogon.exe —SAP visto por UIA— la huella tampoco manda: se espera el techo ({sapPorUia.Ms} ms de {Techo047})");
+
         // 5. NADIE MIRA: sin huella inyectada, como hoy. Es lo que mantiene verdes la 245, 248, 296 y 334 tal como están.
         var ciego = Pulsa047(Mundo047(), () => A047, Ir047.Selector, "Ir", null)!;
         Debe(ciego.Ms >= Techo047 - 100 && ciego.Diario.Any(l => l.Contains("nadie miraba")),
@@ -14382,7 +14392,7 @@ internal static class Contrato
         // Los casos 4 y 6 no lo miraban. La causa va en palabras que la distinguen de las otras (patrón nº2): «no cambió»
         // a secas cubría cuatro situaciones el 21-09.
         foreach (var (caso, p, causa) in new[] { ("asentada", quieta, "asentada"), ("se mueve", moviendose, "no paró de moverse"),
-                     ("con destino", conDestino, "lleva a algún sitio"), ("SAP", sap, "SAP"), ("sin huella", ciego, "nadie miraba"),
+                     ("con destino", conDestino, "lleva a algún sitio"), ("SAP", sap, "SAP"), ("SAP visto por UIA", sapPorUia, "SAP"), ("sin huella", ciego, "nadie miraba"),
                      ("sitio tardío", tardio, "cambió de sitio") })
         {
             string linea = p.Diario.FirstOrDefault(l => l.Contains("dejó de esperar a los")) ?? "";

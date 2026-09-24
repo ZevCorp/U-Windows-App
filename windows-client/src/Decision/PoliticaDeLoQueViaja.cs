@@ -98,10 +98,11 @@ public sealed class PoliticaDeLoQueViaja
         // Hasta el 2026-09-22 aquí solo se miraba sapgui://, y esa pantalla viajaba a Jev con lo que UIA y el terreno
         // publicaran de ella (medido en el rojo de la fase 10, con el código de d905e6a: 1 llamada y Actuar=True). Se reconoce
         // con el MISMO criterio que la acuñó (SurfaceLocator.IsSap: el proceso empieza por «sap»), no con una lista de
-        // versiones ni con Mundos.EsSapVistoPorUia, que solo conoce saplogon.exe.
-        bool sapPorUia = origin.StartsWith("uia://", StringComparison.OrdinalIgnoreCase)
-                         && U.WindowsClient.Uia.SurfaceLocator.IsSap(origin["uia://".Length..]);
-        if ((origin.StartsWith("sapgui://", StringComparison.OrdinalIgnoreCase) || sapPorUia) && !SapHabilitado)
+        // versiones ni con Mundos.EsSapVistoPorUia, que solo conoce saplogon.exe. Desde el 2026-09-24 ese criterio vive en
+        // Mundos.EsSesionDeSap, porque al juntar A y B la espera por huella (047) lo necesitaba igual y lo tenía a medias.
+        bool esSap = U.WindowsClient.Teach.Mundos.EsSesionDeSap(origin);
+        bool sapPorUia = esSap && !U.WindowsClient.Teach.Mundos.EsSap(origin);
+        if (esSap && !SapHabilitado)
         {
             string leido = _leidoSap.Length == 0 ? $"sin {VariableSap}=si" : $"con {VariableSap}=«{_leidoSap}» (se habilita solo con «si»)";
             string cual = sapPorUia ? $"«{origin}» es SAP GUI visto por UIA," : "sapgui://";

@@ -463,8 +463,11 @@ public sealed class PulsarSegunElNucleo
         if (antes == null) return $"no pude mirar antes de tocar ({causaAntes})";
         if (esCampo) return $"es un campo de texto, con su espera corta de {EsperaDeCampoMs} ms (334)";
         // SAP: desde UIA una sesión es un Pane opaco; la huella de dentro no cambiaría nunca y toda espera saldría
-        // «asentada». Su asentada es otra (!Busy ×3 + StructureFingerprint): la 360, reservada.
-        if (Teach.Mundos.EsSap(desde)) return "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)";
+        // «asentada». Su asentada es otra (!Busy ×3 + StructureFingerprint): la 360, reservada. EN SUS DOS IDENTIDADES (al
+        // juntar A y B, 2026-09-24): cuando SAP está Busy el Scripting no da identidad y la ubicación es «uia://saplogon.exe/…»,
+        // el mismo Pane opaco; con solo sapgui:// esa espera salía «asentada» a los 132 ms con SAP aún ocupado (caso 4b de
+        // la 351). La causa dice cuál de las dos, sin la ruta: en uia:// es el título de la ventana (355).
+        if (Teach.Mundos.EsSesionDeSap(desde)) return LaUbicacionEsDeSap(desde);
         // LA PUERTA CON DESTINO: es la que repite la 248 cuando su clic se pierde; una espera cortada aquí haría repetir
         // el clic sobre una navegación que aún estaba en camino. Las palabras valen para las dos esperas que la consultan
         // (357): hasta la fase 5 decían «cortar aquí haría repetir el clic», y tras la repetición ya no se repite nada.
@@ -475,6 +478,14 @@ public sealed class PulsarSegunElNucleo
             return "el paso trae a dónde llegaba la demostración, y una asentada falsa aquí declararía un desvío sobre una navegación que aún está en camino (103)";
         return "";
     }
+
+    /// <summary>
+    /// La causa «es de SAP» de la regla 4, con cuál de sus dos identidades (patrón nº2). La comparten <c>Pulsa</c> y la
+    /// llegada de <see cref="RecorrerSegunElNucleo"/>, que la dicen con las mismas palabras.
+    /// </summary>
+    internal static string LaUbicacionEsDeSap(string url) => Teach.Mundos.EsSap(url)
+        ? "la ubicación es de SAP (sapgui://), que desde UIA no se puede mirar (360, reservada)"
+        : "la ubicación es de SAP visto por UIA (uia://, el Scripting no dio identidad: SAP ocupado o sin contestar), un Pane opaco que desde UIA no se puede mirar (360, reservada)";
 
     /// <summary>
     /// Qué cambió al pulsar, y qué parte lo vio. El SITIO lo decide la ubicación de trabajo —la misma con la que

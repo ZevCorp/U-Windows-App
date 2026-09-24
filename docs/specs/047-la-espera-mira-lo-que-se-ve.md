@@ -1152,6 +1152,16 @@ ciertas en el fondo; lo que no se reproduce se dice.
 trajo las promesas 342 y 343 y el log por instancia; ninguna toca los archivos de esta spec. Cabecera,
 hallazgo y nivel 4 actualizados; 351–359 siguen libres.
 
+**Al juntar A y B** (2026-09-24, rama `jero/jev-todo-junto`). La regla 4 excluía SAP con `Mundos.EsSap`, que solo
+ve `sapgui://`. La 046 midió para su 393 que SAP tiene **dos** identidades: cuando el Scripting no da identidad —SAP Busy,
+`Identity()` sin contestar— `SurfaceLocator` acuña `uia://saplogon.exe/…`, el mismo Pane opaco. Juntas, esa ubicación
+salía «asentada» a los 132 ms con SAP aún ocupado: la carrera del Busy. El criterio pasa a un solo sitio,
+`Mundos.EsSesionDeSap` (el de `SurfaceLocator.IsSap`, el que acuña esa identidad), y lo usan la política de lo que viaja
+(393) y los **2** sitios de esta spec que tenían la clase de error (`PorQueSeEsperaComoHoy` en `Pulsa`,
+`PorQueLaLlegadaSeEsperaComoHoy` en la llegada). El enunciado de la 351 no cambia —ya decía «la ubicación es de SAP»—; su
+cuerpo gana el caso 4b (`uia://saplogon.exe/…` espera el techo y dice «SAP»), rojo antes del código. El sitio de la
+llegada no lo juzga ninguna aserción: la 356 no nombra SAP.
+
 ## Cierre
 
 - [x] Fase 0 **escrita**: 355 verde, sabotaje verificado por diff (2026-09-22)
