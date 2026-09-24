@@ -139,4 +139,41 @@ public sealed record CicloDeJev
 
     /// <summary>La última línea de progreso del tramo, tal cual llegó, o <c>null</c>.</summary>
     public string? Linea { get; init; }
+
+    /// <summary>
+    /// «paso k: «etiqueta» (n) conf c · cambió» o «· no cambió»: la línea que <c>ElTramo.Cuenta</c> escribe cuando la
+    /// mano TERMINÓ de pulsar (<c>ElTramo.cs:204</c>). La etiqueta puede llevar paréntesis y comillas, así que el
+    /// número es el que va entre paréntesis justo antes de « conf». «· no pudo» es que la mano no terminó, y no casa.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex LineaDePaso = new(
+        @"^paso \d+: «.*» \((?<n>[^()]+)\) conf \S+ · (?:no )?cambió$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// EL PUENTE POR LA LÍNEA DE PROGRESO (spec 049 §El puente provisional, 2; revisión del 2026-09-23): el ciclo que
+    /// se pinta cuando llega una línea del tramo. Es la última decisión con la línea puesta y, si la línea dice qué se
+    /// pulsó, con su número en <see cref="Pulsada"/>: la mano puede haber pulsado la segunda mejor sin volver al
+    /// decisor (<c>SurfaceMapTools.cs:304-331</c>), y solo la línea lo cuenta. Hasta el 2026-09-23 la vista no la
+    /// leía, así que la barra resaltada era siempre la elegida y el ticker nunca decía «la 1.ª no estaba».
+    /// </summary>
+    /// <param name="decidido">La última decisión del tramo, o <c>null</c> si todavía no hubo: el ciclo nace del objetivo, sin decisión inventada.</param>
+    /// <param name="objetivo">El objetivo del tramo, para cuando no hay decisión.</param>
+    /// <param name="linea">La línea tal cual llegó.</param>
+    public static CicloDeJev ConLaLinea(CicloDeJev? decidido, string objetivo, string linea)
+    {
+        ArgumentNullException.ThrowIfNull(linea);
+        var desde = decidido ?? new CicloDeJev { Objetivo = objetivo ?? "" };
+        return desde with { Fase = FaseDelCiclo.Linea, Linea = linea, Pulsada = PulsadaDeLaLinea(linea) };
+    }
+
+    /// <summary>
+    /// El número de lo que la mano pulsó según una línea de paso —el mismo texto que <see cref="CandidataDeJev.NumeroDelId"/>
+    /// saca del id, porque la línea lo escribe desde ahí—, o <c>null</c> si la línea no dice que se pulsó nada.
+    /// </summary>
+    public static string? PulsadaDeLaLinea(string? linea)
+    {
+        if (string.IsNullOrWhiteSpace(linea)) return null;
+        var m = LineaDePaso.Match(linea);
+        return m.Success ? m.Groups["n"].Value : null;
+    }
 }

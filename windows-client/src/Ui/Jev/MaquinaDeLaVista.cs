@@ -29,6 +29,8 @@ public sealed class MaquinaDeLaVista
     private bool _flechaVuela;
     private int _cajas;
     private string? _objetivo;
+    private Rect? _pulsada;
+    private string? _overlayImpedido;
 
     /// <param name="configuracion">La de <see cref="ConfiguracionDeLaVista.Leer"/>: decide si hay overlay.</param>
     public MaquinaDeLaVista(ConfiguracionDeLaVista configuracion) =>
@@ -43,8 +45,15 @@ public sealed class MaquinaDeLaVista
     /// <summary>Si el overlay se enciende con Jev: lo dice la configuración, no el botón (379).</summary>
     public bool OverlayEncendido => Configuracion.OverlayEncendido;
 
-    /// <summary>Lo que la línea de estado dice del overlay: «overlay: apagado (sin U_JEV_OVERLAY)» (379).</summary>
-    public string Estado => $"overlay: {(OverlayEncendido ? "encendido" : "apagado")} ({Configuracion.Motivo})";
+    /// <summary>
+    /// Lo que la línea de estado dice del overlay: «overlay: apagado (sin U_JEV_OVERLAY)» (379), o «impedido» con
+    /// quién lo impide (371): «encendido» con el inspector delante sería el estado que miente.
+    /// </summary>
+    public string Estado => !OverlayEncendido
+        ? $"overlay: apagado ({Configuracion.Motivo})"
+        : _overlayImpedido != null
+            ? $"overlay: impedido ({Configuracion.Motivo}, pero {_overlayImpedido})"
+            : $"overlay: encendido ({Configuracion.Motivo})";
 
     /// <summary>
     /// Si corre un tramo CON JEV: el que <see cref="ReglaDeQuienVuela.LaCaritaViaja"/> recibe (384). Lo termina el
@@ -53,8 +62,11 @@ public sealed class MaquinaDeLaVista
     /// </summary>
     public bool EnTramo => Encendida && _tramoEnMarcha;
 
-    /// <summary>Si la ventana del overlay se enseña: Jev encendido y el overlay encendido por configuración.</summary>
-    public bool OverlayVisible => Encendida && OverlayEncendido;
+    /// <summary>
+    /// Si la ventana del overlay se enseña: Jev encendido, el overlay encendido por configuración y nada que lo
+    /// impida (<see cref="ImpedirElOverlay"/>, 371).
+    /// </summary>
+    public bool OverlayVisible => Encendida && OverlayEncendido && _overlayImpedido == null;
 
     /// <summary>Si el panel se enseña: nace al encender Jev y muere al apagarlo (383, 385).</summary>
     public bool PanelVisible => Encendida;
@@ -86,8 +98,21 @@ public sealed class MaquinaDeLaVista
     /// <summary>El panel en físicos: <see cref="MedidaDelPanelDeJev"/> por la escala. Vacío hasta que la vista lo ponga.</summary>
     public Size TamanoDelPanel { get; set; } = Size.Empty;
 
-    /// <summary>Lo que sitúa el panel (la carita), en físicos.</summary>
-    public Point Ancla { get; set; }
+    /// <summary>
+    /// LA CARITA ENTERA, en físicos: lo que el panel no tapa (377, revisión del 2026-09-23). La vista pone el rect de
+    /// la ventana de la carita, con su barra y su menú; con el centro solo, el panel caía encima de ella.
+    /// </summary>
+    public Rect Carita { get; set; } = new(0, 0, 0, 0);
+
+    /// <summary>
+    /// El centro de la carita. Ponerlo pone una carita de 0×0 en ese punto: el ancla-punto de
+    /// <see cref="DondeVaElPanel.Calcular"/>, con la que el sitio sale igual que antes de <see cref="Carita"/>.
+    /// </summary>
+    public Point Ancla
+    {
+        get => new(Carita.X + Carita.Width / 2, Carita.Y + Carita.Height / 2);
+        set => Carita = new Rect(value, new Size(0, 0));
+    }
 
     /// <summary>Lo que el panel no cruza si alguna esquina cabe: el notch de <see cref="ReglaDeLaBandeja.ArribaAlCentro"/>, en físicos.</summary>
     public IReadOnlyList<Rect> Obstaculos { get; set; } = Array.Empty<Rect>();
@@ -103,8 +128,25 @@ public sealed class MaquinaDeLaVista
         Encendida = true;
         _cajas = 0;
         _flechaVuela = false;
+        _pulsada = null;
+        _overlayImpedido = null;   // cada encendido vuelve a preguntar (371)
         if (!_tramoEnMarcha) _objetivo = null;
         Recolocar(objetivo: null);
+    }
+
+    /// <summary>
+    /// EL OVERLAY NO SE ENCIENDE aunque la configuración lo pida: el inspector está encendido y comparten ámbar, verde
+    /// y rosa con otro significado (371). Lo llama la vista al encender, después de preguntar a
+    /// <see cref="ExclusionConElInspector"/>; hasta el siguiente <see cref="Encender"/>, el overlay no se da por
+    /// visible ni cuenta cajas, y <see cref="Estado"/> dice quién lo impide.
+    /// </summary>
+    /// <exception cref="ArgumentException">Sin porqué: «impedido» a secas no dice por quién (patrón nº2).</exception>
+    public void ImpedirElOverlay(string porque)
+    {
+        if (string.IsNullOrWhiteSpace(porque))
+            throw new ArgumentException("impedir el overlay lleva su porqué: «impedido» a secas no dice por quién (patrón nº2)", nameof(porque));
+        _overlayImpedido = porque.Trim();
+        _cajas = 0;
     }
 
     /// <summary>
@@ -116,6 +158,8 @@ public sealed class MaquinaDeLaVista
         Encendida = false;
         _flechaVuela = false;
         _cajas = 0;
+        _pulsada = null;
+        _overlayImpedido = null;
         RectDelPanel = null;
     }
 
@@ -128,6 +172,25 @@ public sealed class MaquinaDeLaVista
         _cajas = 0;
         _flechaVuela = false;
         _objetivo = null;
+        _pulsada = null;
+    }
+
+    /// <summary>
+    /// LO QUE EL PANEL PINTA DE ESTE CICLO, o <c>null</c> si nada (383, revisión del 2026-09-23). En corrida, el ciclo
+    /// tal cual. Sin corrida —tras Escape o soltar, o antes del primer tramo— solo el motivo: la línea sola, sin
+    /// objetivo, sin decisión y sin barras (plano, «Parado a mano»: se borran). Hasta el 2026-09-23 la vista pintaba
+    /// todo lo que llegaba con Jev encendido, y la línea con que el tramo para —que llega DESPUÉS de Escape,
+    /// <c>ElTramo.cs:191</c>— volvía a enseñar el objetivo y las cinco barras sobre un panel que la máquina decía sin
+    /// corrida. Una decisión que llega tarde, tras Escape, tampoco se pinta.
+    /// </summary>
+    public CicloDeJev? QueSePinta(CicloDeJev ciclo)
+    {
+        ArgumentNullException.ThrowIfNull(ciclo);
+        if (!Encendida) return null;
+        if (PanelEnCorrida) return ciclo;
+        return ciclo.Fase == FaseDelCiclo.Linea && !string.IsNullOrWhiteSpace(ciclo.Linea)
+            ? new CicloDeJev { Fase = FaseDelCiclo.Linea, Linea = ciclo.Linea }
+            : null;
     }
 
     /// <summary>Empieza un tramo. Se anota aunque Jev esté apagado: si se enciende a mitad, el tramo ya es suyo.</summary>
@@ -135,6 +198,7 @@ public sealed class MaquinaDeLaVista
     {
         _tramoEnMarcha = true;
         _objetivo = objetivo ?? "";
+        _pulsada = null;
     }
 
     /// <summary>
@@ -147,8 +211,24 @@ public sealed class MaquinaDeLaVista
     public void AlPintarCajas(int cajas) => _cajas = cajas;
 
     /// <summary>
+    /// EL PANEL PINTA ESTAS BARRAS, y su sitio se calcula con el alto que tiene ahora (385, revisión del 2026-09-23):
+    /// <see cref="MedidaDelPanelDeJev.AltoDe"/> por la escala, y recolocado con lo pulsado que ya se conocía. Hasta
+    /// entonces el sitio se calculaba siempre con el alto del panel vacío (64) y el panel crecía a 198,6 hacia abajo:
+    /// puesto encima de la carita, al crecer la tapaba, se salía del área de trabajo o caía sobre lo pulsado.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Con menos de 0 o más de 5 barras: lo lanza <see cref="MedidaDelPanelDeJev.AltoDe"/>.</exception>
+    public void AlPintarBarras(int barras)
+    {
+        double alto = MedidaDelPanelDeJev.AltoDe(barras);
+        // Sin escala no hay tamaño en físicos que calcular: se queda el que hubiera, y Recolocar da null sin pantalla.
+        if (double.IsFinite(Escala) && Escala > 0)
+            TamanoDelPanel = new Size(MedidaDelPanelDeJev.Ancho * Escala, alto * Escala);
+        Recolocar(_pulsada);
+    }
+
+    /// <summary>
     /// La mano dijo qué pulsó (<c>UiaSurface.Pulso</c>): la flecha vuela si la app de trabajo está delante, y el
-    /// panel se aparta de lo pulsado en cuanto lo conoce (385). Con Jev apagado no pasa nada: pulsó Luna.
+    /// panel se aparta de lo pulsado en cuanto lo conoce (385). Fuera de un tramo con Jev no pasa nada: pulsó Luna.
     /// </summary>
     /// <param name="caja">La caja de lo pulsado, en físicos.</param>
     /// <param name="appDelante">
@@ -157,14 +237,18 @@ public sealed class MaquinaDeLaVista
     /// </param>
     public void AlConocerPulsada(Rect caja, bool appDelante)
     {
-        if (!Encendida) return;
+        // FUERA DE UN TRAMO CON JEV, LA PULSACIÓN ES DE LUNA (o del player), no de Jev: ni flecha, ni panel que se
+        // aparte (384, revisión del 2026-09-23). Hasta entonces se miraba «encendida», y la carita —que mira «en
+        // tramo»— viajaba al mismo clic al que volaba la flecha: dos cuerpos cruzando la pantalla por un clic.
+        if (!EnTramo) return;
         _flechaVuela = appDelante;
+        _pulsada = caja;
         Recolocar(caja);
     }
 
     private void Recolocar(Rect? objetivo)
     {
         if (!Encendida || RcWork.IsEmpty || TamanoDelPanel.IsEmpty) { RectDelPanel = null; return; }
-        RectDelPanel = DondeVaElPanel.Calcular(Ancla, TamanoDelPanel, RcWork, Escala, Obstaculos, objetivo).Rect;
+        RectDelPanel = DondeVaElPanel.JuntoALaCarita(Carita, TamanoDelPanel, RcWork, Escala, Obstaculos, objetivo).Rect;
     }
 }

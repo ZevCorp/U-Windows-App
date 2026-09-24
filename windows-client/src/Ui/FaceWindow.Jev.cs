@@ -48,7 +48,7 @@ public partial class FaceWindow
             LogBus.Log("jev-vista", "NacerLaVistaDeJev se llamó otra vez: sigue la vista que ya había, sin engancharla dos veces");
             return;
         }
-        var vista = new VistaDeJev(Dispatcher, AnclaDeLaCarita);
+        var vista = new VistaDeJev(Dispatcher, DondeEstaLaCarita);
         _vistaDeJev = vista;
         _mapaDeJev = mapa;
 
@@ -128,11 +128,13 @@ public partial class FaceWindow
     }
 
     /// <summary>
-    /// Dónde está la carita, en físicos: el centro de su ventana, preguntado a Windows cada vez que se enciende Jev. Si
-    /// la carita está guardada, el muelle, que es donde vive. Si Windows no lo da, lanza con su código: el panel no
-    /// se pone junto a un sitio inventado.
+    /// Dónde está la carita, en físicos: su ventana ENTERA —la barra y, abierto, el menú—, preguntada a Windows al
+    /// encender Jev y antes de cada recolocación. Si la carita está guardada, el muelle, que es donde vive. El panel no
+    /// tapa nada de ella (377): hasta el 2026-09-23 esto daba solo el centro, y a 56 DIP de él el panel caía encima de
+    /// la barra de 150 y del menú de 292. Si Windows no lo da, lanza con su código: el panel no se pone junto a un sitio
+    /// inventado.
     /// </summary>
-    private Point AnclaDeLaCarita()
+    private Rect DondeEstaLaCarita()
     {
         Window cual = IsVisible || _muelle == null ? this : _muelle;
         string quien = ReferenceEquals(cual, this) ? "la carita" : "el muelle";
@@ -141,6 +143,6 @@ public partial class FaceWindow
             throw new InvalidOperationException($"{quien} todavía no tiene ventana de Windows (handle 0), así que no hay sitio junto al que poner el panel");
         if (!GetWindowRect(h, out var r))
             throw new InvalidOperationException($"GetWindowRect de {quien} falló (error {Marshal.GetLastWin32Error()}), así que no hay sitio junto al que poner el panel");
-        return new Point((r.Left + r.Right) / 2.0, (r.Top + r.Bottom) / 2.0);
+        return new Rect(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
     }
 }

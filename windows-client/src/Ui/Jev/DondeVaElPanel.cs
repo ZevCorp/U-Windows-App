@@ -70,39 +70,56 @@ public static class DondeVaElPanel
     /// Con una escala que no es un número positivo. Con 0 —un <c>GetDpiForMonitor</c> que falló— los 56/32/44/12
     /// valdrían 0 y el panel caería ENCIMA del ancla diciendo que cabe (patrón nº9). No hay sitio que calcular.
     /// </exception>
-    public static LugarDelPanel Calcular(Point ancla, Size tamaño, Rect rcWork, double escala, IReadOnlyList<Rect> obstaculos, Rect? objetivo)
+    public static LugarDelPanel Calcular(Point ancla, Size tamaño, Rect rcWork, double escala, IReadOnlyList<Rect> obstaculos, Rect? objetivo) =>
+        JuntoALaCarita(new Rect(ancla, new Size(0, 0)), tamaño, rcWork, escala, obstaculos, objetivo);
+
+    /// <summary>
+    /// JUNTO A LA CARITA ENTERA, no a su centro (revisión del 2026-09-23). La ventana de la carita lleva la barra de
+    /// 150 DIP y, abierto, el menú de 292: con el ancla en su centro, a 56 de él el panel caía SIEMPRE encima de ella
+    /// —opaco, por encima en Z y dejando pasar el ratón—, y tapaba el botón de apagar Jev. Aquí los 56/32 se cuentan
+    /// desde su BORDE y lo que no se tapa es ella más los 22 de alrededor. Una carita de 0×0 es el ancla-punto de
+    /// <see cref="Calcular"/>, con la que todo sale igual que antes: el borde es el punto y los 22 de alrededor, el
+    /// cuadrado de 44.
+    /// </summary>
+    /// <param name="carita">El rect de la carita en físicos; 0×0 en un punto para un ancla-punto (el cursor).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Con una escala que no es un número positivo (ver <see cref="Calcular"/>).</exception>
+    /// <exception cref="ArgumentException">Con una carita vacía o con coordenadas que no son números: no hay junto a qué ponerse.</exception>
+    public static LugarDelPanel JuntoALaCarita(Rect carita, Size tamaño, Rect rcWork, double escala, IReadOnlyList<Rect> obstaculos, Rect? objetivo)
     {
         if (!double.IsFinite(escala) || escala <= 0)
             throw new ArgumentOutOfRangeException(nameof(escala), escala,
                 "la escala del monitor es un número positivo (DPI / 96): 0, NaN o negativa es un GetDpiForMonitor que falló");
         ArgumentNullException.ThrowIfNull(obstaculos);
+        if (carita.IsEmpty || !double.IsFinite(carita.X) || !double.IsFinite(carita.Y) || !double.IsFinite(carita.Width) || !double.IsFinite(carita.Height))
+            throw new ArgumentException($"el panel se pone junto a una carita con sitio, y llegó {carita}", nameof(carita));
 
         double dx = DesplazamientoX * escala, dy = DesplazamientoY * escala, margen = MargenAlBorde * escala;
         var dondeCabe = Encogido(rcWork, margen);
-        var cuadrado = new Rect(ancla.X - Holgura * escala / 2, ancla.Y - Holgura * escala / 2, Holgura * escala, Holgura * escala);
+        // Lo que no se tapa: la carita y los 22 de alrededor. Para un punto, el cuadrado de 44 del plano.
+        var cuadrado = Rect.Inflate(carita, Holgura * escala / 2, Holgura * escala / 2);
         Rect? pulsado = objetivo is { IsEmpty: false } o ? Rect.Inflate(o, InflarLoPulsado * escala, InflarLoPulsado * escala) : null;
 
         foreach (var esquina in EnOrden)
         {
-            var r = JuntoAl(ancla, tamaño, esquina, dx, dy);
+            var r = JuntoAl(carita, tamaño, esquina, dx, dy);
             if (dondeCabe.Contains(r) && !r.IntersectsWith(cuadrado)
                 && !obstaculos.Any(ob => r.IntersectsWith(ob))
                 && !(pulsado is { } p && r.IntersectsWith(p)))
                 return new LugarDelPanel(r, esquina, JuntoAlAncla: true);
         }
 
-        // NINGUNA CABE: a la esquina del área de trabajo OPUESTA a lo pulsado (al ancla, si aún no se conoce).
+        // NINGUNA CABE: a la esquina del área de trabajo OPUESTA a lo pulsado (a la carita, si aún no se conoce).
         // Se ordenan por distancia, de más lejos a más cerca, y eso no es otra regla: las cuatro son simétricas
         // respecto del centro del área y la suma de cuadrados se separa por ejes, así que la más lejana ES la
         // opuesta. Lo que el orden añade es la siguiente: con el ancla metida en esa misma esquina, la opuesta
         // taparía el cuadrado de 44 —que vale SIEMPRE—, y se pasa a la más lejana que no lo tape (fase 4, caso
         // visto rojo antes que su código: el ancla en (100, 100) y lo pulsado ocupando el resto).
-        var lejosDe = objetivo is { IsEmpty: false } ob2 ? Centro(ob2) : ancla;
+        var lejosDe = objetivo is { IsEmpty: false } ob2 ? Centro(ob2) : Centro(carita);
         var delArea = EnOrden
             .Select(e => new LugarDelPanel(EnLaEsquinaDe(dondeCabe, tamaño, e), e, JuntoAlAncla: false))
             .OrderByDescending(l => DistanciaAlCuadrado(Centro(l.Rect), lejosDe))
             .ToList();
-        // Si las cuatro tapan el ancla es que el área no da para el panel y el cuadrado a la vez: se queda la
+        // Si las cuatro tapan la carita es que el área no da para el panel y ella a la vez: se queda la
         // opuesta, y el cuadrado tapado lo ve quien lea el rect; inventar un quinto sitio sería peor.
         return delArea.FirstOrDefault(l => !l.Rect.IntersectsWith(cuadrado), delArea[0]);
     }
@@ -123,12 +140,12 @@ public static class DondeVaElPanel
         return new Rect(arribaIzquierda.X, arribaIzquierda.Y, enDip.Width * primario.Escala, enDip.Height * primario.Escala);
     }
 
-    private static Rect JuntoAl(Point ancla, Size tamaño, EsquinaDelPanel esquina, double dx, double dy)
+    private static Rect JuntoAl(Rect carita, Size tamaño, EsquinaDelPanel esquina, double dx, double dy)
     {
         bool derecha = esquina is EsquinaDelPanel.AbajoDerecha or EsquinaDelPanel.ArribaDerecha;
         bool abajo = esquina is EsquinaDelPanel.AbajoDerecha or EsquinaDelPanel.AbajoIzquierda;
-        double x = derecha ? ancla.X + dx : ancla.X - dx - tamaño.Width;
-        double y = abajo ? ancla.Y + dy : ancla.Y - dy - tamaño.Height;
+        double x = derecha ? carita.Right + dx : carita.Left - dx - tamaño.Width;
+        double y = abajo ? carita.Bottom + dy : carita.Top - dy - tamaño.Height;
         return new Rect(x, y, tamaño.Width, tamaño.Height);
     }
 

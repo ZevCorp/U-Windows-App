@@ -55,6 +55,7 @@ public sealed class PanelDeJev : Window
 
     [DllImport("user32.dll", SetLastError = true)] private static extern int GetWindowLong(IntPtr h, int indice);
     [DllImport("user32.dll", SetLastError = true)] private static extern int SetWindowLong(IntPtr h, int indice, int valor);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowDisplayAffinity(IntPtr h, uint afinidad);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr h, IntPtr tras, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool GetWindowRect(IntPtr h, out RECT r);
@@ -271,6 +272,11 @@ public sealed class PanelDeJev : Window
         uint quedo = unchecked((uint)GetWindowLong(_handle, GWL_EXSTYLE));
         if ((quedo & mascara) != mascara)
             LogBus.Log("jev-panel", $"el panel quedó con estilos 0x{quedo:X8} y le faltan 0x{mascara & ~quedo:X8}: puede tomar el ratón o el foco");
+        // FUERA DE LA CAPTURA, como el overlay y la flecha (385, revisión del 2026-09-23). El panel es opaco, va siempre
+        // encima y cae dentro del área de trabajo: sin esto, la foto que Luna manda al modelo, los fotogramas de voz y
+        // la captura del puente consciente (todas CopyFromScreen) llevaban 340×199 de panel tapando el formulario.
+        if (!SetWindowDisplayAffinity(_handle, EstilosDeVentana.Afinidad))
+            LogBus.Log("jev-panel", $"no se pudo excluir de la captura el panel (SetWindowDisplayAffinity, error {Marshal.GetLastWin32Error()}): saldrá en las fotos que se mandan al modelo y en las grabaciones");
 
         HwndSource.FromHwnd(_handle)?.AddHook(MantenerElSitio);
         if (_pedido is Rect pedido) Aplicar(pedido, "al nacer");

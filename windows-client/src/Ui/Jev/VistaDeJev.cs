@@ -24,8 +24,13 @@ namespace U.WindowsClient.Ui.Jev;
 /// el PC real (D): que <c>WindowFromPoint</c> salte las ventanas nuestras que dejan pasar el ratón es lo que dice la
 /// documentación del ratón, y es del nivel 4.
 ///
-/// NADA DE JEV SE VE CON JEV APAGADO: la mano pulsa también cuando decide Luna. Cada entrada mira
-/// <see cref="MaquinaDeLaVista.Encendida"/> en el hilo de la interfaz, no al llegar.
+/// NADA DE JEV SE VE CON JEV APAGADO, Y LO PULSADO SOLO CUENTA EN UN TRAMO CON JEV: la mano pulsa también cuando
+/// decide Luna, o el player. Cada entrada mira la máquina en el hilo de la interfaz, no al llegar: lo que se pinta lo
+/// dice <see cref="MaquinaDeLaVista.QueSePinta"/> (383) y lo pulsado, <see cref="MaquinaDeLaVista.EnTramo"/> (384).
+///
+/// EL OVERLAY Y EL INSPECTOR NO SE ENCIENDEN A LA VEZ (371): antes de abrir los overlays se le pregunta a
+/// <see cref="ExclusionConElInspector"/>, y la bandera del overlay se pone al enseñarlos y se quita al cerrarlos.
+/// Hasta el 2026-09-23 solo el inspector preguntaba, y nadie ponía la bandera: la regla existía solo en el contrato.
 /// </remarks>
 public sealed class VistaDeJev
 {
@@ -55,7 +60,7 @@ public sealed class VistaDeJev
 
     private readonly IDespachador _despachador;
     private readonly ConectorDeLaVista _conector;
-    private readonly Func<Point> _ancla;
+    private readonly Func<Rect> _carita;
 
     // DEL HILO DEL TRAMO: lo que el pintor necesita para numerar y rehacer ciclos. Se cambian con Interlocked/Volatile.
     private int _paso;
@@ -68,16 +73,18 @@ public sealed class VistaDeJev
     private FlechaDeJev? _flecha;
     private CosteDeJev _coste = new();
     private CajasDelOverlay _cajas = CajasDelOverlay.Vacio;
+    private int _barrasPintadas;
 
     /// <param name="interfaz">El <see cref="Dispatcher"/> del hilo de la interfaz: el de las ventanas.</param>
-    /// <param name="ancla">
-    /// Dónde está la carita, en físicos: lo que sitúa el panel (377). Se pregunta al encender, que es cuando se
-    /// coloca; no se da por hecho uno.
+    /// <param name="carita">
+    /// Dónde está la carita ENTERA, en físicos —su ventana, con la barra y el menú—: lo que el panel no tapa (377).
+    /// Se pregunta al encender y antes de cada recolocación, porque abrir el menú le cambia el tamaño; no se da por
+    /// hecha una.
     /// </param>
-    public VistaDeJev(Dispatcher interfaz, Func<Point> ancla)
+    public VistaDeJev(Dispatcher interfaz, Func<Rect> carita)
     {
         ArgumentNullException.ThrowIfNull(interfaz);
-        _ancla = ancla ?? throw new ArgumentNullException(nameof(ancla));
+        _carita = carita ?? throw new ArgumentNullException(nameof(carita));
         _despachador = new DespachadorDeWpf(interfaz);
         _conector = new ConectorDeLaVista(_despachador, Pintar, linea => LogBus.Log("jev-vista", linea));
         // EL OVERLAY LO ENCIENDE U_JEV_OVERLAY=si (379). Se lee aquí, al crear la vista: el entorno de un proceso no
@@ -124,15 +131,14 @@ public sealed class VistaDeJev
     }
 
     /// <summary>
-    /// Una línea de progreso del tramo: el último ciclo decidido con la línea puesta, o solo la línea si todavía no
-    /// hubo decisión. La pulsada NO se saca de aquí todavía: leer su número de «paso k: «x» (n)» es del puente de la
-    /// fase 9, con su comprobación.
+    /// Una línea de progreso del tramo: el último ciclo decidido con la línea puesta y, si la línea dice qué pulsó la
+    /// mano, con su número (<see cref="CicloDeJev.ConLaLinea"/>, 372): la mano puede haber pulsado la segunda mejor, y
+    /// solo la línea lo cuenta.
     /// </summary>
     public void Progreso(string linea)
     {
         if (string.IsNullOrWhiteSpace(linea)) return;
-        var decidido = Volatile.Read(ref _ultimoDecidido) ?? new CicloDeJev { Objetivo = Volatile.Read(ref _objetivo) };
-        _conector.Publicar(decidido with { Fase = FaseDelCiclo.Linea, Linea = linea });
+        _conector.Publicar(CicloDeJev.ConLaLinea(Volatile.Read(ref _ultimoDecidido), Volatile.Read(ref _objetivo), linea));
     }
 
     /// <summary>Termina el tramo. El panel se queda enseñando cómo acabó; la flecha se esconde sola al terminar de señalar.</summary>
@@ -145,14 +151,23 @@ public sealed class VistaDeJev
     public void AlPulsar(double x, double y, double ancho, double alto) =>
         Encolar("pintar lo pulsado", () => Pulsada(new Rect(x, y, Math.Max(0, ancho), Math.Max(0, alto))));
 
-    /// <summary>Escape o se soltó lo señalado (383): el overlay vacío, la flecha escondida y el panel sin corrida.</summary>
-    public void Suelta() => Encolar("soltar lo señalado", () =>
+    /// <summary>
+    /// Escape o se soltó lo señalado (383): el overlay vacío, la flecha escondida y el panel sin corrida. La última
+    /// decisión y el objetivo se olvidan aquí mismo, en el hilo que avisa: la línea con que el tramo para llega
+    /// después (<c>ElTramo.cs:191</c>) y no puede volver a traer las barras (hallazgo de la revisión del 2026-09-23).
+    /// </summary>
+    public void Suelta()
     {
-        Maquina.Suelta();
-        PintarCajas(CajasDelOverlay.Vacio);
-        _flecha?.Esconder();
-        _panel?.Pintar(Reposo);
-    });
+        Volatile.Write(ref _ultimoDecidido, null);
+        Volatile.Write(ref _objetivo, "");
+        Encolar("soltar lo señalado", () =>
+        {
+            Maquina.Suelta();
+            PintarCajas(CajasDelOverlay.Vacio);
+            _flecha?.Esconder();
+            PintarPanel(Reposo);
+        });
+    }
 
     /// <summary>
     /// Se enciende o se apaga Jev (el botón, después del interruptor del decisor). Encender pone la pantalla ANTES de
@@ -169,20 +184,28 @@ public sealed class VistaDeJev
             int overlays = _overlays.Count;
             foreach (var o in _overlays) o.Close();
             _overlays = Array.Empty<OverlayDeJev>();
+            ExclusionConElInspector.OverlayActivo = false;   // el inspector ya puede encenderse (371)
             _panel?.Close(); _panel = null;
             _flecha?.Close(); _flecha = null;
             _cajas = CajasDelOverlay.Vacio;
+            _barrasPintadas = 0;
             LogBus.Log("jev-vista", $"Jev apagado: cerrados el panel, la flecha y {overlays} overlay(s)");
             return;
         }
 
         PonerLaPantalla();
         Maquina.Encender();
+        _barrasPintadas = 0;   // el panel nace vacío, y su sitio se calculó con ese alto
         _panel = new PanelDeJev();
         if (Maquina.RectDelPanel is Rect sitio) _panel.Colocar(sitio);
         else LogBus.Log("jev-vista", "el panel nace sin sitio calculado (sin área de trabajo o sin escala del monitor de la carita): se enseña donde lo ponga Windows");
         _panel.Show();
 
+        // EL INSPECTOR ENCENDIDO IMPIDE EL OVERLAY (371): comparten ámbar, verde y rosa con otro significado. Se
+        // pregunta ANTES de crear ninguna ventana, y la máquina lo sabe: con el overlay impedido no se da por visible.
+        if (Maquina.OverlayVisible && !ExclusionConElInspector.PuedeEncender(ExclusionConElInspector.Cual.Overlay))
+            Maquina.ImpedirElOverlay(ExclusionConElInspector.PorQueNo(ExclusionConElInspector.Cual.Overlay)
+                ?? "el inspector está encendido (PuedeEncender dijo que no y PorQueNo no dio el motivo)");
         if (Maquina.OverlayVisible)
         {
             _overlays = OverlayDeJev.ParaCadaMonitor();
@@ -191,21 +214,49 @@ public sealed class VistaDeJev
                 o.Caducaron += (_, _) => { _cajas = CajasDelOverlay.Vacio; Maquina.AlPintarCajas(0); };
                 o.Show();
             }
+            if (_overlays.Count > 0) ExclusionConElInspector.OverlayActivo = true;   // y desde aquí el inspector no se enciende
         }
         _flecha = new FlechaDeJev();
         LogBus.Log("jev-vista", $"Jev encendido · {Maquina.Estado} · panel en {(Maquina.RectDelPanel?.ToString() ?? "sin sitio")} · {_overlays.Count} overlay(s) · flecha escondida hasta el primer vuelo");
     }
 
     /// <summary>
-    /// EL PINTOR DEL CONECTOR, en el hilo de la interfaz: el panel pinta lo que dice <see cref="EstadoDeLaDecision.De"/>
+    /// EL PINTOR DEL CONECTOR, en el hilo de la interfaz: pinta lo que la máquina dice que se pinta
+    /// (<see cref="MaquinaDeLaVista.QueSePinta"/>, 383). El panel pinta lo que dice <see cref="EstadoDeLaDecision.De"/>
     /// y, si el ciclo es una decisión, el overlay pinta lo que dice <see cref="CajasDelOverlay.De"/>. Aquí no se
     /// decide nada: ni se ordena ni se filtra.
     /// </summary>
     private void Pintar(CicloDeJev ciclo)
     {
-        if (!Maquina.Encendida) return;
-        _panel?.Pintar(EstadoDeLaDecision.De(ciclo, _coste));
-        if (ciclo.Fase == FaseDelCiclo.Decidido) PintarCajas(CajasDelOverlay.De(ciclo.Candidatas, ciclo.Pulsada));
+        var aPintar = Maquina.QueSePinta(ciclo);
+        if (aPintar == null)
+        {
+            // LO QUE NO SE PINTA SE FACTURA IGUAL: una decisión que llega tras Escape ya se pagó (373).
+            if (ciclo.Fase == FaseDelCiclo.Decidido) _coste.Acumular(ciclo.TokensFacturados);
+            return;
+        }
+        PintarPanel(EstadoDeLaDecision.De(aPintar, _coste));
+        if (aPintar.Fase == FaseDelCiclo.Decidido) PintarCajas(CajasDelOverlay.De(aPintar.Candidatas, aPintar.Pulsada));
+    }
+
+    /// <summary>
+    /// El panel pinta esto y, si cambió cuántas barras enseña, su sitio se recalcula con el alto nuevo (385): la
+    /// máquina lo calcula con <see cref="MedidaDelPanelDeJev.AltoDe"/> y la ventana se mueve ahí. Hasta el 2026-09-23
+    /// el sitio era siempre el del panel vacío (64), y con cinco barras (198,6) el panel tapaba la carita o lo pulsado.
+    /// </summary>
+    private void PintarPanel(LoQuePinta loQuePinta)
+    {
+        if (_panel == null) return;
+        _panel.Pintar(loQuePinta);
+        int barras = loQuePinta.Resultados?.Barras.Count ?? 0;
+        if (barras == _barrasPintadas) return;
+        _barrasPintadas = barras;
+        LeerLaCarita();
+        Maquina.AlPintarBarras(barras);
+        // EL ALTO LO DA EL CONTENIDO (SizeToContent): se mide ya, para que la ventana tenga el alto nuevo cuando se
+        // mueva y el CONTRASTE del panel compare el tamaño con que se calculó el sitio con el de verdad.
+        _panel.UpdateLayout();
+        if (Maquina.RectDelPanel is Rect sitio) _panel.Colocar(sitio);
     }
 
     private void PintarCajas(CajasDelOverlay cajas)
@@ -217,11 +268,14 @@ public sealed class VistaDeJev
 
     /// <summary>
     /// LO PULSADO, en el hilo de la interfaz. La rosa pasa a la candidata que calza con la caja de la mano; el panel se
-    /// aparta; y la flecha vuela si Windows dice que la ventana de trabajo está delante (381).
+    /// aparta; y la flecha vuela si Windows dice que la ventana de trabajo está delante (381). Solo en un tramo con
+    /// Jev: fuera de él pulsó Luna, o el player, y la carita es la que viaja (384).
     /// </summary>
     private void Pulsada(Rect caja)
     {
-        if (!Maquina.Encendida) return;   // pulsó Luna
+        // FUERA DE UN TRAMO CON JEV, ni rosa, ni panel que se aparte, ni flecha. Hasta el 2026-09-23 se miraba
+        // «encendida»: con Jev encendido y sin tramo, la carita viajaba al clic y la flecha volaba al mismo clic.
+        if (!Maquina.EnTramo) return;
         if (!CajasDelOverlay.EsPintable(caja))
         {
             LogBus.Log("jev-vista", $"la mano avisó de una caja sin sitio ({caja}): ni rosa, ni vuelo");
@@ -229,6 +283,7 @@ public sealed class VistaDeJev
         }
         var centro = new Point(caja.X + caja.Width / 2, caja.Y + caja.Height / 2);
         bool delante = LaDeTrabajoEstaDelante(centro, out string quien);
+        LeerLaCarita();
         Maquina.AlConocerPulsada(caja, delante);
         if (Maquina.RectDelPanel is Rect sitio) _panel?.Colocar(sitio);
 
@@ -313,7 +368,8 @@ public sealed class VistaDeJev
     /// </summary>
     private void PonerLaPantalla()
     {
-        var ancla = _ancla();
+        var carita = _carita();
+        var ancla = new Point(carita.X + carita.Width / 2, carita.Y + carita.Height / 2);
         var hMonitor = MonitorFromPoint(new POINT { X = (int)Math.Round(ancla.X), Y = (int)Math.Round(ancla.Y) }, MONITOR_DEFAULTTONEAREST);
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
         if (hMonitor == IntPtr.Zero || !GetMonitorInfo(hMonitor, ref info))
@@ -332,11 +388,26 @@ public sealed class VistaDeJev
         double escala = dpi / 96.0;
         Maquina.RcWork = new Rect(info.rcWork.Left, info.rcWork.Top, info.rcWork.Right - info.rcWork.Left, info.rcWork.Bottom - info.rcWork.Top);
         Maquina.Escala = escala;
-        // EL PANEL NACE VACÍO, y su sitio se calcula con ese alto (64). Al crecer con las barras no se recoloca solo:
-        // el CONTRASTE del panel lo dice (hallazgo (c) del 8b).
+        // EL PANEL NACE VACÍO, y su sitio se calcula con ese alto (64). Al crecer con las barras, PintarPanel se lo
+        // dice a la máquina y el sitio se recalcula con el alto nuevo (385, revisión del 2026-09-23).
         Maquina.TamanoDelPanel = new Size(MedidaDelPanelDeJev.Ancho * escala, MedidaDelPanelDeJev.AltoDe(0) * escala);
-        Maquina.Ancla = ancla;
+        Maquina.Carita = carita;
         Maquina.Obstaculos = PanelDeJev.Obstaculos();
+    }
+
+    /// <summary>
+    /// La carita se vuelve a preguntar antes de recolocar el panel: abrir o cerrar su menú le cambia el tamaño, y el
+    /// rect de cuando se encendió Jev dejaría el panel encima del menú abierto después. Si Windows no la da, se queda
+    /// la de antes y se dice.
+    /// </summary>
+    private void LeerLaCarita()
+    {
+        try { Maquina.Carita = _carita(); }
+        catch (Exception e)
+        {
+            for (var x = e; x != null; x = x.InnerException)
+                LogBus.Log("jev-vista", $"✘ no pude volver a leer dónde está la carita ({x.GetType().Name}: {x.Message}); el panel se coloca con la de antes, {Maquina.Carita}");
+        }
     }
 
     /// <summary>El panel sin corrida: sin objetivo, sin ticker y sin resultados, como nace.</summary>

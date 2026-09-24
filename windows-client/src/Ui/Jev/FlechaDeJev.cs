@@ -296,7 +296,7 @@ public sealed class FlechaDeJev : Window
             _pildora.Visibility = Visibility.Visible;
             Mover(plan.Fin);
         }
-        LogBus.Log("jev-flecha", $"posada en {Punto(plan.Fin)} tras {_fotogramas} fotograma(s) en {_cronometro.Elapsed.TotalSeconds:0.00} s (el plan decía {plan.Duracion.TotalSeconds:0.00} s){(_etiqueta.Length > 0 ? $", píldora «{_etiqueta}»" : ", sin píldora: no se sabe qué candidata se pulsó")}");
+        LogBus.Log("jev-flecha", $"posada en {Punto(plan.Fin)} tras {_fotogramas} fotograma(s) en {_cronometro.Elapsed.TotalSeconds:0.00} s (el plan decía {plan.Duracion.TotalSeconds:0.00} s){(_etiqueta.Length > 0 ? $", con píldora ({_etiqueta.Length} carácter(es))" : ", sin píldora: no se sabe qué candidata se pulsó")}");
         _relojDeSenalar.Start();
     }
 
