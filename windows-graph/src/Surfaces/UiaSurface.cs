@@ -417,6 +417,34 @@ public sealed class UiaSurface : IUiSurface
         keybd_event(vk, 0, KEYEVENTF_KEYUP_I, IntPtr.Zero);
     }
 
+    /// <summary>El texto carácter a carácter; un salto es Enter, como lo teclearía una persona.</summary>
+    private static void TeclearTexto(string texto)
+    {
+        foreach (char c in texto)
+        {
+            if (c == '\r') continue;
+            if (c == '\n') { Tecla(0x0D); continue; }
+            Unicode(c, false); Unicode(c, true);
+            Thread.Sleep(4);
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+A y Suprimir sobre el campo que tiene el foco (promesa 410). Solo se llama sobre un campo que
+    /// se LEE y tiene contenido: en uno mudo —Google Docs— Ctrl+A seleccionaría el documento entero.
+    /// </summary>
+    private static void VaciarElCampoConFoco()
+    {
+        const byte VK_CONTROL = 0x11, VK_A = 0x41, VK_DELETE = 0x2E;
+        keybd_event(VK_CONTROL, 0, 0, IntPtr.Zero);
+        keybd_event(VK_A, 0, 0, IntPtr.Zero);
+        keybd_event(VK_A, 0, KEYEVENTF_KEYUP_I, IntPtr.Zero);
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP_I, IntPtr.Zero);
+        Thread.Sleep(30);
+        Tecla(VK_DELETE);
+        Thread.Sleep(60);
+    }
+
     /// <summary>El título de una ventana, o vacío.</summary>
     public static string TituloDe(IntPtr hwnd)
     {
@@ -1430,7 +1458,7 @@ public sealed class UiaSurface : IUiSurface
             var veredicto = ComoSeEscribe.TrasEscribir(value, antes, LoQueDiceElCampo(el));
             if (veredicto == ComoSeEscribe.Veredicto.Cuajo) return true;
             L($"    el campo no enseña el texto ({veredicto}) → se teclea");
-            return TeclearEnElCampo(el, value, out error);
+            return TeclearEnElCampo(el, value, out error, antes);
         }
         error = "el campo no soporta ValuePattern (no se puede escribir por UIA)";
         return false;
@@ -1463,10 +1491,25 @@ public sealed class UiaSurface : IUiSurface
     /// era de la persona. Y se vuelve a comprobar: si tampoco cuajó tecleando, se dice — contestar
     /// «escribí» sobre un campo vacío es lo que hizo que la voz anunciara un mensaje que no existía.
     /// </remarks>
-    public bool TeclearEnElCampo(AutomationElement el, string texto, out string error)
+    /// <param name="antesDeTodo">
+    /// Lo que el campo tenía antes de la PRIMERA escritura —la de SetValue, si la hubo—. Es contra eso
+    /// contra lo que se mide si el texto quedó dos veces (promesa 410); lo que hay justo antes de teclear
+    /// ya puede ser el texto que SetValue sí dejó.
+    /// </param>
+    public bool TeclearEnElCampo(AutomationElement el, string texto, out string error, string? antesDeTodo = null)
     {
         error = "";
         string? antesDeTeclear = LoQueDiceElCampo(el);
+
+        // MIRAR ANTES DE TECLEAR (promesa 410). Teclear donde esté el cursor sobre un campo que ya tiene el
+        // texto es escribirlo dos veces: así quedó un correo el 2026-09-23. Si ya lo tiene no se teclea; si
+        // tiene otra cosa se vacía antes, porque SetValue reemplaza y su respaldo tiene que hacer lo mismo.
+        var tecleo = ComoSeEscribe.AntesDeTeclear(texto ?? "", antesDeTeclear);
+        if (tecleo == ComoSeEscribe.Tecleo.YaLoTiene)
+        {
+            L($"    → el campo ya tiene el texto: NO se teclea, que sería escribirlo dos veces");
+            return true;
+        }
         IntPtr focoAntes = GetForegroundWindow();
         GetCursorPos(out POINT cursorAntes);
         try
@@ -1482,17 +1525,28 @@ public sealed class UiaSurface : IUiSurface
             return false;
         }
         Thread.Sleep(120);
-        foreach (char c in texto ?? "")
+        if (tecleo == ComoSeEscribe.Tecleo.Reemplazando)
         {
-            if (c == '\r') continue;
-            if (c == '\n') { Tecla(0x0D); continue; }
-            Unicode(c, false); Unicode(c, true);
-            Thread.Sleep(4);
+            L($"    → el campo tiene otra cosa: se vacía antes de teclear (reemplazar, nunca añadir)");
+            VaciarElCampoConFoco();
         }
+        TeclearTexto(texto ?? "");
         Thread.Sleep(150);
 
         string? ahora = LoQueDiceElCampo(el);
-        var veredicto = ComoSeEscribe.TrasEscribir(texto ?? "", antesDeTeclear, ahora);
+        string? referencia = antesDeTodo ?? antesDeTeclear;
+        var veredicto = ComoSeEscribe.TrasEscribir(texto ?? "", referencia, ahora);
+        if (veredicto == ComoSeEscribe.Veredicto.Doble)
+        {
+            // UNA corrección, no un bucle: se vacía y se teclea una vez más. Si tampoco queda una sola vez,
+            // se dice — el campo no se deja vaciar, y seguir tecleando solo lo repetiría más.
+            L($"    ✗ el campo quedó con el texto DOS veces: se vacía y se teclea una sola vez");
+            VaciarElCampoConFoco();
+            TeclearTexto(texto ?? "");
+            Thread.Sleep(150);
+            ahora = LoQueDiceElCampo(el);
+            veredicto = ComoSeEscribe.TrasEscribir(texto ?? "", referencia, ahora);
+        }
         bool ok = ComoSeEscribe.SeDaPorEscrito(veredicto);
         // UN CAMPO MUDO SE DA POR ESCRITO (promesa 247): decir «no pude» sobre un campo que no cuenta lo
         // que tiene es lo que hizo que un informe se escribiera cuatro veces (2026-09-16).
@@ -1500,9 +1554,12 @@ public sealed class UiaSurface : IUiSurface
         {
             ComoSeEscribe.Veredicto.Cuajo => $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es), y el campo lo tiene",
             ComoSeEscribe.Veredicto.MudoNoSeSabe => $"    → tecleado en el campo: {(texto ?? "").Length} carácter(es); el campo no cuenta lo que tiene, así que no se puede comprobar y NO se reescribe",
+            ComoSeEscribe.Veredicto.Doble => $"    ✗ el campo sigue con el texto repetido y no se deja vaciar (dice «{(ahora ?? "").Trim()}»)",
             _ => $"    ✗ ni tecleando entró el texto (el campo dice «{(ahora ?? "").Trim()}»)",
         });
-        if (!ok) error = "el campo no se quedó con el texto ni escribiéndolo ni tecleándolo";
+        if (!ok) error = veredicto == ComoSeEscribe.Veredicto.Doble
+            ? "el texto quedó escrito DOS veces y el campo no se dejó vaciar: NO lo vuelvas a escribir, hay que borrar lo repetido"
+            : "el campo no se quedó con el texto ni escribiéndolo ni tecleándolo";
 
         if (ComoSePulsa.HayQueDevolver(ComoSePulsa.Gesto.Fisico, focoAntes, GetForegroundWindow()))
         {

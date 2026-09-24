@@ -766,6 +766,10 @@ internal static class Contrato
         Prueba("347. el resultado textual del delegado entra al historial aunque la respuesta haya llegado por el canal de voz", ElTextoDelDelegadoLlegaAlHistorial);
         Prueba("348. el chat convierte Markdown técnico en texto conversacional sin perder contenido", ElChatEntregaTextoLegibleYCompleto);
         Prueba("349. U toca el borde izquierdo, la persona el derecho y el último texto queda visible", CadaVozTocaSuBorde);
+        // ESCRIBIR NUNCA DEJA EL TEXTO DOS VECES (spec 049, 2026-09-23). Un correo de Gmail quedó con el
+        // cuerpo repetido: el campo se comió los saltos, el juez lo leyó como «no cuajó», y el respaldo
+        // tecleó encima de lo que ya estaba. 410 y no 350: hasta la 407 están tomadas en ramas abiertas.
+        Prueba("410. escribir nunca deja el texto dos veces: un campo de una línea que se come los saltos SÍ tiene el texto; el respaldo por teclado no teclea si el campo ya lo tiene, reemplaza lo que haya en un campo que se lee y solo teclea encima de un campo vacío o mudo; y un campo que enseña el texto dos veces seguidas donde antes no estaba es «Doble», que no se da por escrito", EscribirNuncaDejaElTextoDosVeces);
         // UN ASISTENTE POR ESCRITORIO (spec 031, 2026-09-17). El dueño: «quiero dejar un asistente en cada
         // escritorio virtual; incrustar la carita en el centro de la consulta, con las dimensiones del pantallazo;
         // y un botón debajo para llevarla a otro escritorio, con la aplicación quedándose enfrente mío». Todo lo
@@ -10122,6 +10126,62 @@ internal static class Contrato
 
         Debe(Escrito("Cuajo") && Escrito("MudoNoSeSabe") && !Escrito("NoCuajo"),
             "solo el «no cuajó» se cuenta como fallo: reescribir un informe entero es peor daño que no poder confirmarlo");
+    }
+
+    private static void EscribirNuncaDejaElTextoDosVeces()
+    {
+        // EL CASO DEL LOG, LITERAL (2026-09-23, u-20260923-windows-app-p2684). SetValue dejó el texto sin
+        // saltos en un campo de una línea; la comparación colapsaba los espacios en vez de quitarlos, así
+        // que «David: La» no casó con «David:La», se dio por no escrito, y el respaldo lo tecleó DETRÁS.
+        var t = Grafico("U.Graph.Surfaces.ComoSeEscribe");
+        var tras = t?.GetMethod("TrasEscribir");
+        var seDa = t?.GetMethod("SeDaPorEscrito");
+        var antesDeTeclear = t?.GetMethod("AntesDeTeclear");
+        Debe(tras != null && seDa != null && antesDeTeclear != null,
+            "todavía no existe «ComoSeEscribe.AntesDeTeclear» (spec 049, promesa 410). "
+            + "La promesa está escrita y en rojo, que es donde tiene que estar");
+        if (tras == null || seDa == null || antesDeTeclear == null) return;
+        string V(string pedido, string? antes, string? despues)
+            => tras.Invoke(null, new object?[] { pedido, antes, despues })!.ToString()!;
+        string A(string pedido, string? loQueHay)
+            => antesDeTeclear.Invoke(null, new object?[] { pedido, loQueHay })!.ToString()!;
+        bool Escrito(string veredicto)
+        {
+            if (!Enum.GetNames(tras.ReturnType).Contains(veredicto)) return true;   // sin ese veredicto, lo daría por escrito
+            return (bool)seDa.Invoke(null, new[] { Enum.Parse(tras.ReturnType, veredicto) })!;
+        }
+
+        const string cuerpo = "Hola, José David:\n\nLa reunión quedó configurada el viernes a las dos de la tarde.\n\nSaludos.";
+        const string sinSaltos = "Hola, José David:La reunión quedó configurada el viernes a las dos de la tarde.Saludos.";
+
+        // 1. El campo que se come los saltos SÍ tiene el texto.
+        Debe(V(cuerpo, "", sinSaltos) == "Cuajo",
+            "un campo de una línea BORRA los saltos, no los cambia por espacios: «David:La» es el texto, y leerlo como "
+            + "«no cuajó» es lo que mandó a teclearlo otra vez");
+
+        // 2. El respaldo por teclado nunca añade encima.
+        Debe(A(cuerpo, sinSaltos) == "YaLoTiene", "si el campo ya tiene el texto, no se teclea: teclear ahí es escribirlo dos veces");
+        Debe(A("hola", " hola\n") == "YaLoTiene", "con los espacios y el salto que añade el editor, también lo tiene");
+        Debe(A("hola mundo", "hola") == "Reemplazando",
+            "si el campo se lee y tiene OTRA cosa —un resto a medias, lo de antes—, se reemplaza: SetValue reemplaza, y su respaldo también");
+        Debe(A("hola", "adiós") == "Reemplazando", "lo que había antes no se conserva delante de lo pedido");
+        Debe(A("hola", "holahola") == "Reemplazando", "un campo que ya lo tiene REPETIDO no «lo tiene»: se deja con una sola vez");
+        Debe(A("hola", "") == "Encima" && A("hola", "\n") == "Encima",
+            "un campo vacío —o el salto de línea que es el vacío de un editor web— se teclea sin más");
+        Debe(A("hola", null) == "Encima",
+            "UN CAMPO MUDO NO SE REEMPLAZA: no se ve qué tiene, y Ctrl+A en Google Docs selecciona el documento entero");
+
+        // 3. El juez ve el doble, y el doble no es escrito.
+        Debe(V(cuerpo, "", sinSaltos + sinSaltos) == "Doble",
+            "el campo del log —el texto dos veces seguidas— no es «cuajó»: contenerlo no es tenerlo UNA vez");
+        Debe(V("hola", "hola", "hola hola") == "Doble", "escribir «hola» sobre «hola» y acabar con dos es un doble");
+        Debe(V("hola", "holahola", "holahola") == "Cuajo", "si ya estaba repetido antes, no lo repitió esta escritura");
+        Debe(V("a", "", "casa blanca") != "Doble", "una letra que aparece varias veces no es un doble: el doble va seguido");
+        Debe(!Escrito("Doble"), "un doble no se da por escrito: decir «escribí» sobre un campo repetido es lo que dejó el correo así");
+
+        // Lo que ya prometía la 247 sigue en pie.
+        Debe(V("hola", "", "adiós") == "NoCuajo" && V("hola", null, null) == "MudoNoSeSabe",
+            "y lo de la 247 sigue igual: otra cosa no cuajó, lo ilegible no se sabe");
     }
 
     private static void ElClicQueNoMovioNadaSeRepiteUnaVez()

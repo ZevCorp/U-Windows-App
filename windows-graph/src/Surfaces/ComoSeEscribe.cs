@@ -68,10 +68,59 @@ public static class ComoSeEscribe
     /// <param name="leido">Lo que el campo dice tener ahora, o null si no se pudo leer.</param>
     public static bool Cuajo(string pedido, string? leido)
     {
-        string quiero = Aplanado(pedido);
+        string quiero = SinBlancos(pedido);
         if (quiero.Length == 0) return true;   // escribir vacío no se puede desmentir
         if (leido == null) return true;        // ilegible: no se juzga
-        return Aplanado(leido).Contains(Muestra(quiero), StringComparison.Ordinal);
+        return SinBlancos(leido).Contains(Muestra(quiero), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// EL TEXTO SIN NINGÚN BLANCO (promesa 410, spec 049). Colapsar no basta: un campo de una línea no
+    /// cambia los saltos por espacios, los BORRA. El 2026-09-23 un correo leyó «David:La reunión», la
+    /// comparación buscaba «David: La reunión», lo dio por no escrito, y el respaldo lo tecleó detrás.
+    /// </summary>
+    private static string SinBlancos(string? t)
+    {
+        if (string.IsNullOrEmpty(t)) return "";
+        var sb = new System.Text.StringBuilder(t.Length);
+        foreach (char c in t) if (!char.IsWhiteSpace(c)) sb.Append(c);
+        return sb.ToString();
+    }
+
+    /// <summary>¿El campo enseña el texto dos veces SEGUIDAS? Es lo que deja teclear detrás de lo que ya estaba.</summary>
+    private static bool Repetido(string pedido, string? leido)
+    {
+        string p = SinBlancos(pedido);
+        return p.Length > 0 && SinBlancos(leido).Contains(p + p, StringComparison.Ordinal);
+    }
+
+    /// <summary>Qué hace el respaldo por teclado con lo que el campo ya tiene (promesa 410).</summary>
+    public enum Tecleo
+    {
+        /// <summary>El campo ya enseña el texto: no se teclea, porque teclearlo es escribirlo dos veces.</summary>
+        YaLoTiene,
+        /// <summary>El campo se lee y tiene otra cosa: se vacía y se teclea, igual que SetValue reemplaza.</summary>
+        Reemplazando,
+        /// <summary>Vacío o mudo: se teclea sin más.</summary>
+        Encima,
+    }
+
+    /// <summary>
+    /// ANTES DE TECLEAR, MIRAR LO QUE HAY. Promesa 410 (spec 049).
+    /// </summary>
+    /// <remarks>
+    /// El respaldo tecleaba donde estuviera el cursor, y sobre un campo que ya tenía el texto eso es
+    /// añadirlo otra vez: un correo quedó con el cuerpo repetido el 2026-09-23. SetValue REEMPLAZA, y su
+    /// respaldo tiene que hacer lo mismo o deja de ser un respaldo para ser otra operación.
+    ///
+    /// UN CAMPO MUDO NO SE REEMPLAZA. No se ve qué tiene, y vaciarlo es Ctrl+A: en Google Docs eso
+    /// selecciona el documento ENTERO, y teclear encima borraría el trabajo de la persona.
+    /// </remarks>
+    public static Tecleo AntesDeTeclear(string pedido, string? loQueHay)
+    {
+        if (loQueHay == null || Aplanado(loQueHay).Length == 0) return Tecleo.Encima;
+        if (Repetido(pedido, loQueHay)) return Tecleo.Reemplazando;   // repetido no es «ya lo tiene»
+        return Cuajo(pedido, loQueHay) ? Tecleo.YaLoTiene : Tecleo.Reemplazando;
     }
 
     /// <summary>
@@ -95,10 +144,11 @@ public static class ComoSeEscribe
 
     /// <summary>
     /// De un texto largo basta reconocer su comienzo: un editor puede recortar, envolver o paginar el
-    /// resto, y comparar el informe entero es pedirle que no toque una coma.
+    /// resto, y comparar el informe entero es pedirle que no toque una coma. 50 caracteres SIN blancos,
+    /// que son los ~60 con espacios de antes de la promesa 410.
     /// </summary>
-    private static string Muestra(string aplanado)
-        => aplanado.Length <= 60 ? aplanado : aplanado[..60];
+    private static string Muestra(string sinBlancos)
+        => sinBlancos.Length <= 50 ? sinBlancos : sinBlancos[..50];
 
     /// <summary>Lo que se sabe después de escribir. Tres respuestas, no dos (promesa 247, spec 026).</summary>
     public enum Veredicto
@@ -109,6 +159,8 @@ public static class ComoSeEscribe
         NoCuajo,
         /// <summary>El campo no cuenta lo que tiene, así que no hay forma de saberlo.</summary>
         MudoNoSeSabe,
+        /// <summary>El campo enseña el texto dos veces seguidas y antes no: se escribió de más (promesa 410).</summary>
+        Doble,
     }
 
     /// <summary>
@@ -129,14 +181,17 @@ public static class ComoSeEscribe
     {
         if (Aplanado(pedido).Length == 0) return Veredicto.Cuajo;
         if (despues == null) return Veredicto.MudoNoSeSabe;
+        // CONTENERLO NO ES TENERLO UNA VEZ (promesa 410): `Contains` daba por escrito un campo con el
+        // texto repetido. Se mira antes que «cuajó», que también lo contiene.
+        if (Repetido(pedido, despues) && !Repetido(pedido, antes)) return Veredicto.Doble;
         if (Cuajo(pedido, despues)) return Veredicto.Cuajo;
         // El campo no dice nada: ni lo de antes ni lo pedido. No se puede saber, y no se inventa.
         if (Aplanado(despues).Length == 0) return Veredicto.MudoNoSeSabe;
         return Veredicto.NoCuajo;
     }
 
-    /// <summary>¿Se da por escrito? Solo el «no cuajó» es un fallo (promesa 247).</summary>
-    public static bool SeDaPorEscrito(Veredicto v) => v != Veredicto.NoCuajo;
+    /// <summary>¿Se da por escrito? El «no cuajó» es un fallo (promesa 247), y el doble también (410).</summary>
+    public static bool SeDaPorEscrito(Veredicto v) => v != Veredicto.NoCuajo && v != Veredicto.Doble;
 
     /// <summary>El error nombra lo pedido y dónde se buscó: «no encontré el elemento «»» no decía ninguna de las dos.</summary>
     public static string NoEncontre(string campo, string ventana)
