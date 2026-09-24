@@ -7,9 +7,13 @@ razones, con los censos como datos y un lector de fuentes que corrigió tres med
 **fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) ·
 **fase 3 hecha** (395 verde: las salidas directas suben por forma, tipo y número) · **fase 4 hecha**
 (397 verde: lo que las manos escriben va al log por su longitud) · **fase 5 hecha** (398 y 399
-verdes: lo dicho, lo narrado y el objetivo por su forma, y el censo cerrado, 35 de 35) · **las seis
-en verde; falta la compuerta (`verificar.ps1`) y el nivel 4** · Spec 051 · 2026-09-23 ·
-Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–399**
+verdes: lo dicho, lo narrado y el objetivo por su forma, y el censo cerrado, 35 de 35) · **revisión
+del 2026-09-24** (fase 6: diez hallazgos de un crítico sobre la fase 5, los diez ciertos y dos de ellos
+repetidos): ocho sitios más en el censo (35 → **43**), la cuenta del recorrido por lotes y el juez de
+la comprobación arreglados donde nacen, los dos servidores locales cerrados a otros orígenes, y dos
+promesas nuevas, **400** (el juez de la comprobación) y **401** (los servidores locales) · falta la
+compuerta (`verificar.ps1`) y el nivel 4 · Spec 051 · 2026-09-23 ·
+Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–401**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
 > la nota delante acaba en el log local, y el log entero sale del equipo hacia el backend por el
@@ -26,7 +30,9 @@ Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas 
 > (`046-el-decisor-lleva-todo-el-computer-use.md`, nueve promesas hoy numeradas 335–343) pase a 050
 > con sus promesas en **394+**. Si el dueño acepta esa propuesta, esta spec y aquella chocan en
 > 394–399; esta las toma porque hoy están libres en `origin/*` y lo dice aquí para que se decida
-> en el PR, sin reciclar ningún número.
+> en el PR, sin reciclar ningún número. **400 y 401**, comprobadas el 2026-09-24 tras `fetch` sobre las
+> 55 refs `origin/*` y las ramas locales **(M)**: ningún `Contrato.cs` registra un `Prueba("40…` y
+> ninguna spec tiene filas `| 40x |`; el más alto ajeno sigue siendo 393.
 >
 > **Marcas.** **(M)** medido: `grep`, `git log`, conteo sobre el log. **(D)** deducido del código.
 
@@ -46,7 +52,7 @@ fuera de `src` y compilado en `U.exe`— y `windows-graph/src`.
 | Cuánto log hay | **683** llamadas a `LogBus.Log(` en **78** archivos (676 en los `src`, 7 en `App.xaml.cs`), **85** etiquetas literales distintas (3 solo en `App.xaml.cs`: `fatal`, `unobserved-task`, `instalador`), y **26** embudos que meten entero en el log el texto de otro componente (`Log = s => LogBus.Log("workflow", s)`, `Diagnostic += … LogBus.Log("sap", msg)`…) | `grep` **(M)** |
 | Etiquetas y líneas no deciden lo mismo | con la lista blanca de 16 etiquetas de la primera versión de esta spec, **111** sentencias `LogBus.Log("<etiqueta de la lista>"` subirían enteras, más 4 embudos del player; **37** de las 111 interpolan texto ajeno cuyo contenido no está en el código (`.Message`, `{ex}`, `ToString()`, `{err}`, `{porque}`, `Recortar(cuerpo)`, `hecho.Porque`, `result.Error`) | `grep` **(M)**; casos: `EspejoDeConsulta.cs:141-142` (300 car. del cuerpo de error de Supabase), `RellenadorSap.cs:129` con `:454` (200 car. del cuerpo de `/api/v1/pipeline`, cuya petición lleva la nota), `App.xaml.cs:61, 80, 90` (`ex.ToString()`), `BackendClient.cs:117, 128` (el cuerpo entero en el mensaje) |
 | El diario del player lleva la etiqueta de cada paso, y la de un select **es** el valor | `Publish(el, "select", el.Current.Name)`; `Label` sale de `LabelOf`, que devuelve primero `info.Name`: `Label == Value`. El player la escribe en `· paso N: … «{s.Label}»`, `→ paso N «{step.Label}»`, `⏸ {pause.Headline}` (= `paso N · select «{Label}»`) y `eligió «{step.Label}»`, y esas líneas entran por los embudos `workflow` (×3) y `exportar` (×1) | `UiaSurface.cs:2359, 2385, 828`; `WorkflowPlayer.cs:193, 316, 351, 511`; `StepPause.cs:55`; `WorkflowMcpRunner.cs:50`, `FaceWindow.xaml.cs:4309`, `WorkflowLibraryWindow.xaml.cs:58`, `EjecutorDeExportaciones.cs:263` **(M, lectura)** |
-| Sitios que meten en el log lo escrito, lo dicho, lo narrado o el objetivo | **35** (tabla de abajo): 18 E, 5 D, 8 N y 4 O | `grep` + lectura de cada uno **(M)** |
+| Sitios que meten en el log lo escrito, lo dicho, lo narrado o el objetivo | **35** (tabla de abajo): 18 E, 5 D, 8 N y 4 O; **43** tras la revisión del 2026-09-24 (+5 E, +3 N) | `grep` + lectura de cada uno **(M)** |
 | Salidas del equipo que llevan líneas o texto libre | **2 canales**: el espejo (1 sitio) y las llamadas directas a `TelemetryBus.Emit` (**10** sitios; 6 con texto libre o ajeno: el objetivo, el resumen, el contexto, el `Message` de un error, la etiqueta de un paso y el error de un workflow) | `grep 'TelemetryBus\.Emit('` **(M)** |
 | Los canales, hoy | oyentes del log: `EspejoDelLog.cs:43` (`Anotado`) y `LogWindow.xaml.cs:16` (`Logged`, en pantalla); `Snapshot()` solo en `LogWindow.xaml.cs:13`; `TodayFile()` solo dentro de `LogBus`; rutas `/agent/`: `Telemetry.cs:111` (`/agent/register`), `:135` (`/agent/events`), `FaceWindow.xaml.cs:1014` (`/agent/usage`, solo cifras), `BackendClient.cs:92` (`/agent/turn`, el turno del cerebro) y `Credenciales/ClavesDelBackend.cs:221` (`GET /agent/claves`, las claves del backend: no lleva nada del log; la quinta la encontró el lector de fuentes de la fase 0, el `grep` de esta tabla no la había visto) **(M)**. Que ninguno de los 47 `PostAsync/SendAsync` del cliente lleve una línea suelta del log en su cuerpo es **(D)**: se leyeron por archivo, no uno a uno | `grep` |
 | El log local de esta máquina lo guarda hoy | 17 archivos (2026-08-06 → 09-22): **107** líneas «usuario dijo:» y **92** «Ü dijo:» en 6 archivos; 1 «✓ escrito «» y 1 «→ map_type» | conteo con `grep -c`, **sin leer el contenido** **(M)** |
@@ -101,6 +107,11 @@ huecos permitidos** en ella además de los que empiezan por `SinValor.` o `Linea
 | E16 | `Ui/WorkflowLibraryWindow.xaml.cs:174` | `workflow-ui` | «primer workflow crudo: {raw[0]}»; si el resumen trae los pasos, trae los valores grabados al enseñar **(D)** | `primer workflow crudo` | — |
 | E17 | `Ui/FaceWindow.xaml.cs:735` | `nucleo-http` | «no pude {accion} «{dato}»: {e.Message}», con `dato` = lo tecleado por el servidor del núcleo (`(sel, texto) => accionar("input", sel, texto)`, `:997`) | `"nucleo-http", $"no pude {accion}` (corregida en la fase 0: `"nucleo-http", $"no pude` está en **4** sentencias, `:596, 622, 735, 787` **(M)**) | `accion`, `e.Message` |
 | E18 | `Agent/AgentLoop.cs:295` | `agent` | «… → {Short(result, 120)}»: para una acción `mcp`, `result` es la respuesta del mapa (`LocalMcp.cs:38` → `SurfaceMapTools.Call`), que repite el texto (`RelatoDeEscribir`, `:2847`) | `en '{where}' →` | `Describe(a)`, `where`, `Short(SinValor.Tapar(result, …), 120)` |
+| E19 | `Navigation/ServidorDelNucleo.cs:220-222` (revisión) | `nucleo-http` | «escrito «{dato}» en «{etiqueta}»» y «NO pude escribir «{dato}»…» en **cada** `/escribir` y `/elegir`; E17 era solo la rama de la excepción de la lambda `accionar` | `"escrito" : "elegido"` | `etiqueta` |
+| E20 | `Agent/AgentLoop.cs:269` (revisión) | `agent` | «texto descartado='{Short(a.Text, 40)}'»: la hermana de E10 en el mismo `ExecuteAsync`, cuando la compuerta de origen descarta un `type` | `texto descartado` | `why` |
+| E21 | `Ui/FaceWindow.xaml.cs:3350-3351` (revisión) | `comprobar` | «plan del piloto: … escribir «{p.Texto}» en «{p.Exit}»…»: la clase de E3 en `RecorrerElPlan`; el `{p.Texto}` va en la línea siguiente al `LogBus.Log`, y por eso el `grep` por líneas no lo vio | `plan del piloto:` | `Piloto.PlanDeComprobacion.LineaDelPlan(pasos)` |
+| E22 | `Ui/FaceWindow.xaml.cs:3374` (revisión) | `comprobar` | «plan · PARÓ … : {res.Cuenta}», la cuenta del recorrido, que citaba lo escrito (`RecorrerSegunElNucleo.cs:180, 337`) | `plan · PARÓ en el paso` | `i + 1`, `id.ParaSenalar`, `res.Cuenta` (la cuenta se arregla donde nace: §*Decisión 6*) |
+| E23 | `Ui/FaceWindow.xaml.cs:5675` (revisión) | `aprendizajes` | «← » + `res.Cuenta` de mostrar, la misma cuenta | `"aprendizajes", "← "` | `res.Cuenta` (ídem) |
 
 **D — lo que se dice (5)**
 
@@ -124,6 +135,9 @@ huecos permitidos** en ella además de los que empiezan por `SinValor.` o `Linea
 | N6 | `Ui/FaceWindow.xaml.cs:5598-5599` | `envio` | «… · {r.Ultimo}» | `"envio", $"piloto terminó` | `(r.Termino ? "bien" : $"salida {r.Salida}")`, `reloj.ElapsedMilliseconds`, `r.CostoUsd:0.000` |
 | N7 | `Ui/ConsultaWindow.cs:2090` | `consulta` | «cuenta del envío: {cuenta}» (la devuelve el piloto) | `cuenta del envío` | — |
 | N8 | `Agent/AgentLoop.cs:180` | `agent` | «■ fin · {Short(summary, 160)}»: lo que Ü contestó | `■ fin` | `actions` |
+| N9 | `Piloto/RegistroDeLaComprobacion.cs:171` (revisión) | `comprobar` | «evento {n}: … · {vt.Motivo}», con ««{que}» dice «{ahora}» y la demo tecleó «{e.Texto}»» (`:166-169`): la clase de E2 en el juez de la comprobación | `LineaDelCampo(` | `n` |
+| N10 | `Ui/FaceWindow.xaml.cs:3324-3326` (revisión) | `comprobar` | «piloto terminó … · {final.Motivo}», el relato de `Final()`, que juntaba esos motivos (`RegistroDeLaComprobacion.cs:212`) | `"comprobar", $"piloto terminó` | los de N6 más `registro.Hechos`, `registro.Total` y `final.Motivo` (el relato se arregla donde nace: §*Decisión 6*) |
+| N11 | `Ui/ConsultaWindow.cs:1719` (revisión) | `aprendizajes` | «← {cuenta}»: el veredicto que vuelve de «Mostrar»; por la rama «comprobar» lleva `final.Motivo` y «el piloto no terminó bien ({r.Ultimo})» (`FaceWindow.xaml.cs:3331`), lo mismo que N5 tapó tres líneas antes | `"aprendizajes", $"← ` | — |
 
 **O — el objetivo (4)** (ver §*Diseño*, decisión 4: **ya no** se queda en el log local)
 
@@ -137,6 +151,15 @@ huecos permitidos** en ella además de los que empiezan por `SinValor.` o `Linea
 Descartados al leerlos **(M)**: `memoria` (`ConversacionEnVivo.cs:2060, 2107, 2266`): `resultado.Response`
 son frases fijas de `MemoriaPersonal.cs:40-62`, no repiten lo guardado. `exportar`, `clinica`,
 `consulta` (salvo N7) y `DictadoEnVivo` ya registran longitudes.
+
+**La revisión del 2026-09-24 contó además tres sitios que no son sentencias de log** y por eso no
+tienen fila: la cuenta del recorrido por lotes (`RecorrerSegunElNucleo.cs:180, 337`, «no pude escribir
+«…»», «escribí «…» y quedé en…»), el motivo del juez de la comprobación (`RegistroDeLaComprobacion.cs:166-169`)
+y la «←» del mapa para las herramientas cuya respuesta cita lo que no viene en sus argumentos
+(`SurfaceMapTools.cs:2167`: `voz_preguntar` —lo que la persona contestó—, `leccion_llegue` y
+`leccion_plan` —lo que el juez leyó y lo que la demo tecleó—; el crítico nombró las dos primeras, la
+tercera salió al contar la clase). Se arreglan donde nacen (§*Decisión 6*) y los juzgan la 397(g), la
+400 y la 398(e) con el productor real.
 
 ### Las salidas del equipo
 
@@ -320,6 +343,64 @@ piezas que ya están en el log (`FaceWindow.xaml.cs:4387` y la línea `resultado
 la voz vive en la conversación. La línea queda `▶ objetivo: ‹N car.›` más la compuerta, y S2 sube lo
 mismo.
 
+### Decisión 5 (revisión del 2026-09-24): los servidores locales atienden a esta máquina y a su propia página, nada más
+
+`127.0.0.1` no es «solo esta máquina»: el navegador del médico también lo es. Medido leyendo el código
+**(M)**: hay **2** servidores locales, `ServidorMcp` (8790, `POST /mcp`) y `ServidorDelNucleo` (8792);
+**ninguno** miraba el `Origin`, y el del núcleo contestaba además con `Access-Control-Allow-Origin: *`
+(`ServidorDelNucleo.cs:94`). Con eso, cualquier página podía **leer** `/batches` —el rastro guardaba la
+cuenta del recorrido tal cual (`FaceWindow.xaml.cs:900`), y la cuenta citaba lo escrito— y, con o sin
+CORS, **hacer** que Ü escribiera o despachara una herramienta: un `POST` con `text/plain` es una
+petición «simple» que el navegador manda sin permiso previo, y los dos servidores leen el cuerpo como
+JSON sin mirar su tipo. Que un navegador concreto lo deje pasar hoy (Chromium empieza a pedir permiso de
+red local) es **(D)**; lo que el servidor contesta a cada `Origin` no depende de ningún navegador, y eso
+es lo que se promete.
+
+| Alternativa | Por qué no |
+|---|---|
+| Solo tapar al guardar en el rastro | Cierra `/batches` y deja las dos puertas de escritura abiertas: el crítico lo nombra de pasada («esa página también puede hacer POST a /escribir e /ir») y el MCP ni lo nombra. |
+| Solo quitar el CORS | Impide **leer**, no **actuar**: el `POST` simple llega igual. |
+| Un token por petición | El visor y `ci-terreno.ps1` tendrían que conocerlo; el piloto y el Agent SDK ya lo tendrían que recibir por otro canal. Mucha maquinaria para lo que resuelve una regla de una línea. |
+| **Mirar `Origin` y `Host`** | Un navegador **siempre** manda `Origin` en una petición de otro origen (y en todo `POST`), y no deja a una página falsificarlo. Quien no es navegador —el piloto en Node, el Agent SDK, PowerShell, la propia app— no lo manda. Así que: sin `Origin`, se atiende; con `Origin`, solo si es la página del propio servidor (`http://127.0.0.1:PUERTO`, que es desde donde se sirve el visor, `/visor`). `null` —`file://`, un iframe con sandbox— no lo es. El `Host` tiene que ser esta máquina en ese puerto (un `Host` ajeno es un nombre que alguien resolvió a 127.0.0.1); http.sys ya lo rechaza antes de llegar al código porque el prefijo es explícito **(D, documentado)**, y se comprueba igual, porque esa protección vive en una configuración que no es de este archivo. |
+
+Una sola regla en un solo sitio, `Navigation/PuertaLocal.Admite(origen, host, puerto)`, que los dos
+servidores llaman **antes** de leer el cuerpo: lo rechazado contesta 403, anota «rechazada … : el
+porqué» y no toca nada. Cada servidor gana un parámetro `puerto` (por defecto el de siempre) para que el
+contrato los arranque de verdad en un puerto libre sin pisar la app viva.
+
+**Lo que se pierde, dicho:** el visor abierto con `file://` deja de funcionar (su `Origin` es `null`); se
+abre por `http://127.0.0.1:8792/visor`, que existe desde el 2026-08 y es el mismo archivo.
+
+### Decisión 6 (revisión del 2026-09-24): la cuenta del recorrido y el motivo del juez se arreglan donde nacen
+
+**La cuenta del recorrido por lotes** (`RecorrerSegunElNucleo.cs:180, 337`) citaba lo escrito y tenía
+**5 salidas** contadas **(M)**: la respuesta al modelo (`map_batch`, `map_skill_run`, `map_type` en SAP,
+`leccion_plan`), la «←» del batch y de la skill (`SurfaceMapTools.cs:1051, 1138`, tapadas en la fase 4),
+el rastro de `/batches` (`FaceWindow.xaml.cs:900`), el «plan · PARÓ» (`:3374`) y la «←» de mostrar
+(`:5675`, que además vuelve a la consulta, N11). Tapar en cada salida es la lista de cinco que la
+sexta deja vieja; la cuenta pasa a decir `no pude escribir ‹N car.› en «Talla».` y `escribí ‹N car.› y
+quedé en «…»`. El modelo no pierde nada: la cuenta es la respuesta a los pasos que **él** mandó, y sigue
+nombrando el campo.
+
+**El motivo del juez de la comprobación** (`RegistroDeLaComprobacion.cs:166-169`) tiene dos lectores con
+necesidades opuestas, y por eso se parte en dos en vez de taparse:
+
+- **al piloto** (`Llegue` → `leccion_llegue`, `Pendientes()` → `leccion_plan`) se le sigue diciendo
+  ««Talla» dice «17» y la demo tecleó «170»»: la **175** lo exige («el motivo nombra los dos valores») y
+  el piloto trabaja con la lección, valores incluidos, delante;
+- **al log y al relato final** (`Final()`, que anotan N10 y la consulta) va `LineaDelCampo`: la etiqueta,
+  la longitud de lo que dice el campo y si es lo que tecleó la demo —igual, «con otro formato» (el `82` que
+  SAP devuelve como `82,000`: la comparación del juez, `LoMismoTecleado`, lo da por hecho, y decir
+  «distinto» sería una línea que contradice a su veredicto), o distinto con la longitud de lo tecleado—, o
+  por qué no se pudo leer. `SinValor.Contraste` no sirve aquí tal cual: compara letra a letra, y el juez
+  compara números.
+
+Y como la respuesta de `leccion_llegue` y la de `leccion_plan` llevan ese motivo al modelo, y la de
+`voz_preguntar` lleva lo que la persona contestó, la «←» del mapa anota esas tres **por su longitud**
+(`SurfaceMapTools.RespuestaParaElLog`): son las únicas herramientas cuya respuesta cita lo que no viene en
+sus argumentos, y lo que su «←» enseñaba ya lo anota otra línea sin valores —el juez (`comprobar: evento
+N: …`), el plan (`plan del piloto`, `plan · …`) y la voz (`usuario dijo: ‹N car.›`)—.
+
 ## La especificación
 
 El enunciado es el que va **literalmente** en `tests/ContratoDelGrafo/Contrato.cs`.
@@ -329,13 +410,19 @@ El enunciado es el que va **literalmente** en `tests/ContratoDelGrafo/Contrato.c
 | **394** | el espejo del log sube por línea marcada, no por etiqueta: de una línea anotada con LogBus.Log —sea cual sea su etiqueta, también exportar, workflow o dictado, y también la que llega por el diario del player— solo sale del equipo su etiqueta y su longitud, con label exactamente «‹etiqueta› · línea de N car.» y un detail con exactamente las claves tag y largo; entera sale solo la anotada con LogBus.Publico, y cada LogBus.Publico del código está en el censo de la 051 con su etiqueta, su ancla y sus huecos —uno nuevo, o uno que cambie un hueco, pone el contrato rojo nombrando archivo y línea—; ninguno lleva una de las catorce etiquetas de lo escrito, lo dicho, lo narrado o el objetivo; y una línea de la etiqueta telemetry no produce ningún evento | 2 |
 | **395** | ninguna otra salida del equipo lleva lo escrito, lo dicho, lo narrado ni el objetivo: el objetivo y el resumen de una corrida consciente y el contexto de un workflow suben por su longitud, un error sube por su tipo y no por su mensaje, y un paso de workflow por su número y su tipo de acción, nunca por su etiqueta; cada TelemetryBus.Emit del código está en el censo de la 051 con todos sus argumentos; y los canales por los que algo puede salir —los oyentes de LogBus, los lectores del archivo y del anillo del log y las llamadas a rutas /agent/— son exactamente los censados: uno nuevo, o uno que cambie lo que manda, pone el contrato rojo nombrando archivo y línea | 3 |
 | **396** | el log del rellenador dice etiqueta, longitud y si coincide, nunca el valor: la línea que el rellenador anota al escribir un campo es exactamente su etiqueta, la longitud de lo leído y si es igual a lo pedido, igual salvo mayúsculas o espacios, o distinto con la longitud de lo pedido; la de un campo que quedó vacío, exactamente su etiqueta y la longitud de lo pedido; y se juzga la línea que el rellenador de verdad anota, no una función aparte | 1 |
-| **397** | lo que las manos escriben no queda en el log: la línea de cada llamada al mapa nombra sus argumentos de lugar (target, selector, surface, app, path, exit, workflow_id) con su valor y cualquier otro solo por su longitud; la línea de su respuesta y la del resultado de una acción mcp del agente consciente tapan esos valores aunque la respuesta los repita; y el recorrido por lotes, el «type» del agente consciente, el contexto con que se invoca un workflow y el dato que el núcleo no pudo escribir van por su longitud | 4 |
-| **398** | lo que se dice y lo que se pide no queda en el log: lo que dijo la persona y lo que contestó Ü al cerrar un turno, el mensaje crudo del servidor que no se traduce, lo que narra el piloto, el objetivo de una corrida consciente y su resumen final se registran por su longitud —y su tipo—, nunca por su texto | 5 |
-| **399** | el censo de la 051 queda cerrado en el código: cada uno de los 35 sitios contados el 2026-09-23 se encuentra por su ancla y su sentencia no tiene más huecos que SinValor, una longitud o los permitidos de su fila; ninguna línea que llega al log —por LogBus.Log o por cualquier embudo que acabe en él— ni ningún error que una superficie devuelve interpola un valor ni un texto sueltos en todo windows-client y windows-graph —su longitud sí—; y un embudo hacia el log que el juez no sabe seguir lo pone rojo | 5 |
+| **397** | lo que las manos escriben no queda en el log: la línea de cada llamada al mapa nombra sus argumentos de lugar (target, selector, surface, app, path, exit, workflow_id) con su valor y cualquier otro solo por su longitud; la línea de su respuesta y la del resultado de una acción mcp del agente consciente tapan esos valores aunque la respuesta los repita; y el recorrido por lotes —su línea, la cuenta que devuelve y el plan del piloto—, el «type» del agente consciente —también el que la compuerta de origen descarta—, el contexto con que se invoca un workflow y el dato que el núcleo escribe, elige o no pudo escribir van por su longitud | 4, 6 |
+| **398** | lo que se dice y lo que se pide no queda en el log: lo que dijo la persona y lo que contestó Ü al cerrar un turno, lo que la persona contesta a una pregunta del piloto, el mensaje crudo del servidor que no se traduce, lo que narra el piloto —también dentro del veredicto que vuelve a la consulta—, el objetivo de una corrida consciente y su resumen final se registran por su longitud —y su tipo—, nunca por su texto | 5, 6 |
+| **399** | el censo de la 051 queda cerrado en el código: cada uno de los 43 sitios contados —35 el 2026-09-23 y 8 en la revisión del 2026-09-24— se encuentra por su ancla y su sentencia no tiene más huecos que SinValor, una longitud o los permitidos de su fila; en todo windows-client y windows-graph, ninguna línea que llega al log —por LogBus.Log o por cualquier embudo que acabe en él— ni ningún error que una superficie devuelve lleva, fuera de SinValor y de una línea Linea…, un hueco que nombre valor, texto o dato, o que lea un miembro Texto —su longitud sí—, y lo que esa regla no nombra lo juzga solo el censo; y un embudo hacia el log que el juez no sabe seguir lo pone rojo | 5, 6 |
+| **400** | el juez de la comprobación dice etiqueta, longitud y si coincide, nunca el valor: la línea que anota al juzgar un campo tecleado es exactamente el evento, su veredicto, la etiqueta del campo, la longitud de lo que dice y si es lo que tecleó la demo —igual, con otro formato, o distinto con la longitud de lo tecleado—, o por qué no se pudo leer; el relato de su veredicto final no lleva ni lo leído ni lo tecleado; la línea con que el mapa anota la respuesta de una llegada o de un plan del piloto va por su longitud; y lo que el juez le dice al piloto sigue nombrando los dos valores, como exige la 175 | 6 |
+| **401** | los servidores locales no son una puerta abierta: ninguna respuesta del servidor del núcleo ni del MCP lleva Access-Control-Allow-Origin; una petición con un Origin que no es la página del propio servidor, o con un Host que no es esta máquina en su puerto, se rechaza sin tocar nada —ni escribir, ni despachar una herramienta—; la que llega sin Origin o desde la propia página se atiende, y lo que el núcleo escribe se anota por su longitud; y los servidores locales, sus prefijos y sus rutas son exactamente los censados: uno nuevo pone el contrato rojo nombrando archivo y línea | 6 |
 
 **La que cierra el asunto es la 394**: mientras el espejo suba por defecto, cualquier arreglo en
 origen es una lista de 35 que el sitio 36 deja vieja. Las 396–399 cierran el log local; la 394 y la
 395 cierran la salida del equipo aunque el log local volviera a llenarse.
+La **400** y la **401** son de la revisión del 2026-09-24: la 400 cierra el último productor de la
+clase de E2 (el juez de la comprobación), y la 401 cierra la salida que ninguna otra miraba, porque no
+es ni el log ni `/agent/`: los dos servidores locales, a los que hasta hoy podía hablarles cualquier
+página del navegador.
 
 ## Con qué se juzga cada una (sin pantalla, sin SAP, sin red)
 
@@ -365,6 +452,11 @@ pura puede estar intacta y nadie llamarla. Los dos se ven rojos, verificados por
 | 397 | **(a)** `new SurfaceMapTools(() => null).Call("herramienta_de_prueba_051", { text: "ZZ-INVENTADO-051", decir: "Paciente Inventado Cero", target: "Talla" })` con `LogBus.Anotado` escuchando (herramienta inexistente: cae en «herramienta de mapa no soportada», `SurfaceMapTools.cs:2130`, sin tocar nada; el contrato ya llama a `Call` en `:8513` y `:11000`): la línea «→» es **exactamente** `→ herramienta_de_prueba_051 text=‹16 car.› decir=‹23 car.› target=Talla`. **(b)** `SurfaceMapTools.LineaDeRespuesta(12, SurfaceMapTools.RelatoDeEscribir("ZZ-INVENTADO-051", "", ""), args)` es exactamente `← (12 ms) escribí ‹16 car.› y confirmé con Enter`. **(c)** `LineaDelRecorrido` con un paso de texto «ZZ-INVENTADO-051» y uno de salida «Guardar»: exactamente `recorrido de 2 paso(s): escribir ‹16 car.› → «Guardar»`. **(d)** `AgentLoop.Describe` (privada, por reflexión) de un `type` en (10,20) con `Text` «Ñandú Inventado 051»: exactamente `type (10,20) ‹19 car.›`. **(e)** La línea «MCP invoca» de la ejecución de 395(a): exactamente `MCP invoca workflow_id='wf-051' context=‹35 car.›`. **(f)** `SinValor.Tapar("escribí «ZZ-INVENTADO-051» y confirmé con Enter; zz-inventado-051 quedó", "ZZ-INVENTADO-051")` es exactamente `escribí ‹16 car.› y confirmé con Enter; ‹16 car.› quedó` (E18 usa esto sobre los argumentos de la acción; su cableado lo juzga la 399(a)) | **Función:** en `LineaDeLlamada`, la pertenencia a los argumentos de lugar pasa a `true` (todo argumento con su valor) → (a) roja. **Cableado:** en `Call`, la línea «→» vuelve a `string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"))` en vez de `LineaDeLlamada(…)` → (a) roja (y la 399(a)) |
 | 398 | **(a)** `ConversacionEnVivo.Procesar` (reflexión, con los sobres de GPT-Live que ya usan 209–224): una transcripción de la persona «Paciente Inventado Cero tiene 38,5 inventado», un trozo de Ü «anoto ZZ-INVENTADO-051» y el cierre de turno → las líneas `voz-viva` son de la forma exacta `usuario dijo: ‹N car.›` y `Ü dijo: ‹M car.›` (`N`, `M`: la longitud de lo acumulado) y ninguna línea anotada contiene esas frases. **(b)** Un mensaje que no se traduce con la frase dentro (`session.instructions.appended` con un campo `nota`): la línea «←» es de la forma exacta `← session.instructions.appended · ‹N car.›`. **(c)** `ElPiloto.LineaDelPiloto(json)`, pura: `{"tipo":"texto","texto":"Paciente Inventado Cero"}` → exactamente `texto: ‹23 car.›`; «ZZ-INVENTADO-051 sin json» → exactamente `línea sin JSON: ‹25 car.›`. **(d)** La corrida de 395(a′) con `LogBus.Anotado` escuchando: la línea `agent` del objetivo es exactamente `▶ objetivo: ‹33 car.› · SIN compuerta de superficie`, la del fin es exactamente `■ fin · 0 acción(es) · ‹70 car.›`, y ninguna línea contiene «ZZ-INVENTADO-051» | **Función:** `ElPiloto.LineaDelPiloto` devuelve `$"{tipo}: {texto}"` → (c) roja. **Cableado:** «usuario dijo: {SinValor.Forma(…)}» vuelve a «usuario dijo: {_fraseUsuario}» → (a) roja; y, tercero y opcional, `▶ objetivo: «{Short(goal, 160)}»` restaurado → (d) roja |
 | 399 | Las fuentes (`U_REPO`). **(a) El censo:** por cada uno de los 35 sitios, el ancla de su fila aparece en su archivo (las veces que dice la fila), y la sentencia que la contiene —desde el inicio de la sentencia hasta su `;`, o hasta su `,` en un brazo de `switch` (E10)— no tiene más huecos que los que empiezan por `SinValor.` o `Linea…(`, los que terminan en `.Length` y los permitidos de su fila, comparados como texto normalizado sin espacios. El juez dice cuántos de 35 y, de cada uno que falla, si falta el ancla o qué hueco sobra. **(b) La regla:** en todo el ámbito, en cada sentencia que llega al log y en cada `error = $"` / `err = $"`, ningún hueco nombra como identificador entero `valor` o `texto` fuera de una llamada a `SinValor.`/`Linea…(` —salvo seguido de `.Length`, y sin mirar dentro de los literales del hueco—. **Las formas de llegar al log no son una lista fija: se derivan de los embudos.** Cada lambda cuyo cuerpo llama a `LogBus.Log(` se resuelve al nombre que la recibe —el miembro asignado (`X = s => …`), el evento suscrito (`X += (_, m) => …`) o el parámetro al que se pasa, seguido hasta el campo que lo guarda— y ese nombre da las formas `X(`, `X?.Invoke(` y `X.Invoke(`; más `LogBus.Log(` y ` L($"`. Una lambda que no se deja resolver pone la 399 roja nombrando archivo y línea («embudo sin seguir»). Hoy, por esas formas y fuera de `LogBus.Log`, pasan **30** sentencias (`_log(`, `_log?.Invoke(`, `anotar?.Invoke(`, `Cuenta?.Invoke(`, `Diario?.Invoke(`, `LogGlobal?.Invoke(`…) **(M)**. **Solo esos dos nombres en (b), y medido por qué:** con `value`, `despues`, `leido` y `pedido` la misma búsqueda daba 15 aciertos de los que **5 eran falsos** (`IconosDelEscritorio.cs:278`, `Desplazamiento.cs:84`, `FaceWindow.Escritorio.cs:49`, `FaceWindow.xaml.cs:4326`, `UiaSurface.cs:403`); con `valor` y `texto` y la excepción de `.Length`, **0 falsos** sobre `043addc` **(M)**. (b) es la red para el caso obvio de mañana; el juez de verdad es (a), y lo que (b) no ve —`dato` en E17, `result` en E18, `despues`/`leido`/`value` en E2, E13, E15— lo lleva el censo. Sin `U_REPO`: «NO PUDE JUZGARLA», incumplida. **Medido con el juez de la fase 0 sobre `043addc`** (un lector de C# que distingue literal, comentario y hueco, no un `grep`): 36 lambdas-embudo resueltas (42 nombres por los que se les llama, cada uno con su ámbito), 1 externa (`PlanesALaMano.cs:62`, `ContinueWith`, que no se declara aquí) y 0 sin seguir; por las formas derivadas y `L(` pasan **147** sentencias fuera de `LogBus.Log` y de los errores (las 30 de arriba contaban seis formas con nombre; esta cuenta incluye las 80 de `L(` en `UiaSurface`/`WorkflowPlayer`). Un parámetro que solo llega al log dentro de `SinValor.`/`Linea…(` o por su `.Length` no hace embudo de su lambda (si no, E9 arreglado seguiría «embudando» `MundoQueToca.cs:102`). Un nombre de embudo que es un **parámetro** vale dentro de su método, y el **campo** que lo guarda dentro de su tipo, siguiéndolo a los métodos a los que se pasa tal cual: `MundoQueToca.cs` tiene dos `_sap` en dos clases, y `MiradaSubida.Real` no invoca `anotar`, se lo pasa a `SubirAOpenAI`. `(texto ?? "").Length` cuenta como longitud (`UiaSurface.cs:403, 1499`, precedentes buenos que si no darían falso). Hoy (b) da **12**: 9 del censo (E1, E2, E6–E9, E13, E14, N1), 2 que pasan por las lambdas de E9 y E17 y se van con ellas (`MundoQueToca.cs:102`, `_sap(campo, texto)`; `FaceWindow.xaml.cs:998`, `accionar("input", sel, texto)`) y **1 fuera del censo**: `Voice/MiradaSubida.cs:87`, el cuerpo de un error de OpenAI (`Corto(texto)`) por el embudo `anotar` (`ConversacionEnVivo.cs:1618` → `MiradaSubida.Real` → `SubirAOpenAI`). No es lo escrito, pero es texto ajeno entero en el log: la fase 5 lo registra por su código y su longitud | **Función:** en `FaceWindow.xaml.cs:855`, «no pude escribir «{SinValor.Forma(texto)}»» vuelve a ««{texto}»» → (a) y (b) rojas (ningún juez dinámico pasa por ahí). **Cableado:** en `FaceWindow.xaml.cs:735`, `var d = dato;` y «no pude {accion} «{d}»» → (a) roja (hueco `d` no permitido) mientras (b) sigue verde: es la prueba de que el juez es (a) |
+| 397 (revisión) | **(g)** La cuenta del recorrido, por el ejecutor real (`RecorrerSegunElNucleo` con un grafo de un campo «Talla» y manos falsas): con `escribir` que falla, la cuenta contiene exactamente `no pude escribir ‹16 car.› en «Talla».`; con `escribir` que acierta y una llegada que no llega, `escribí ‹16 car.› y quedé en «uia://x.exe/a»`; y en ninguna de las dos está el valor. **(h)** `PlanDeComprobacion.LineaDelPlan` de un paso de texto en «Talla» y uno de salida «Guardar» es exactamente `2 paso(s) → escribir ‹16 car.› en «Talla» → «Guardar»` (`Pendiente` si no existe). El «type» que la compuerta descarta (E20) y el dato del núcleo (E19) los juzga el censo de la 399(a); E19, además, la 401(b) con el servidor de verdad | **Cableado:** en `RecorrerSegunElNucleo.cs:180`, `{SinValor.Forma(paso.Texto)}` vuelve a `«{paso.Texto}»` → (g) roja |
+| 398 (revisión) | **(e)** `new SurfaceMapTools(() => null) { Preguntar = _ => "la persona dijo: «Paciente Inventado Cero mide 170»" }.Call("voz_preguntar", { texto: "¿qué talla tiene?" })` con `LogBus.Anotado` escuchando: al piloto le llega la respuesta entera (precondición), la «←» es de la forma exacta `← (N ms) ‹51 car.›` y ninguna línea contiene «Paciente Inventado Cero». El veredicto que vuelve a la consulta (N11) lo juzga el censo | **Cableado:** en `SurfaceMapTools.Call`, la «←» anota `r` en vez de `RespuestaParaElLog(…)` → (e) roja, y la 400(c) también |
+| 399 (revisión) | **(a)** El censo pasa a **43** filas: las 35 y E19–E23, N9–N11 (§*El censo*), con las mismas reglas de ancla y huecos. **(b)** La regla nombra además `dato` (identificador entero) y el **miembro** `Texto` —con mayúscula, y no seguido de `(`: `Texto(raiz, "status")` es una llamada que lee el estado de un encuentro (`ClinicaClient.cs:92`), el único falso que dio la primera versión—. **No** entran `.Text` (en `FaceWindow.xaml.cs:332, 358` es el texto de un nodo del árbol de SAP, clase L) ni `value`/`.Value` (5 falsos de 15 en la fase 0). Medido sobre `00dcd42` con el juez de fuentes **(M)**: `dato` y `Texto` encuentran **3** huecos en **2** sentencias —`ServidorDelNucleo.cs:220` (dos `{dato}`) y `FaceWindow.xaml.cs:3350` (`p.Texto`)—, los tres de lo escrito, y **0 falsos** tras excluir la llamada. El enunciado dice ahora exactamente eso —lo que la regla nombra, y que lo demás solo lo juzga el censo—, porque el de antes («ningún … interpola un valor ni un texto sueltos») prometía una regla general que su juez no miraba (aprendizaje nº18) | **Función:** en `FaceWindow.xaml.cs:3350`, la línea vuelve a `escribir «{p.Texto}»` → (a) roja por E21 y (b) roja por `p.Texto`: la regla ampliada ve lo que antes solo veía el censo |
+| 400 | **(a)** Por el productor real, `RegistroDeLaComprobacion.Llegue`, sobre una lección de un campo tecleado («Talla», `wnd[0]/usr/txtZZ-051`) con una lectura falsa, cada línea `comprobar` por **igualdad exacta**: leído «ZZ-OTRO-051» → `evento 1: NO hecho · «Talla» = ‹11 car.›, distinto de lo que tecleó la demo (‹16 car.›)`; leído «zz-inventado-051» → `evento 1: HECHO · «Talla» = ‹16 car.›, lo que tecleó la demo`; tecleado «170», leído «170,000» → `evento 1: HECHO · «Talla» = ‹7 car.›, lo que tecleó la demo con otro formato (‹3 car.›)`; lectura nula → `evento 1: NO hecho · «Talla» no se pudo leer (la lectura no devolvió nada): sin comprobar lo que tecleó la demo (‹16 car.›)`; lectura que lanza → `… (leerlo lanzó InvalidOperationException): …`. En cada caso, `Final().Motivo` no contiene ni lo leído ni lo tecleado, y ninguna línea anotada tampoco. **(b)** El `Motivo` que se le dice al piloto sí nombra los dos (la 175). **(c)** Por el despacho real, `Call("leccion_llegue", { n: "1" })` y `Call("leccion_plan", { pasos: "[]" })` con delegados que devuelven la forma de `FaceWindow` (llegada y relato del plan con los pendientes del juez): al piloto le llega lo leído (precondición), la «←» es exactamente `← (N ms) ‹M car.›` y ninguna línea lleva lo leído ni lo tecleado | **Función:** `LineaDelCampo` devuelve el `Motivo` de antes (con los dos valores) → (a) roja |
+| 401 | **(d)** Las fuentes: ningún literal del ámbito contiene `Access-Control-Allow-Origin`; cada archivo con un `new HttpListener(` en el código llama a `PuertaLocal.Admite(`; y los servidores, sus prefijos (`$"http://127.0.0.1:{…}/…"`) y sus rutas (literales `"/…"` de esos archivos) son exactamente los 14 del censo —2 `HttpListener`, `/mcp/`, `/`, y las 10 rutas del núcleo—, nombrando archivo y línea de cada sobra o falta. **(a)** `PuertaLocal.Admite`, pura, en 10 casos: sin `Origin`, vacío, la propia página por `127.0.0.1` y por `localhost` → atiende; una página ajena, `null`, otra página de esta máquina en otro puerto, un `Host` ajeno, sin `Host` y el `Host` de otro puerto → rechaza. **(b)** El servidor del núcleo **de verdad**, en un puerto libre, con un grafo de un campo «Talla» vivo: `POST /escribir` desde una página ajena → 403 y no escribe; desde `null` → 403; con un `Host` ajeno → 4xx sin escribir (http.sys lo corta antes); `GET /batches` desde una página ajena → 403, sin el rastro; sin `Origin` → 200, el valor llega entero a las manos y la línea `nucleo-http` es exactamente `escrito ‹16 car.› en «Talla»`; la propia página y quien llega sin `Origin` leen `/batches`; y **ninguna** respuesta lleva `Access-Control-Allow-Origin`. **(c)** El servidor MCP de verdad, con una herramienta que solo cuenta: desde una página ajena → 403 y 0 despachos; sin `Origin` → 200 y 1; sin CORS. Si un servidor no arranca: «NO PUDE JUZGARLA», incumplida | **Cableado:** en `ServidorDelNucleo.Atender`, la llamada a `PuertaLocal.Admite` se sustituye por un veredicto que siempre atiende → (b) roja (y la (d), que ya no la encuentra) |
 
 **Dos sabotajes por promesa, y se comprueba el sabotaje** (CLAUDE.md, 2026-08-21): el diff contra la
 copia de seguridad tiene que enseñar la línea cambiada antes de contar la roja, y el build no se
@@ -382,9 +474,11 @@ Una rama para la spec; cada fase un commit que pone verde su promesa sin romper 
 | **3** | **395** | `Agent/AgentLoop.cs:96, 133, 181` · `Mcp/WorkflowMcpRunner.cs:39, 55, 69-72` | 6 de 10 salidas (S2, S3, S4, S8, S9, S10) | 395 verde; los dos sabotajes vistos rojos |
 | **4** | **397** | `Mcp/SurfaceMapTools.cs` (E3–E8: `LineaDeLlamada`, `LineaDeRespuesta`, `LineaDelRecorrido`, y `:2700`, `:2792`, `:2819` con `Forma`) · `Ui/FaceWindow.xaml.cs:735, 855` (E17, E9) · `Agent/AgentLoop.cs:295, 307` (E18, E10) y **su comentario falso de `:300-303`** · `Voice/ConversacionEnVivo.cs:1327` (E12, con `Tapar`) · `windows-graph/src/Surfaces/SapGuiSurface.cs:535, 1035` y `UiaSurface.cs:1542` (E13–E15: el error dice qué regla falló y la forma, no el valor) · `Ui/WorkflowLibraryWindow.xaml.cs:174` (E16) | 15 (E3–E10, E12–E18) | 397 verde; los dos sabotajes vistos rojos |
 | **5** | **398** y **399** | `Voice/ConversacionEnVivo.cs:1868, 1938, 1939, 2416` (D1–D4) · `Voice/RecordatoriosEnVivo.cs:29` (D5) · `Piloto/ElPiloto.cs:98, 101, 103` (N1–N3, con `LineaDelPiloto`) · `Ui/FaceWindow.xaml.cs:3186, 3325, 5599` (N4–N6) · `Ui/ConsultaWindow.cs:2090` (N7) · `Agent/AgentLoop.cs:92, 180` (O1, N8) · `Mcp/SurfaceMapTools.cs:1767, 1778` (O2, O3, con `Tapar`) · `Actions/Freno.cs:128` (O4) · y `Voice/MiradaSubida.cs:87`, que no es del censo pero la 399(b) lo encuentra por el embudo `anotar` (el cuerpo de un error de OpenAI: por su código y su longitud) · y `Navigation/ElTramo.cs:190`, la «←» del tramo con el objetivo entero, que no es del censo y la 399 no ve (hallazgo de la fase 4) · y, hallados al contar la clase O en esta fase, la «←» del mapa para `map_tramo`, `map_alto` y `map_tramo_estado` (`SurfaceMapTools.cs`, `Call`) y la línea `album` de `Navigation/MapaVivo.cs:512` | 17 (D1–D5, N1–N8, O1–O4) + 1 de la regla + 1 de la fase 4 + 2 de la clase O | 398 y 399 verdes (399: 35 de 35); sabotajes vistos rojos; `CONTRATO INTACTO` |
+| **6** (revisión) | **400** y **401**, y **397–399** con lo que la revisión les añade | rojo primero: las promesas nuevas y los casos nuevos en `Contrato.cs`, con `Pendiente` por reflexión para `PuertaLocal.Admite`, los constructores con `puerto` y `PlanDeComprobacion.LineaDelPlan`. Después: `Navigation/RecorrerSegunElNucleo.cs:180, 337` (la cuenta) · `Piloto/RegistroDeLaComprobacion.cs` (`LineaDelCampo`, el relato de `Final()` y el `catch { }` mudo de `:163`) · `Piloto/PlanDeComprobacion.cs` (`LineaDelPlan`) · `Mcp/SurfaceMapTools.cs` (`RespuestaParaElLog`) · `Navigation/PuertaLocal.cs` (nuevo) · `Navigation/ServidorDelNucleo.cs` (sin CORS, la puerta, el puerto, E19) · `Mcp/ServidorMcp.cs` (la puerta, el puerto) · `Agent/AgentLoop.cs:269` (E20) · `Ui/FaceWindow.xaml.cs:3350` (E21) · `Ui/ConsultaWindow.cs:1719` (N11) | 8 del censo (E19–E23, N9–N11; 3 de ellos, E22, E23 y N10, ya limpios en cuanto la cuenta y el relato nacen limpios) + 3 en origen (la cuenta, el motivo del juez, la «←» de 3 herramientas) + 2 servidores | 394–401 verdes (399: 43 de 43); un sabotaje por promesa tocada, visto rojo; `CONTRATO INTACTO` |
 
 Total en origen: **35 sitios** (2 + 1 + 15 + 17), **7 salidas** (S1, S2, S3, S4, S8, S9, S10) y
-**26 líneas públicas** (23 que pasan de `Log` a `Publico`, 3 nuevas). El número va en cada commit de
+**26 líneas públicas** (23 que pasan de `Log` a `Publico`, 3 nuevas). Tras la revisión: **43 sitios** (+8), **3
+productores arreglados en origen** y **2 servidores locales** con su puerta. El número va en cada commit de
 fase (patrón nº5).
 
 **Zonas.** `windows-graph/` (`SinValor`, E13–E15): riesgo bajo, pero **el checkout principal tiene
@@ -450,6 +544,19 @@ regla de la decisión 1, con su lectura.
   que revienta deja una línea `logbus:` en el anillo y el archivo, sin repartirla (repartirla a quien
   acaba de reventar es un bucle). No cambia a ningún oyente; los jueces de esta spec siguen
   protegiéndose igual (§*Con qué se juzga*).
+- **La «←» del mapa de lo que se LEE en la pantalla** (revisión del 2026-09-24): `map_what_i_see`,
+  `map_where_am_i` y el inventario que se pega a los actos (`ComoSeContesta.Pegar`) citan lo leído,
+  hasta 200 caracteres en el log local. Es la clase L, y va con la 052. `map_recuerdos` cita lo que la
+  persona enseñó sobre un elemento («este campo es la talla»); no se clasificó en esta revisión y se
+  dice sin medir **(D)**.
+- **Lo que el juez de la comprobación le dice al piloto** nombra lo leído y lo tecleado, a propósito (la
+  175 y §*Decisión 6*). Es lo que viaja a un modelo: la 053.
+- **El visor abierto con `file://`** deja de hablar con el 8792 (su `Origin` es `null`): se abre por
+  `http://127.0.0.1:8792/visor`. La respuesta de `/escribir` sigue devolviendo el `dato` a quien lo
+  mandó: ya solo puede ser esta máquina sin navegador o la propia página.
+- **Que el piloto y el Agent SDK no manden `Origin`** es **(D)** —ni `fetch` de Node ni los SDK de MCP lo
+  ponen por defecto—: si alguno lo mandara, sus llamadas saldrían `403` con la línea `mcp: rechazada …`
+  en el log, y el nivel 4 lo verá.
 - **La 012**: su fase 3 (el log del rellenador) la absorbe esta spec como 396. Sus 168, 169 y 171
   siguen sin contrato y **sin número**: los cuatro se reciclaron el 2026-09-07. Se le dice al dueño
   en el PR; esta spec no la renumera.
@@ -466,7 +573,12 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
 3. **Panel del Provider Studio**: las líneas de `update`, `exportar` (P17–P23) y `workflow`
    (P24–P26) con su texto; las de `dictado`, `voz-viva`, `mapa-mcp` y el paso a paso del player como
    cadencia; buscar cada valor inventado → 0.
-4. Pegar en el PR las líneas con **hora**, no «probado», y las dos pantallas con nombre.
+4. **Revisión del 2026-09-24:** una comprobación con el piloto sobre una lección con un campo tecleado
+   (triage) y un «Mostrar» desde la consulta: `grep -c` de cada valor inventado en el log → 0, las
+   líneas `comprobar: evento N: … · «Campo» = ‹N car.›, …` y `aprendizajes: ← ‹N car.›`; el piloto
+   sigue llegando al 8790 (ninguna línea `mcp: rechazada`), y el visor se abre por
+   `http://127.0.0.1:8792/visor` y pinta el terreno y los batches.
+5. Pegar en el PR las líneas con **hora**, no «probado», y las dos pantallas con nombre.
 
 ## Hallazgos
 
@@ -729,10 +841,28 @@ cadencia desde la fase 2; (3) congelar es la fricción correcta, pero **por lín
 los argumentos y **los canales**: congelar etiquetas congelaba lo que no importa; (4) `dato` en
 `FaceWindow.xaml.cs:735` (E17), y `result` en `AgentLoop.cs:295` (E18).
 
+**2026-09-24 · Un crítico sobre la fase 5, diez hallazgos.** Los diez se comprobaron leyendo el código
+en `00dcd42` antes de tocar nada; **ninguno resultó falso**, y dos repiten a otros dos (el 8 al 4, el 9
+al 5). Los números de línea son los de `00dcd42`.
+
+| # | Hallazgo | Veredicto | Qué se midió | Qué cambió |
+|---|---|---|---|---|
+| 1 | `/batches` se sirve sin tapar con `Access-Control-Allow-Origin: *`, y la cuenta cita lo escrito; la misma cabecera deja a cualquier página hacer `POST` a `/escribir` e `/ir` | **cierto**, y más ancho | `ServidorDelNucleo.cs:94, 149-154`; `FaceWindow.xaml.cs:900`; `RecorrerSegunElNucleo.cs:180, 337` **(M, lectura)**. Contando la clase: **2** servidores locales, **ninguno** miraba el `Origin`; el MCP (8790) no tiene CORS pero atiende un `POST` simple desde cualquier página **(M, lectura; que un navegador lo mande es (D))**. La cuenta tenía **5** salidas y 1 tapada | §*Decisión 5* y 401; la cuenta arreglada donde nace (§*Decisión 6*, 397(g)) |
+| 2 | `nucleo-http` anota el `dato` en cada `/escribir` y `/elegir` | **cierto** | `ServidorDelNucleo.cs:220-222`; la 399(b) no lo ve porque se llama `dato` **(M)** | E19; la 399(b) nombra `dato` |
+| 3 | `AgentLoop.cs:269` anota el texto del `type` descartado | **cierto** | la clase de E10 tenía **2** sitios en `AgentLoop`, no 1 **(M)** | E20 |
+| 4 | El juez de la comprobación anota lo leído y lo tecleado, y `Final()` lo junta en el relato | **cierto**, y un tercer camino | `RegistroDeLaComprobacion.cs:166-171, 212`; `FaceWindow.xaml.cs:3324-3326`; y la «←» de `leccion_llegue` y `leccion_plan`, que el hallazgo no nombra **(M)** | §*Decisión 6*, 400; N9, N10 |
+| 5 | `ConsultaWindow.cs:1719` anota entero el veredicto, con `final.Motivo` y `r.Ultimo` | **cierto** | la lectura «sin datos» de la fase 4 valía solo para la rama «mostrar» **(M)** | N11; el veredicto va al log por su longitud (en pantalla sigue entero) |
+| 6 | La «←» del mapa solo tapa lo que viene en los argumentos: `voz_preguntar` y `leccion_llegue` citan lo que no | **cierto**, y una tercera | `SurfaceMapTools.cs:2167-2168`; `FaceWindow.xaml.cs:3280-3281, 3474`; `leccion_plan` cita los pendientes del juez **(M)** | `RespuestaParaElLog`; 398(e), 400(c) |
+| 7 | El plan del piloto anota `escribir «{p.Texto}»` y el «PARÓ» la cuenta sin tapar | **cierto** | `FaceWindow.xaml.cs:3350-3351, 3374`; el `grep` por líneas no lo vio porque el hueco va en la línea siguiente **(M)** | E21, E22; `LineaDelPlan`; la cuenta en origen |
+| 8 | = 4 | **cierto** (repetido) | — | — |
+| 9 | = 5 | **cierto** (repetido) | — | — |
+| 10 | El enunciado de la 399 promete una regla general que su (b) no juzga | **cierto** | (b) solo nombraba `valor` y `texto` **(M, lectura del juez)** | las dos cosas que el hallazgo ofrecía: el enunciado dice lo que se juzga, y (b) nombra además `dato` y el miembro `Texto`, con su medida de falsos (0 tras excluir la llamada `Texto(`) |
+
 ## Cierre
 
 - [x] Todas las promesas verdes (`.\scripts\contrato-del-grafo.ps1` → CONTRATO INTACTO), y el de la voz intacto — 2026-09-24, fase 5: 304 cumplidas, 0 rojas; VOZ ÍNTEGRA
 - [x] Dos sabotajes por promesa —función y cableado—, vistos rojos y verificados por diff — fases 1–5, uno de cada por promesa (394–399), en §*Hallazgos*
+- [ ] Revisión del 2026-09-24 (fase 6): 394–401 verdes, un sabotaje por promesa tocada visto rojo
 - [ ] `.\scripts\verificar.ps1` pasa, con evidencia en `out\evidencia.md`
 - [ ] Nivel 4 en ≥2 pantallas, con nombre: triage (`SAPLY000`) y admisión (`NV2000`)
 - [ ] Estado de este documento: **implementado** (AAAA-MM-DD)

@@ -848,9 +848,13 @@ internal static class Contrato
         Prueba("394. el espejo del log sube por línea marcada, no por etiqueta: de una línea anotada con LogBus.Log —sea cual sea su etiqueta, también exportar, workflow o dictado, y también la que llega por el diario del player— solo sale del equipo su etiqueta y su longitud, con label exactamente «‹etiqueta› · línea de N car.» y un detail con exactamente las claves tag y largo; entera sale solo la anotada con LogBus.Publico, y cada LogBus.Publico del código está en el censo de la 051 con su etiqueta, su ancla y sus huecos —uno nuevo, o uno que cambie un hueco, pone el contrato rojo nombrando archivo y línea—; ninguno lleva una de las catorce etiquetas de lo escrito, lo dicho, lo narrado o el objetivo; y una línea de la etiqueta telemetry no produce ningún evento", ElEspejoSubePorLineaMarcada);
         Prueba("395. ninguna otra salida del equipo lleva lo escrito, lo dicho, lo narrado ni el objetivo: el objetivo y el resumen de una corrida consciente y el contexto de un workflow suben por su longitud, un error sube por su tipo y no por su mensaje, y un paso de workflow por su número y su tipo de acción, nunca por su etiqueta; cada TelemetryBus.Emit del código está en el censo de la 051 con todos sus argumentos; y los canales por los que algo puede salir —los oyentes de LogBus, los lectores del archivo y del anillo del log y las llamadas a rutas /agent/— son exactamente los censados: uno nuevo, o uno que cambie lo que manda, pone el contrato rojo nombrando archivo y línea", NingunaOtraSalidaLlevaLoEscrito);
         Prueba("396. el log del rellenador dice etiqueta, longitud y si coincide, nunca el valor: la línea que el rellenador anota al escribir un campo es exactamente su etiqueta, la longitud de lo leído y si es igual a lo pedido, igual salvo mayúsculas o espacios, o distinto con la longitud de lo pedido; la de un campo que quedó vacío, exactamente su etiqueta y la longitud de lo pedido; y se juzga la línea que el rellenador de verdad anota, no una función aparte", ElRellenadorDiceLaFormaNoElValor);
-        Prueba("397. lo que las manos escriben no queda en el log: la línea de cada llamada al mapa nombra sus argumentos de lugar (target, selector, surface, app, path, exit, workflow_id) con su valor y cualquier otro solo por su longitud; la línea de su respuesta y la del resultado de una acción mcp del agente consciente tapan esos valores aunque la respuesta los repita; y el recorrido por lotes, el «type» del agente consciente, el contexto con que se invoca un workflow y el dato que el núcleo no pudo escribir van por su longitud", LasManosNoDejanLoEscritoEnElLog);
-        Prueba("398. lo que se dice y lo que se pide no queda en el log: lo que dijo la persona y lo que contestó Ü al cerrar un turno, el mensaje crudo del servidor que no se traduce, lo que narra el piloto, el objetivo de una corrida consciente y su resumen final se registran por su longitud —y su tipo—, nunca por su texto", LoDichoYLoPedidoNoQuedanEnElLog);
-        Prueba("399. el censo de la 051 queda cerrado en el código: cada uno de los 35 sitios contados el 2026-09-23 se encuentra por su ancla y su sentencia no tiene más huecos que SinValor, una longitud o los permitidos de su fila; ninguna línea que llega al log —por LogBus.Log o por cualquier embudo que acabe en él— ni ningún error que una superficie devuelve interpola un valor ni un texto sueltos en todo windows-client y windows-graph —su longitud sí—; y un embudo hacia el log que el juez no sabe seguir lo pone rojo", ElCensoDeLo051QuedaCerrado);
+        Prueba("397. lo que las manos escriben no queda en el log: la línea de cada llamada al mapa nombra sus argumentos de lugar (target, selector, surface, app, path, exit, workflow_id) con su valor y cualquier otro solo por su longitud; la línea de su respuesta y la del resultado de una acción mcp del agente consciente tapan esos valores aunque la respuesta los repita; y el recorrido por lotes —su línea, la cuenta que devuelve y el plan del piloto—, el «type» del agente consciente —también el que la compuerta de origen descarta—, el contexto con que se invoca un workflow y el dato que el núcleo escribe, elige o no pudo escribir van por su longitud", LasManosNoDejanLoEscritoEnElLog);
+        Prueba("398. lo que se dice y lo que se pide no queda en el log: lo que dijo la persona y lo que contestó Ü al cerrar un turno, lo que la persona contesta a una pregunta del piloto, el mensaje crudo del servidor que no se traduce, lo que narra el piloto —también dentro del veredicto que vuelve a la consulta—, el objetivo de una corrida consciente y su resumen final se registran por su longitud —y su tipo—, nunca por su texto", LoDichoYLoPedidoNoQuedanEnElLog);
+        Prueba("399. el censo de la 051 queda cerrado en el código: cada uno de los 43 sitios contados —35 el 2026-09-23 y 8 en la revisión del 2026-09-24— se encuentra por su ancla y su sentencia no tiene más huecos que SinValor, una longitud o los permitidos de su fila; en todo windows-client y windows-graph, ninguna línea que llega al log —por LogBus.Log o por cualquier embudo que acabe en él— ni ningún error que una superficie devuelve lleva, fuera de SinValor y de una línea Linea…, un hueco que nombre valor, texto o dato, o que lea un miembro Texto —su longitud sí—, y lo que esa regla no nombra lo juzga solo el censo; y un embudo hacia el log que el juez no sabe seguir lo pone rojo", ElCensoDeLo051QuedaCerrado);
+        // Revisión del 2026-09-24: el juez de la comprobación anotaba lo leído y lo tecleado, y los servidores
+        // locales atendían a cualquier página del navegador (8792 con CORS abierto sirviendo el rastro de batches).
+        Prueba("400. el juez de la comprobación dice etiqueta, longitud y si coincide, nunca el valor: la línea que anota al juzgar un campo tecleado es exactamente el evento, su veredicto, la etiqueta del campo, la longitud de lo que dice y si es lo que tecleó la demo —igual, con otro formato, o distinto con la longitud de lo tecleado—, o por qué no se pudo leer; el relato de su veredicto final no lleva ni lo leído ni lo tecleado; la línea con que el mapa anota la respuesta de una llegada o de un plan del piloto va por su longitud; y lo que el juez le dice al piloto sigue nombrando los dos valores, como exige la 175", ElJuezDeLaComprobacionDiceLaForma);
+        Prueba("401. los servidores locales no son una puerta abierta: ninguna respuesta del servidor del núcleo ni del MCP lleva Access-Control-Allow-Origin; una petición con un Origin que no es la página del propio servidor, o con un Host que no es esta máquina en su puerto, se rechaza sin tocar nada —ni escribir, ni despachar una herramienta—; la que llega sin Origin o desde la propia página se atiende, y lo que el núcleo escribe se anota por su longitud; y los servidores locales, sus prefijos y sus rutas son exactamente los censados: uno nuevo pone el contrato rojo nombrando archivo y línea", LosServidoresLocalesNoSonUnaPuertaAbierta);
         Console.WriteLine();
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
@@ -12088,6 +12092,35 @@ internal static class Contrato
             const string esperada = "escribí ‹16 car.› y confirmé con Enter; ‹16 car.› quedó";
             Debe(tapado == esperada, $"Tapar cambia el valor —entre «» y suelto, sin mirar mayúsculas— por su forma: «{esperada}» (es «{tapado}»)");
         }
+
+        // (g) LA CUENTA QUE DEVUELVE EL RECORRIDO POR LOTES, por el ejecutor real con manos falsas (revisión del
+        // 2026-09-24). Esa cuenta tenía CINCO salidas —la respuesta al modelo, la «←» del batch (tapada en la fase
+        // 4), el rastro que sirve /batches (FaceWindow.xaml.cs:900), el «plan · PARÓ» de la comprobación y la «←»
+        // de mostrar— y solo una tapada: se arregla donde nace, no en cada salida (patrón nº5).
+        var gT = new Nucleo.Grafo();
+        gT.Estoy("uia://x.exe/a");
+        gT.Observar("uia://x.exe/a", new[] { new Nucleo.Elemento("s:t", "Talla", "Edit") });
+        string dondeT = "uia://x.exe/a";
+        var pulsarT = new PulsarSegunElNucleo(gT, () => dondeT, (sel, et) => true) { EsperaMaximaMs = 240 };
+        var noEscribe = new RecorrerSegunElNucleo(gT, () => dondeT, pulsarT, escribir: (_, _) => false) { EsperaMaximaMs = 240 };
+        string c1 = noEscribe.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Talla", Inventado051) }).Cuenta;
+        Debe(c1.Contains("no pude escribir ‹16 car.› en «Talla».", StringComparison.Ordinal) && !c1.Contains(Inventado051, StringComparison.OrdinalIgnoreCase),
+            $"la cuenta de un recorrido que no pudo escribir dice «no pude escribir ‹16 car.› en «Talla».», nunca lo escrito (es «{c1}»)");
+        var escribe = new RecorrerSegunElNucleo(gT, () => dondeT, pulsarT, escribir: (_, _) => true) { EsperaMaximaMs = 240 };
+        string c2 = escribe.Recorre(new[] { new RecorrerSegunElNucleo.Paso("Talla", Inventado051, "uia://x.exe/otra") }).Cuenta;
+        Debe(c2.Contains("escribí ‹16 car.› y quedé en «uia://x.exe/a»", StringComparison.Ordinal) && !c2.Contains(Inventado051, StringComparison.OrdinalIgnoreCase),
+            $"y la de uno que escribió y no llegó, «escribí ‹16 car.› y quedé en «uia://x.exe/a»…», tampoco (es «{c2}»)");
+
+        // (h) EL PLAN DEL PILOTO, que la comprobación anota antes de recorrerlo (FaceWindow.xaml.cs, RecorrerElPlan).
+        var plan = Cap004("U.WindowsClient.Piloto.PlanDeComprobacion")?.GetMethod("LineaDelPlan", BindingFlags.Public | BindingFlags.Static);
+        if (plan == null) Pendiente("Piloto.PlanDeComprobacion.LineaDelPlan (la línea del plan del piloto, por la longitud de lo que escribe)", "397", "051");
+        else
+        {
+            var pasosDelPlan = new List<U.WindowsClient.Piloto.PasoDelPlan> { new(1, "Talla", Inventado051, "", "", ""), new(2, "Guardar", "", "", "", "") };
+            string linea = (string?)Llama051(plan, null, pasosDelPlan) ?? "(null)";
+            const string esperada = "2 paso(s) → escribir ‹16 car.› en «Talla» → «Guardar»";
+            Debe(linea == esperada, $"la línea del plan del piloto es exactamente «{esperada}» (es «{linea}»)");
+        }
     }
 
     /// <summary>Promesa 398.</summary>
@@ -12132,6 +12165,24 @@ internal static class Contrato
             Debe(agente.Count(l => l == fin) == 1, $"y el fin, exactamente «{fin}» (anotó: {string.Join(" | ", agente.Select(l => "«" + l + "»"))})");
             Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)),
                 $"y ninguna línea de la corrida contiene «{Inventado051}»:" + Renglones(lineas.Where(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)).Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+
+        // (e) LO QUE LA PERSONA CONTESTA A UNA PREGUNTA DEL PILOTO (revisión del 2026-09-24). voz_preguntar devuelve
+        // «la persona dijo: «…»» (FaceWindow.xaml.cs, PreguntarYEsperar), y la «←» del mapa solo tapaba lo que venía
+        // en los argumentos —la pregunta—, así que la respuesta salía entera: la 398 cubría «usuario dijo:» y no
+        // esta segunda copia. Por el despacho real, con la voz falsa.
+        {
+            string contestado = $"la persona dijo: «{Paciente051} mide 170»";
+            var voz = new SurfaceMapTools(() => null) { Preguntar = _ => contestado };
+            string devuelto = "";
+            var lineas = LineasDurante(anotado, () => devuelto = voz.Call("voz_preguntar",
+                new Dictionary<string, string> { ["texto"] = "¿qué talla tiene?" }));
+            Debe(devuelto == contestado, $"(precondición) al piloto le llega la respuesta entera: la necesita para seguir (le llegó «{devuelto}»)");
+            var vuelta = lineas.Where(l => l.Etiqueta == "mapa-mcp" && l.Texto.StartsWith("← ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+            Debe(vuelta.Count == 1 && Regex.IsMatch(vuelta[0], $@"^← \(\d+ ms\) ‹{contestado.Length} car\.›$"),
+                $"la línea de la respuesta a una pregunta del piloto es «← (N ms) ‹{contestado.Length} car.›» (anotó: {string.Join(" | ", vuelta.Select(l => "«" + l + "»"))})");
+            Debe(!lineas.Any(l => l.Texto.Contains(Paciente051, StringComparison.OrdinalIgnoreCase)),
+                "y ninguna línea anotada contiene lo que la persona contestó:" + Renglones(lineas.Where(l => l.Texto.Contains(Paciente051, StringComparison.OrdinalIgnoreCase)).Select(l => $"{l.Etiqueta}: {l.Texto}")));
         }
 
         // (a) y (b) LO DICHO Y LO QUE NO SE TRADUCE, por la puerta del socket de una conversación GPT-Live sin socket.
@@ -12198,8 +12249,268 @@ internal static class Contrato
         int nombres = embudos.Select(e => (e.Nombre, e.Posicion, e.En?.Ruta, e.Ini)).Distinct().Count();
         Debe(regla.Count == 0,
             $"ninguna línea que llega al log —por LogBus.Log, por L( o por uno de los {lambdas} embudos derivados de lambdas ({nombres} nombres "
-            + $"por los que se les llama), que hoy llevan {porEmbudos} sentencias— ni ningún error que una superficie devuelve interpola "
-            + "«valor» o «texto» enteros:" + Renglones(regla));
+            + $"por los que se les llama), que hoy llevan {porEmbudos} sentencias— ni ningún error que una superficie devuelve lleva un hueco "
+            + "que nombre «valor», «texto» o «dato» enteros, o que lea un miembro «Texto»:" + Renglones(regla));
+    }
+
+    /// <summary>Promesa 400.</summary>
+    /// <remarks>
+    /// EL JUEZ DE LA COMPROBACIÓN ANOTABA LO QUE LEÍA Y LO QUE LA DEMO TECLEÓ. RegistroDeLaComprobacion.cs:166-171
+    /// (medido sobre 00dcd42, 2026-09-24): «evento 3: NO hecho · «Talla» dice «17» y la demo tecleó «170»», y
+    /// Final() juntaba esos motivos en el relato que FaceWindow anota con «piloto terminó … · {final.Motivo}» y
+    /// devuelve a la consulta. Es la clase de E2 (RellenadorSap), arreglada en la fase 1 allí y no aquí. El motivo
+    /// que se le dice AL PILOTO sigue nombrando los dos valores —la 175 lo exige, y el piloto trabaja con la lección
+    /// delante—; lo que cambia es lo que se ANOTA, y la línea con que el mapa anota esa respuesta.
+    /// </remarks>
+    private static void ElJuezDeLaComprobacionDiceLaForma()
+    {
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        var tt = TiposDeLaLeccion.Cargar();
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "400", "051"); return; }
+        if (tt == null) { Pendiente("los tipos de la lección (Teach.EventoDeLaLeccion, Teach.Leccion…)", "400", "051"); return; }
+
+        const string otro = "ZZ-OTRO-051";   // 11
+        U.WindowsClient.Teach.Leccion LeccionDe(string tecleado)
+        {
+            var ev = ListaDe(tt.Evento);
+            ev.Add(tt.Evento_(1, 1000, "clic", 1, 1, "wnd[0]/usr/txtZZ-051", tecleado, "", "", "", Array.Empty<string>(), etiqueta: "Talla"));
+            return (U.WindowsClient.Teach.Leccion)tt.Leccion_("sapgui://QAS/ZZ051", "sapgui://QAS/ZZ051", ev, ListaDe(tt.CuadroLeccion));
+        }
+
+        // (a) LA LÍNEA DEL JUEZ, por el productor real (Llegue) con una lectura falsa, y por IGUALDAD EXACTA: un
+        // «no contiene» dejaría pasar un prefijo del valor.
+        var casos = new (string Tecleado, Func<string, string?> Leer, bool Hecho, string Linea)[]
+        {
+            (Inventado051, _ => otro, false, "evento 1: NO hecho · «Talla» = ‹11 car.›, distinto de lo que tecleó la demo (‹16 car.›)"),
+            (Inventado051, _ => "zz-inventado-051", true, "evento 1: HECHO · «Talla» = ‹16 car.›, lo que tecleó la demo"),
+            ("170", _ => "170,000", true, "evento 1: HECHO · «Talla» = ‹7 car.›, lo que tecleó la demo con otro formato (‹3 car.›)"),
+            (Inventado051, _ => null, false, "evento 1: NO hecho · «Talla» no se pudo leer (la lectura no devolvió nada): sin comprobar lo que tecleó la demo (‹16 car.›)"),
+            (Inventado051, _ => throw new InvalidOperationException("el campo " + otro + " no contesta"), false,
+                "evento 1: NO hecho · «Talla» no se pudo leer (leerlo lanzó InvalidOperationException): sin comprobar lo que tecleó la demo (‹16 car.›)"),
+        };
+        foreach (var (tecleado, leer, hecho, esperada) in casos)
+        {
+            var registro = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(tecleado), leer);
+            U.WindowsClient.Piloto.VeredictoDeEvento? v = null;
+            var lineas = LineasDurante(anotado, () => v = registro.Llegue(1, "sapgui://QAS/ZZ051"));
+            Debe(v != null && v.Aterrizo == hecho, $"(precondición) tecleado «{tecleado}»: el veredicto es {(hecho ? "HECHO" : "NO hecho")} (es {(v == null ? "nada" : v.Aterrizo ? "HECHO" : "NO hecho")})");
+            var delJuez = lineas.Where(l => l.Etiqueta == "comprobar").Select(l => l.Texto).ToList();
+            Debe(delJuez.Count == 1 && delJuez[0] == esperada,
+                $"tecleado «{tecleado}»: la línea del juez es exactamente «{esperada}» (anotó {delJuez.Count}: {string.Join(" | ", delJuez.Select(l => "«" + l + "»"))})");
+            string final = registro.Final().Motivo;
+            var enElFinal = new[] { tecleado, otro, "170,000", "zz-inventado-051" }.Where(x => final.Contains(x, StringComparison.OrdinalIgnoreCase)).ToList();
+            Debe(enElFinal.Count == 0, $"tecleado «{tecleado}»: el relato del veredicto final no lleva ni lo leído ni lo tecleado (lleva {string.Join(", ", enElFinal.Select(x => "«" + x + "»"))}: «{final}»)");
+            Debe(!lineas.Any(l => l.Texto.Contains(tecleado, StringComparison.OrdinalIgnoreCase) || l.Texto.Contains(otro, StringComparison.OrdinalIgnoreCase)),
+                $"tecleado «{tecleado}»: ninguna línea anotada lleva lo leído ni lo tecleado:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+
+        // (b) LO QUE EL JUEZ LE DICE AL PILOTO sigue nombrando los dos valores (la 175): arreglar el log no es dejar
+        // al piloto sin saber qué hay en el campo.
+        var alPiloto = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(Inventado051), _ => otro);
+        var vp = alPiloto.Llegue(1, "sapgui://QAS/ZZ051");
+        Debe(vp.Motivo.Contains(Inventado051, StringComparison.Ordinal) && vp.Motivo.Contains(otro, StringComparison.Ordinal),
+            $"el motivo que se le dice al piloto nombra lo que dice el campo y lo que tecleó la demo (es «{vp.Motivo}»)");
+
+        // (c) LA LÍNEA CON QUE EL MAPA ANOTA LA RESPUESTA de una llegada y de un plan: citan lo que el juez leyó y lo
+        // que la demo tecleó, que no vienen en los argumentos (n, pasos), así que LineaDeRespuesta no sabría taparlos.
+        // Los delegados repiten la forma de FaceWindow.xaml.cs (Llegue y el relato de RecorrerElPlan): lo que se
+        // juzga es el despacho del mapa, que es el mismo para cualquier productor.
+        var comprobando = new U.WindowsClient.Piloto.RegistroDeLaComprobacion(LeccionDe(Inventado051), _ => otro);
+        var mano = new SurfaceMapTools(() => null)
+        {
+            Llegue = n =>
+            {
+                var v = comprobando.Llegue(n, "sapgui://QAS/ZZ051");
+                return v.Aterrizo ? $"ATERRIZASTE: el evento {n} llegó a «{v.Esperada}». Sigue con el siguiente." : $"NO ATERRIZÓ el evento {n}: {v.Motivo}";
+            },
+            Plan = _ => "HICE 0 DE 1 y PARÉ en el paso 1. FALTA POR JUZGAR: "
+                + string.Join("; ", comprobando.Pendientes().Select(p => $"evento {p.N} «{p.Que}» ({p.Motivo})")) + ".",
+        };
+        foreach (var (herramienta, argumentos) in new[]
+        {
+            ("leccion_llegue", new Dictionary<string, string> { ["n"] = "1" }),
+            ("leccion_plan", new Dictionary<string, string> { ["pasos"] = "[]" }),
+        })
+        {
+            string devuelto = "";
+            var lineas = LineasDurante(anotado, () => devuelto = mano.Call(herramienta, argumentos));
+            Debe(devuelto.Contains(otro, StringComparison.Ordinal), $"(precondición) {herramienta}: al piloto le llega lo que dice el campo (le llegó «{devuelto}»)");
+            var vuelta = lineas.Where(l => l.Etiqueta == "mapa-mcp" && l.Texto.StartsWith("← ", StringComparison.Ordinal)).Select(l => l.Texto).ToList();
+            Debe(vuelta.Count == 1 && Regex.IsMatch(vuelta[0], $@"^← \(\d+ ms\) ‹{devuelto.Length} car\.›$"),
+                $"{herramienta}: la línea de su respuesta es «← (N ms) ‹{devuelto.Length} car.›» (anotó: {string.Join(" | ", vuelta.Select(l => "«" + l + "»"))})");
+            Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase) || l.Texto.Contains(otro, StringComparison.OrdinalIgnoreCase)),
+                $"{herramienta}: ninguna línea anotada lleva lo leído ni lo tecleado:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+        }
+    }
+
+    /// <summary>Promesa 401.</summary>
+    /// <remarks>
+    /// ESCUCHAR EN 127.0.0.1 NO ES «SOLO ESTA MÁQUINA»: el navegador del médico también es esta máquina. Medido
+    /// leyendo el código (00dcd42, 2026-09-24): ServidorDelNucleo.cs:94 contestaba con «Access-Control-Allow-Origin:
+    /// *», así que cualquier página podía leer /batches —el rastro citaba lo escrito en SAP— y mandar POST a
+    /// /escribir e /ir; y ninguno de los DOS servidores locales (8790 y 8792) miraba el Origin, así que un POST
+    /// «simple» (text/plain, sin permiso previo) desde cualquier página hacía que Ü escribiera o despachara una
+    /// herramienta aunque no pudiera leer la respuesta. Que un navegador concreto lo deje pasar es (D); se juzga
+    /// lo que el servidor contesta a cada Origin, que no depende de ningún navegador.
+    /// </remarks>
+    private static void LosServidoresLocalesNoSonUnaPuertaAbierta()
+    {
+        // (d) LAS FUENTES: sin CORS en ningún literal, cada servidor local por la puerta, y el censo de servidores,
+        // prefijos y rutas. No pide ninguna capacidad nueva: se juzga siempre.
+        var fuentes = Fuentes051DelRepo("401");
+        if (fuentes != null)
+        {
+            var fallos = Fuentes051.Censo051.JuzgarServidores(fuentes);
+            Debe(fallos.Count == 0,
+                "ningún literal del código lleva Access-Control-Allow-Origin, cada servidor local pasa sus peticiones por PuertaLocal.Admite, "
+                + $"y los servidores, sus prefijos y sus rutas son exactamente los {Fuentes051.Censo051.ServidoresLocales.Length} del censo:" + Renglones(fallos));
+        }
+
+        // (a) LA REGLA, pura.
+        var admite = Cap004("U.WindowsClient.Navigation.PuertaLocal")?.GetMethod("Admite", BindingFlags.Public | BindingFlags.Static);
+        if (admite == null) Pendiente("Navigation.PuertaLocal.Admite(origen, host, puerto): quién puede hablarle a un servidor local", "401", "051");
+        else
+        {
+            var reglas = new (string? Origen, string? Host, bool Pasa, string Caso)[]
+            {
+                (null, "127.0.0.1:8792", true, "sin Origin: el piloto (Node), el Agent SDK, PowerShell y la propia app no son navegadores"),
+                ("", "127.0.0.1:8792", true, "Origin vacío: ningún navegador lo manda vacío"),
+                ("http://127.0.0.1:8792", "127.0.0.1:8792", true, "la propia página del servidor (el visor, servido desde /visor)"),
+                ("http://localhost:8792", "localhost:8792", true, "la propia página, por localhost"),
+                ("https://pagina-ajena.example", "127.0.0.1:8792", false, "una página ajena"),
+                ("null", "127.0.0.1:8792", false, "«null»: una página abierta con file:// o un iframe con sandbox"),
+                ("http://127.0.0.1:9999", "127.0.0.1:8792", false, "otra página de esta máquina, en otro puerto"),
+                (null, "pagina-ajena.example:8792", false, "un Host ajeno: un nombre que otro resolvió a 127.0.0.1"),
+                (null, "", false, "sin Host"),
+                (null, "127.0.0.1:9999", false, "el Host de otro puerto"),
+            };
+            foreach (var (origen, host, pasa, caso) in reglas)
+            {
+                object? v = admite.Invoke(null, new object?[] { origen, host, 8792 });
+                bool? dio = v == null ? null : (bool?)v.GetType().GetProperty("Pasa")?.GetValue(v);
+                Debe(dio == pasa, $"PuertaLocal.Admite(«{origen ?? "(sin Origin)"}», «{host}», 8792) {(pasa ? "atiende" : "rechaza")}: {caso} (dio {(dio == null ? "nada" : dio.Value ? "atiende" : "rechaza")})");
+            }
+        }
+
+        // (b) EL SERVIDOR DEL NÚCLEO, de verdad, en un puerto libre: lo que contesta a cada Origin y lo que hace.
+        var ctorNucleo = typeof(ServidorDelNucleo).GetConstructors().FirstOrDefault(c => c.GetParameters().Any(p => p.Name == "puerto"));
+        if (ctorNucleo == null) Pendiente("ServidorDelNucleo(…, int puerto): el servidor del núcleo en un puerto que no sea el de la app viva", "401", "051");
+        var ctorMcp = typeof(ServidorMcp).GetConstructors().FirstOrDefault(c => c.GetParameters().Any(p => p.Name == "puerto"));
+        if (ctorMcp == null) Pendiente("ServidorMcp(ProtocoloMcp, int puerto): el servidor MCP en un puerto que no sea el de la app viva", "401", "051");
+        var anotado = Cap004("U.WindowsClient.Diagnostics.LogBus")?.GetEvent("Anotado");
+        if (anotado == null) { Pendiente("Diagnostics.LogBus.Anotado", "401", "051"); return; }
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        (int Estado, bool Cors, string Cuerpo) Pide(HttpMethod metodo, string url, string? cuerpo, string? origen, string? host = null)
+        {
+            using var req = new HttpRequestMessage(metodo, url);
+            if (cuerpo != null) req.Content = new StringContent(cuerpo, Encoding.UTF8, "application/json");
+            if (origen != null) req.Headers.TryAddWithoutValidation("Origin", origen);
+            if (host != null) req.Headers.Host = host;
+            using var resp = http.Send(req);
+            return ((int)resp.StatusCode, resp.Headers.Contains("Access-Control-Allow-Origin"), resp.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+        }
+
+        if (ctorNucleo != null)
+        {
+            int puerto = PuertoLibre051();
+            string donde = "uia://x.exe/formulario";
+            var g = new Nucleo.Grafo();
+            g.Estoy(donde);
+            g.Observar(donde, new[] { new Nucleo.Elemento("s:talla", "Talla", "Edit") });
+            var escritos = new List<(string Selector, string Texto)>();
+            var args = ctorNucleo.GetParameters().Select(p => p.Name switch
+            {
+                "grafo" => (object?)g,
+                "donde" => (Func<string>)(() => donde),
+                "pulsar" => (Func<string, string, bool>)((_, _) => true),
+                "enfocar" => (Func<string, bool>)(_ => true),
+                "escribir" => (Func<string, string, bool>)((sel, t) => { lock (escritos) escritos.Add((sel, t)); return true; }),
+                "elegir" => (Func<string, string, bool>)((_, _) => true),
+                "puerto" => puerto,
+                _ => p.HasDefaultValue ? p.DefaultValue : null,
+            }).ToArray();
+            using var servidor = (ServidorDelNucleo)ctorNucleo.Invoke(args);
+            if (!servidor.Arrancar())
+            {
+                _fallos++;
+                Console.WriteLine($"   ⚠ NO PUDE JUZGARLA (401): el servidor del núcleo no arrancó en 127.0.0.1:{puerto} (mira la línea «nucleo-http» del log). "
+                                + "No es que la promesa falle: es que no llegué a probarla, y eso cuenta como incumplida.");
+            }
+            else
+            {
+                string url = $"http://127.0.0.1:{puerto}";
+                string escribir = JsonSerializer.Serialize(new { elemento = "Talla", texto = Inventado051 });
+                var ajena = Pide(HttpMethod.Post, url + "/escribir", escribir, "https://pagina-ajena.example");
+                Debe(ajena.Estado == 403 && escritos.Count == 0,
+                    $"un POST a /escribir desde una página ajena se rechaza con 403 y no escribe nada (contestó {ajena.Estado}, escribió {escritos.Count})");
+                var nula = Pide(HttpMethod.Post, url + "/escribir", escribir, "null");
+                Debe(nula.Estado == 403 && escritos.Count == 0, $"y desde file:// («null»), igual (contestó {nula.Estado}, escribió {escritos.Count})");
+                var otroHost = Pide(HttpMethod.Post, url + "/escribir", escribir, null, $"pagina-ajena.example:{puerto}");
+                Debe(otroHost.Estado >= 400 && otroHost.Estado < 500 && escritos.Count == 0,
+                    $"y con un Host ajeno se rechaza sin escribir (contestó {otroHost.Estado}, escribió {escritos.Count})");
+                var rastro = Pide(HttpMethod.Get, url + "/batches", null, "https://pagina-ajena.example");
+                Debe(rastro.Estado == 403 && !rastro.Cuerpo.Contains("corridas", StringComparison.Ordinal),
+                    $"el rastro de batches no se le sirve a una página ajena (contestó {rastro.Estado}: «{(rastro.Cuerpo.Length > 120 ? rastro.Cuerpo[..120] + "…" : rastro.Cuerpo)}»)");
+
+                (int Estado, bool Cors, string Cuerpo) propia = default;
+                var lineas = LineasDurante(anotado, () => propia = Pide(HttpMethod.Post, url + "/escribir", escribir, null));
+                Debe(propia.Estado == 200 && escritos.Count == 1 && escritos[0].Texto == Inventado051,
+                    $"sin Origin se atiende y el valor llega entero a las manos (contestó {propia.Estado}, escribió {escritos.Count}: {string.Join(", ", escritos.Select(e => $"«{e.Selector}» ← ‹{e.Texto.Length} car.›"))})");
+                var delNucleo = lineas.Where(l => l.Etiqueta == "nucleo-http").Select(l => l.Texto).ToList();
+                Debe(delNucleo.Count == 1 && delNucleo[0] == "escrito ‹16 car.› en «Talla»",
+                    $"y lo que el núcleo escribe se anota exactamente «escrito ‹16 car.› en «Talla»» (anotó: {string.Join(" | ", delNucleo.Select(l => "«" + l + "»"))})");
+                Debe(!lineas.Any(l => l.Texto.Contains(Inventado051, StringComparison.OrdinalIgnoreCase)),
+                    "y ninguna línea anotada lleva lo escrito:" + Renglones(lineas.Select(l => $"{l.Etiqueta}: {l.Texto}")));
+
+                var visor = Pide(HttpMethod.Get, url + "/batches", null, url);
+                var sinOrigen = Pide(HttpMethod.Get, url + "/batches", null, null);
+                Debe(visor.Estado == 200 && sinOrigen.Estado == 200, $"la propia página y quien llega sin Origin leen el rastro (contestó {visor.Estado} y {sinOrigen.Estado})");
+                var cors = new[] { ("ajena", ajena), ("null", nula), ("rastro ajeno", rastro), ("propia", propia), ("visor", visor), ("sin Origin", sinOrigen) }
+                    .Where(x => x.Item2.Cors).Select(x => x.Item1).ToList();
+                Debe(cors.Count == 0, $"y ninguna respuesta del servidor del núcleo lleva Access-Control-Allow-Origin (la llevan: {string.Join(", ", cors)})");
+            }
+        }
+
+        // (c) EL SERVIDOR MCP, de verdad: una herramienta que solo cuenta cuántas veces la despacharon.
+        if (ctorMcp != null)
+        {
+            int puerto = PuertoLibre051();
+            int despachos = 0;
+            var protocolo = new ProtocoloMcp(
+                new[] { new Voz.Realtime.Utensilio("cuenta_051", "solo cuenta", Array.Empty<Voz.Realtime.Argumento>()) },
+                (_, __) => { Interlocked.Increment(ref despachos); return "contado"; });
+            using var servidor = (ServidorMcp)ctorMcp.Invoke(ctorMcp.GetParameters().Select(p =>
+                p.Name == "puerto" ? (object?)puerto : p.ParameterType == typeof(ProtocoloMcp) ? protocolo : p.HasDefaultValue ? p.DefaultValue : null).ToArray());
+            if (!servidor.Start())
+            {
+                _fallos++;
+                Console.WriteLine($"   ⚠ NO PUDE JUZGARLA (401): el servidor MCP no arrancó en 127.0.0.1:{puerto} (mira la línea «mcp» del log). "
+                                + "No es que la promesa falle: es que no llegué a probarla, y eso cuenta como incumplida.");
+            }
+            else
+            {
+                string url = $"http://127.0.0.1:{puerto}/mcp/";
+                const string llamada = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cuenta_051","arguments":{}}}""";
+                var ajena = Pide(HttpMethod.Post, url, llamada, "https://pagina-ajena.example");
+                Debe(ajena.Estado == 403 && Volatile.Read(ref despachos) == 0,
+                    $"una llamada MCP desde una página ajena se rechaza con 403 y no despacha la herramienta (contestó {ajena.Estado}, despachos {despachos})");
+                var propia = Pide(HttpMethod.Post, url, llamada, null);
+                Debe(propia.Estado == 200 && Volatile.Read(ref despachos) == 1,
+                    $"sin Origin —así llegan el piloto y el Agent SDK— se despacha una vez (contestó {propia.Estado}, despachos {despachos})");
+                Debe(!ajena.Cors && !propia.Cors, "y ninguna respuesta del servidor MCP lleva Access-Control-Allow-Origin");
+            }
+        }
+    }
+
+    /// <summary>Un puerto libre en 127.0.0.1: el de la app viva (8790, 8792) puede estar ocupado, y juzgar sobre él sería juzgar a la app del usuario.</summary>
+    private static int PuertoLibre051()
+    {
+        var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        int p = ((IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return p;
     }
 
     private static void Prueba(string nombre, Action cuerpo)
@@ -14914,6 +15225,19 @@ internal static class Fuentes051
             new("O2", C + "Mcp/SurfaceMapTools.cs", "\"tramo\", $\"→ ", 1, false),
             new("O3", C + "Mcp/SurfaceMapTools.cs", "ALTO:", 1, false),
             new("O4", C + "Actions/Freno.cs", "alto pedido", 1, false, "porque"),
+            // REVISIÓN DEL 2026-09-24: ocho sitios más de las mismas clases, que el censo del 09-23 no contó. Los tres
+            // que anotan una cuenta o un relato ya sin valores (E22, E23, N10) permiten ese hueco porque su contenido
+            // se arregla donde nace y lo juzgan la 397(g) y la 400 con el productor real; la fila fija la sentencia.
+            new("E19", C + "Navigation/ServidorDelNucleo.cs", "\"escrito\" : \"elegido\"", 1, false, "etiqueta"),
+            new("E20", C + "Agent/AgentLoop.cs", "texto descartado", 1, false, "why"),
+            new("E21", C + "Ui/FaceWindow.xaml.cs", "plan del piloto:", 1, false, "Piloto.PlanDeComprobacion.LineaDelPlan(pasos)"),
+            new("E22", C + "Ui/FaceWindow.xaml.cs", "plan · PARÓ en el paso", 1, false, "i + 1", "id.ParaSenalar", "res.Cuenta"),
+            new("E23", C + "Ui/FaceWindow.xaml.cs", "\"aprendizajes\", \"← \"", 1, false, "res.Cuenta"),
+            new("N9", C + "Piloto/RegistroDeLaComprobacion.cs", "LineaDelCampo(", 1, false, "n"),
+            new("N10", C + "Ui/FaceWindow.xaml.cs", "\"comprobar\", $\"piloto terminó", 1, false,
+                "(r.Termino ? \"bien\" : $\"salida {r.Salida}\")", "reloj.ElapsedMilliseconds", "registro.Hechos", "registro.Total",
+                "r.CostoUsd:0.000", "final.Motivo"),
+            new("N11", C + "Ui/ConsultaWindow.cs", "\"aprendizajes\", $\"← ", 1, false),
         };
 
         internal static bool Permitido(string hueco, IEnumerable<string> permitidos)
@@ -14987,9 +15311,24 @@ internal static class Fuentes051
 
         // ── 399(b): la regla, sobre todo el ámbito ───────────────────────────────
 
-        /// <summary>¿El hueco nombra «valor» o «texto» enteros, fuera de SinValor./Linea…( y no como su .Length?</summary>
+        /// <summary>
+        /// ¿El hueco nombra «valor», «texto» o «dato» enteros, o lee un miembro «Texto», fuera de SinValor./Linea…( y
+        /// no como su .Length?
+        /// </summary>
+        /// <remarks>
+        /// «dato» y «Texto» ENTRARON EN LA REVISIÓN DEL 2026-09-24: la regla solo miraba «valor» y «texto», y tres
+        /// sitios vivos se le escapaban por el nombre —«{dato}» en ServidorDelNucleo.cs:221 y «{p.Texto}» en el plan del
+        /// piloto (FaceWindow.xaml.cs:3351)—, mientras el enunciado de la 399 prometía la regla general. «Texto» es el
+        /// miembro de lo que se teclea en este dominio (Paso, PasoDelPlan, EventoDeLaLeccion) y va con mayúscula: la
+        /// comparación distingue mayúsculas a propósito, y un «Texto(» es una LLAMADA, no el miembro —medido: la primera
+        /// versión de esta regla dio un falso en ClinicaClient.cs:92, «Texto(raiz, "status")», que lee el estado de un
+        /// encuentro—. NO entran «.Text» —en FaceWindow.xaml.cs:332 y :358 es el texto de un nodo del árbol de SAP, lo
+        /// leído (clase L, la 052)— ni «value»/«.Value», que medidos en la fase 0 daban 5 falsos de 15.
+        /// </remarks>
         internal static bool NombraValorOTexto(Fuente f, Hueco h)
-            => NombraEntero(f, h.Ini, h.Fin, "valor") || NombraEntero(f, h.Ini, h.Fin, "texto");
+            => NombraEntero(f, h.Ini, h.Fin, "valor") || NombraEntero(f, h.Ini, h.Fin, "texto")
+               || NombraEntero(f, h.Ini, h.Fin, "dato")
+               || Regex.IsMatch(SinFormas(f, h.Ini, h.Fin), @"(?<![\w])Texto(?!\w)(?!\s*\()(?!\s*\??\s*\.\s*Length\b)");
 
         internal static List<string> JuzgarRegla(List<Fuente> fuentes, out int porEmbudos, out List<string> sinSeguir, out List<Embudo> embudos)
         {
@@ -15152,6 +15491,63 @@ internal static class Fuentes051
                 fallos.Add($"{donde}: {que} no es un canal censado");
             }
             foreach (var (que, archivo) in pendientes) fallos.Add($"falta el canal {que} en {archivo}");
+            return fallos;
+        }
+
+        // ── 401(d): los servidores locales, sus prefijos y sus rutas ─────────────
+
+        private const string Nucleo8792 = C + "Navigation/ServidorDelNucleo.cs";
+
+        /// <summary>
+        /// Lo que escucha en esta máquina, medido el 2026-09-24: dos HttpListener (8790 y 8792), sus prefijos y las
+        /// rutas que el del núcleo sirve. Una ruta nueva es una salida nueva del proceso: se lee antes de entrar aquí.
+        /// </summary>
+        internal static readonly (string Que, string Archivo)[] ServidoresLocales =
+        {
+            ("new HttpListener", C + "Mcp/ServidorMcp.cs"),
+            ("prefijo /mcp/", C + "Mcp/ServidorMcp.cs"),
+            ("new HttpListener", Nucleo8792),
+            ("prefijo /", Nucleo8792),
+            ("ruta /visor", Nucleo8792), ("ruta /nucleo", Nucleo8792), ("ruta /terreno", Nucleo8792), ("ruta /batches", Nucleo8792),
+            ("ruta /ir", Nucleo8792), ("ruta /escribir", Nucleo8792), ("ruta /elegir", Nucleo8792), ("ruta /reglas", Nucleo8792),
+            ("ruta /reglas-mapeador", Nucleo8792), ("ruta /mapeador", Nucleo8792),
+        };
+
+        internal static List<string> JuzgarServidores(List<Fuente> fuentes)
+        {
+            var fallos = new List<string>();
+            var hay = new List<(string Que, string Archivo, string Donde)>();
+            var oreja = new Regex(@"new\s+(System\s*\.\s*Net\s*\.\s*)?HttpListener\s*\(");
+            var puerta = new Regex(@"PuertaLocal\s*\.\s*Admite\s*\(");
+            var prefijo = new Regex(@"^\$""http://127\.0\.0\.1:\{[^}]*\}(/[\w/-]*)""$");
+            var ruta = new Regex(@"^""(/[a-z][\w-]*)""$");
+            foreach (var f in fuentes)
+            {
+                string m = new string(f.M);
+                foreach (var lit in f.Literales.Values)
+                {
+                    string t = f.Texto[lit.Ini..lit.Fin];
+                    int k = t.IndexOf("Access-Control-Allow-Origin", StringComparison.OrdinalIgnoreCase);
+                    if (k >= 0 && f.T[lit.Ini + k] == EnLiteral)
+                        fallos.Add($"{f.Donde(lit.Ini)}: un literal «Access-Control-Allow-Origin» abre la puerta a otro origen");
+                }
+                var orejas = oreja.Matches(m).Cast<Match>().Where(x => f.T[x.Index] == Codigo).ToList();
+                if (orejas.Count == 0) continue;
+                foreach (var x in orejas) hay.Add(("new HttpListener", f.Ruta, f.Donde(x.Index)));
+                foreach (var lit in f.Literales.Values)
+                {
+                    string t = f.Texto[lit.Ini..lit.Fin];
+                    if (prefijo.Match(t) is { Success: true } p) hay.Add(("prefijo " + p.Groups[1].Value, f.Ruta, f.Donde(lit.Ini)));
+                    if (!lit.Interpolado && ruta.Match(t) is { Success: true } r) hay.Add(("ruta " + r.Groups[1].Value, f.Ruta, f.Donde(lit.Ini)));
+                }
+                if (!puerta.Matches(m).Cast<Match>().Any(x => f.T[x.Index] == Codigo))
+                    fallos.Add($"{f.Donde(orejas[0].Index)}: escucha en un puerto de esta máquina y no pasa sus peticiones por PuertaLocal.Admite");
+            }
+            var distintos = hay.GroupBy(h => (h.Que, h.Archivo)).Select(g => g.First()).ToList();
+            foreach (var h in distintos.Where(h => !ServidoresLocales.Contains((h.Que, h.Archivo))))
+                fallos.Add($"{h.Donde}: {h.Que} no está en el censo de los servidores locales");
+            foreach (var (que, archivo) in ServidoresLocales.Where(c => !distintos.Any(h => h.Que == c.Que && h.Archivo == c.Archivo)))
+                fallos.Add($"falta {que} en {archivo}");
             return fallos;
         }
     }
