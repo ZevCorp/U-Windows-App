@@ -61,6 +61,9 @@ cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el 
 clic, y la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta
 como cualquier navegación; y lo que no es un campo espera como siempre.
 
+> **Reescrita el 2026-09-22, sin reciclar el número** (spec 047, fase 3). La última cláusula de arriba es la
+> original y ya no es la vigente: el literal que juzga el contrato está en «Lo que pasó después», al final.
+
 ## Fases
 
 | Fase | Qué | Promesa | Archivo |
@@ -118,3 +121,34 @@ gemela. Se dice porque una comparación con una línea base prestada es más dé
 (`uia://ShellHost.exe/configuración-rápida`), Ü no consigue traer Chrome al frente: `map_go_to` contesta
 «no pude abrir ni encontrar google.com» en 1,4-4,5 s y todo lo demás falla detrás. Le pasó al dueño al
 empezar su tercera prueba (~8 s perdidos) y a esta corrida entera.
+
+## Lo que pasó después
+
+**2026-09-22 · spec 047 («la espera mira lo que se ve»), fase 3, rama `jero/jev-la-espera-mira-lo-que-se-ve`.**
+El enunciado de la 334 se reescribió **sin reciclar el número**. Su última cláusula decía «y lo que no es un
+campo espera como siempre», y «como siempre» era el presupuesto entero: el 21-09, **13 de 13** clics que no
+navegaban esperaron **1.797–1.825 ms** a un cambio de ubicación que no llegaba (ChatGPT.exe y Gmail en Chrome;
+`u-20260921.log`, 16:34-16:39, M). Con la 047 un botón sale de la espera en cuanto lo que se ve se asienta
+(promesa 351), así que el enunciado viejo ya no decía lo que hace el código. El vigente, literal:
+
+> **334.** un campo de texto no navega: al pulsar un Edit o un ComboBox no se espera el presupuesto de un
+> cambio de pantalla —solo una espera corta, por si acaso—, no se consulta el terreno ni se repite el clic, y
+> la respuesta dice que es un campo y que tiene el foco; si aun así la pantalla cambió se cuenta como
+> cualquier navegación; y lo que no es un campo espera a que lo que se ve se asiente —el presupuesto entero
+> si nadie mira, o en los demás casos en que la 351 espera como hoy—
+
+- **Lo que no cambió: el cuerpo de la prueba**, byte a byte (54 líneas, iguales a las de `17560d0`; M: md5
+  `1212778d…` en los dos lados, quitando los CR). Su caso 4 —«Guardar» espera el presupuesto entero— sigue
+  exigiéndose tal cual: este arnés no inyecta huella, y sin huella se espera como hoy (047, regla, punto 4).
+- **Quién juzga la cláusula nueva: la 354**, sobre este mismo mundo («Search», «Rename», «Guardar»). Con una
+  huella que ve lo mismo dos veces, «Guardar» contesta en menos de la mitad del techo, dice que la pantalla no
+  cambió y no aprende nada; sin huella, espera el techo entero (el caso 4 de aquí, calcado); y los dos campos
+  siguen con su espera corta y su respuesta de campo, con huella y sin ella.
+- **«Los demás casos en que la 351 espera como hoy»** son los de la regla 4 de la 047: no se pudo tomar la
+  huella de antes, la ubicación es `sapgui://` (desde UIA una sesión de SAP es un `Pane` opaco) y el terreno
+  sabe que la puerta lleva a algún sitio (la que repite la 248). Se citan por la promesa que los juzga y no se
+  copian: una lista en dos enunciados es una segunda definición (aprendizaje nº16).
+- **La condición que esta spec dejó escrita sigue en pie** —«acortar esa espera sin medir es la spec 038,
+  aparcada por el dueño»—: la regla de la 047 está escrita y juzgada, pero entra como `wip` y no llega a
+  `main` hasta el nivel 4 de su fase 0, que cuenta cuántas «asentadas» serían falsas. Hasta entonces sus dos
+  números (400 ms antes de la primera huella, 250 de respiro) son metas, no datos.

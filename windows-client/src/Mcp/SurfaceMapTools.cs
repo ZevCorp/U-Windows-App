@@ -443,8 +443,10 @@ public sealed class SurfaceMapTools
             bool termino = mano?.Termino == true;
             bool cambio = mano?.Logro == true;
             // EL TRAMO RECIBE EL NOMBRE PARA CONTAR en el campo Etiqueta (350): lo escribe en «paso k:», en la cuenta y
-            // en «la misma puerta tres veces». Pulsa por Selector, así que no necesita el texto para nada.
-            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Nombre, numero, prob, relato.ToString(), d.Porque, false, tiempos);
+            // en «la misma puerta tres veces». Pulsa por Selector, así que no necesita el texto para nada. Y lleva
+            // cuál de los cuatro veredictos dio pulsar (353): sin él, el tramo no distingue «cambió dentro» de «nada».
+            return new Navigation.ElTramo.Paso(true, termino, cambio, puerta.Selector, puerta.Nombre, numero, prob, relato.ToString(), d.Porque, false, tiempos,
+                mano?.QueCambio ?? Navigation.HuellaDeLoQueSeVe.QueCambio.Nada);
         }
         return Sin(relato.ToString(), "no quedó ninguna candidata", d.Confianza);
     }
@@ -2722,6 +2724,12 @@ public sealed class SurfaceMapTools
 
         /// <summary>El selector que el ejecutor pulsó de verdad, si pulsó algo.</summary>
         public string? Pulsado { get; init; }
+
+        /// <summary>
+        /// Cuál de los cuatro veredictos dio pulsar (spec 047, promesa 353). <see cref="Logro"/> sigue siendo lo que lee
+        /// el tope de la voz (204); esto es lo que lee el detector de bucle del tramo, que es el camino del operador.
+        /// </summary>
+        public Navigation.HuellaDeLoQueSeVe.QueCambio QueCambio { get; init; }
     }
 
     [ThreadStatic] private static Mano? _ultimaMano;
@@ -2743,7 +2751,7 @@ public sealed class SurfaceMapTools
     {
         // La lista numerada de homónimos NO es un intento: no se pulsó nada, y contarla como fallo
         // frenaba el «pruebo este otro botón» que pide el audio (crítico de la rama, 2026-09-11).
-        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos, Pulsado = r.Pulsado };
+        _ultimaMano = new Mano(r.Termino, r.Termino && (escribe || r.Cambio), Intento: !r.Ambiguo) { Candidatos = r.Candidatos, Pulsado = r.Pulsado, QueCambio = r.QueCambio };
         return r.Cuenta;
     }
 
@@ -2900,7 +2908,7 @@ public sealed class SurfaceMapTools
             keybd_event(0x0D, 0, 0, IntPtr.Zero);
             keybd_event(0x0D, 0, 2, IntPtr.Zero);
         }
-        EsperarPantallaLista(900);
+        EsperarPantallaLista(ventana, antes, 900);
 
         // EL ENTER PUEDE HABERNOS METIDO DENTRO. Al renombrar una carpeta recién creada queda
         // seleccionada, y el Enter que confirma el nombre también la ABRE: la tarea seguía creyendo
@@ -2915,8 +2923,13 @@ public sealed class SurfaceMapTools
                 StepOrder = 1, ActionType = "click",
                 Selector = "uia:aid=backButton;ct=Button", Label = "Atrás",
             };
-            _uia.Execute(atras, out _);
-            Llego(antes, 2000);
+            bool pulsado = _uia.Execute(atras, out string errAtras);
+            // UN PASO QUE NO SE HIZO DEJA RASTRO (patrón nº10), y el mensaje distingue sus dos causas (nº2): hasta el 22-09
+            // no pulsar «Atrás» y pulsarlo sin volver pasaban los dos en silencio. No lo juzga ninguna aserción.
+            if (!Llego(antes, 2000))
+                LogBus.Log("mapa-mcp", pulsado
+                    ? $"✋ no se llegó a «{antes}»: pulsé «Atrás» y en 2000 ms la ubicación no volvió"
+                    : $"✋ no se llegó a «{antes}»: no pude pulsar «Atrás» ({errAtras})");
             ahora = antes;   // se volvió: no se cuenta como una llegada
         }
 
@@ -2955,77 +2968,81 @@ public sealed class SurfaceMapTools
     }
 
     /// <summary>
-    /// Espera a que la pantalla esté LISTA: que deje de cambiar. Devuelve en cuanto lo está.
+    /// Espera a que la pantalla esté LISTA tras el Enter: que deje de cambiar. Devuelve en cuanto lo está.
     ///
     /// Es la idea de <c>SurfaceReadiness</c> —que ya usa el reproductor de workflows— traída a esta
     /// capa en su forma mínima. La diferencia con dormir un tiempo fijo es doble: se sigue en
     /// cuanto se puede, en vez de esperar el peor caso, y no se actúa antes de tiempo cuando la app
-    /// tarda más de lo previsto. Un plazo fijo se equivoca en las dos direcciones a la vez.
-    ///
-    /// La señal es el número de elementos accionables: mientras la pantalla se pinta, sube; cuando
-    /// se repite dos lecturas seguidas, está lista. El techo es una red contra pantallas que nunca
-    /// se asientan (una lista que se refresca sola), no el mecanismo de espera.
+    /// tarda más de lo previsto. Un plazo fijo se equivoca en las dos direcciones a la vez. El techo
+    /// es una red contra pantallas que nunca se asientan, no el mecanismo de espera.
     /// </summary>
-    private bool EsperarPantallaLista(int msMax = 2500)
+    /// <remarks>
+    /// «LISTA» ES «ASENTADA», CON LA MISMA HUELLA Y LA MISMA REGLA QUE LA ESPERA DE DESPUÉS DE PULSAR (promesa 358, spec
+    /// 047): dos huellas de lo que se ve iguales con un respiro en medio, no antes de la primera huella, y el sitio releído
+    /// fresco antes de declararla. Si el Enter cambió de sitio sale en el acto, y quien llama lo ve en la ubicación.
+    ///
+    /// HASTA EL 22-09 CONTABA BOTONES DE LA VENTANA DE DELANTE (leído, no medido): tres FindAll —Button, ListItem,
+    /// MenuItem— sobre GetForegroundWindow, «lista» cuando el recuento se repetía, y un bucle de msMax / 90 VUELTAS, no de
+    /// reloj. Cada vuelta pagaba 90 ms más los tres FindAll, sin medir: «900 ms» eran diez vueltas de 90 ms más lo que
+    /// costara mirar. Un recuento que se repetía antes de que la navegación empezara daba «lista» en la segunda vuelta;
+    /// dos pantallas con el mismo número de botones eran la misma; con la persona en otra ventana se juzgaba la de ella; y
+    /// su catch devolvía 0 sin decir por qué, «no pude mirar» disfrazado de «no hay nada» (patrón nº3).
+    ///
+    /// SE MIRA LA VENTANA QUE RECIBIÓ EL ENTER: la de trabajo si la hay, y si no la de delante, que es adonde fue la tecla.
+    /// El sitio sale de <c>_where</c>, el mismo con el que <see cref="Type"/> decide si el Enter se deshace: juzgar el
+    /// cambio de sitio por otro camino sería la clase del aprendizaje nº16. Sin sitio de antes no hay cambio de sitio que
+    /// juzgar (patrón nº9): decide solo la huella.
+    ///
+    /// SI NO SE PUEDE MIRAR se espera el techo entero —el lado seguro, lo que hacía el recuento cuando su catch devolvía
+    /// 0— y la línea dice por qué.
+    /// </remarks>
+    private void EsperarPantallaLista(IntPtr ventana, string sitioDeAntes, int msMax)
     {
-        int anterior = -1;
-        for (int i = 0; i < msMax / 90; i++)
+        var compas = new Compas(msMax);
+        IntPtr mira = ventana != IntPtr.Zero ? ventana : GetForegroundWindow();
+        var ojos = new HuellaEnVivo(() => _where()?.Id ?? "", () => mira) { RespiroMs = EsperaAsentada.RespiroMetaMs };
+        // SIN SITIO DE ANTES NO HAY SITIO QUE JUZGAR: nulo, y decide la huella. Hasta el 23-09 era una función que devolvía «», y
+        // desde que un sitio fresco vacío ya no deja declarar nada (vacío no es «no cambió», nº9) eso habría sido esperar siempre
+        // el techo.
+        Func<string>? sitioFresco = string.IsNullOrWhiteSpace(sitioDeAntes) ? null : ojos.SitioFresco;
+        // EL SITIO SE COMPARA COMO LO COMPARA Type (revisión del 23-09): con Superficies.MismaPantalla, el mismo camino que
+        // ElEnterSeDeshace y RelatoDeEscribir. Con Ordinal, «web://www.google.com/search» antes del Enter y «web://google.com/search»
+        // después —medido el 18-09 en map_type, 7 veces en una sesión— salía como «cambió de sitio» en la primera relectura, antes
+        // de que se pintara la página, y acto seguido Type decidía que era la misma pantalla.
+        var v = EsperaAsentada.Espera(ojos.Tomar, sitioFresco,
+            HuellaDeLoQueSeVe.De(sitioDeAntes, "", Array.Empty<string>(), Array.Empty<string>()),
+            compas, EsperaAsentada.RespiroMetaMs, EsperaAsentada.PrimeraMetaMs, 120, Navigation.Superficies.MismaPantalla);
+        string porQue = v.PorQueDejoDeEsperar switch
         {
-            int ahora = CuantosAccionables();
-            if (ahora > 0 && ahora == anterior) return true;
-            anterior = ahora;
-            System.Threading.Thread.Sleep(90);
-        }
-        return false;
-    }
-
-    /// <summary>Cuántos elementos accionables hay ahora. Consulta dirigida: nada de leer el árbol.</summary>
-    private static int CuantosAccionables()
-    {
-        try
+            EsperaAsentada.PorQue.Asentada => $"asentada (dos huellas iguales con {EsperaAsentada.RespiroMetaMs} ms de respiro, desde los {EsperaAsentada.PrimeraMetaMs} ms)",
+            EsperaAsentada.PorQue.CambioDeSitio => $"cambió de sitio, a «{v.SitioAhora}»",
+            EsperaAsentada.PorQue.TechoNoSePudoMirar => v.Causa,
+            _ => "llegó al techo: la pantalla no paró de moverse",
+        };
+        if (v.PorQueDejoDeEsperar == EsperaAsentada.PorQue.TechoNoSePudoMirar)
         {
-            IntPtr fg = GetForegroundWindow();
-            if (fg == IntPtr.Zero) return 0;
-            var raiz = System.Windows.Automation.AutomationElement.FromHandle(fg);
-            if (raiz == null) return 0;
-            int n = 0;
-            foreach (var ct in new[] { System.Windows.Automation.ControlType.Button,
-                                       System.Windows.Automation.ControlType.ListItem,
-                                       System.Windows.Automation.ControlType.MenuItem })
-            {
-                n += raiz.FindAll(System.Windows.Automation.TreeScope.Descendants,
-                    new System.Windows.Automation.PropertyCondition(
-                        System.Windows.Automation.AutomationElement.ControlTypeProperty, ct)).Count;
-            }
-            return n;
+            compas.Respira(compas.Queda);
+            porQue += $"; esperé el techo entero, {compas.Transcurrido} ms";
         }
-        catch { return 0; }
-    }
-
-    /// <summary>Espera a que la superficie DEJE de ser la de partida y devuelve la nueva, o "".</summary>
-    private string EsperarCambio(string desde, int msMax)
-    {
-        for (int i = 0; i < msMax / 80; i++)
-        {
-            System.Threading.Thread.Sleep(80);
-            string ahora = _where()?.Id ?? "";
-            if (ahora.Length > 0 && !string.Equals(ahora, desde, StringComparison.OrdinalIgnoreCase)
-                && !ahora.EndsWith("/ventana", StringComparison.OrdinalIgnoreCase))
-                return ahora;
-        }
-        return "";
+        LogBus.Log("mapa-mcp", $"⏱ tras el Enter, dejó de mirar a los {v.MsHastaElVeredicto} ms de {msMax}: {porQue} · {v.Sondeos} sondeo(s) de huella");
     }
 
     /// <summary>Espera a que la superficie sea la esperada. La UI tarda; la paciencia va aquí.</summary>
+    /// <remarks>
+    /// GASTA DEL MISMO COMPÁS QUE LAS OTRAS ESPERAS (promesa 358). Hasta el 22-09 contaba con DateTime.UtcNow: ya era reloj
+    /// de pared —no contaba vueltas, contra lo que decía la tabla de la spec 047—, pero otro reloj, y dormía sus 200 ms
+    /// también con el plazo agotado. Con un «dónde» de 500 ms eran 1.400 ms para un techo de 1.200; <see cref="Compas.Respira"/>
+    /// no da esa vuelta de cortesía, y el bucle sale en el techo más, como mucho, el último sondeo.
+    /// </remarks>
     private bool Llego(string esperada, int msMax)
     {
-        var hasta = DateTime.UtcNow.AddMilliseconds(msMax);
-        while (DateTime.UtcNow < hasta)
+        var compas = new Compas(msMax);
+        do
         {
             string ahora = _where()?.Id ?? "";
             if (ahora.Length > 0 && SurfacePlace.Same(ahora, esperada)) return true;
-            System.Threading.Thread.Sleep(200);
         }
+        while (compas.Respira(200));
         return false;
     }
 }
