@@ -81,6 +81,8 @@ public sealed partial class ConsultaWindow : Window
     private readonly TextBlock _vivo;
     private readonly StackPanel _nota;
     private readonly Border _vacioNota;
+    /// <summary>«¿Por qué vino a cardiología?», arriba de la Nota, al soltar la historia clínica (spec 051).</summary>
+    private readonly PanelDelMotivo _motivo = new();
     private readonly Button _grabar;
     private readonly TextBlock _puntoDeGrabar;
     private readonly TextBlock _etiquetaDeGrabar;
@@ -405,9 +407,18 @@ public sealed partial class ConsultaWindow : Window
             Foreground = Estudio.TintaMedia, FontSize = 12.5, LineHeight = 19,
             TextWrapping = TextWrapping.Wrap,
         });
+        // Sin esta línea soltar documentos no se descubre: la ventana no tiene ningún botón que lo sugiera.
+        pilaVacio.Children.Add(new TextBlock
+        {
+            Text = "Suelta aquí la historia clínica —fotos o PDF— y te digo por qué vino a cardiología.",
+            Foreground = Estudio.TintaMedia, FontSize = 12.5, LineHeight = 19,
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 0),
+        });
         _vacioNota.Child = pilaVacio;
 
         _panelNota = new StackPanel();
+        // ARRIBA DE TODO: es lo primero que el médico tiene que leer (spec 051).
+        _panelNota.Children.Add(_motivo.Vista);
         _panelNota.Children.Add(_vivo);
         _panelNota.Children.Add(Estudio.Elevar(_vacioNota));
         _panelNota.Children.Add(_nota);
@@ -543,9 +554,24 @@ public sealed partial class ConsultaWindow : Window
 
         PintarMicrofono();
 
+        // SOLTAR LA HISTORIA CLÍNICA (spec 051): en la vista de Nota, grabando o no. En Consultas y en
+        // Aprendizajes no se admite: allí no hay paciente al que pertenezca lo soltado.
+        AllowDrop = true;
+        bool AdmiteSoltar() => _enNota && !_enAprendizajes;
+        DragEnter += (_, e) => { if (AdmiteSoltar()) _motivo.AlPasarPorEncima(e); else { e.Effects = DragDropEffects.None; e.Handled = true; } };
+        DragOver += (_, e) => { if (AdmiteSoltar()) _motivo.AlPasarPorEncima(e); else { e.Effects = DragDropEffects.None; e.Handled = true; } };
+        DragLeave += (_, __) => _motivo.AlSalir();
+        Drop += async (_, e) =>
+        {
+            if (!AdmiteSoltar()) return;
+            e.Handled = true;
+            _superficie.ScrollToTop();
+            await _motivo.SoltarAsync(e.Data);
+        };
+
         Mostrar(nota: true);
         Loaded += async (_, __) => await ArrancarAsync();
-        Closed += (_, __) => { _cronometro.Stop(); _pulso.Stop(); _dictado.Dispose(); _audio.Dispose(); _http.Dispose(); };
+        Closed += (_, __) => { _cronometro.Stop(); _pulso.Stop(); _dictado.Dispose(); _audio.Dispose(); _http.Dispose(); _motivo.Dispose(); };
     }
 
     // ── el micrófono ─────────────────────────────────────────────────────────
