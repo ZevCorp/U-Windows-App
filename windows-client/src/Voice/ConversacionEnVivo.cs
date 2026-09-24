@@ -1322,9 +1322,21 @@ public sealed class ConversacionEnVivo : IDisposable
         string donde = args.TryGetValue("surface", out var s) && s.Length > 0 ? s
                      : args.TryGetValue("path", out var p) && p.Length > 0 ? p
                      : args.TryGetValue("app", out var a) ? a : "";
-        string linea = resultado.Split('\n')[0].Trim();
-        if (linea.Length > 90) linea = linea[..90] + "…";
-        LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {linea}");
+        LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool}{(donde.Length > 0 ? $" «{donde}»" : "")} → {LineaDelResultado(resultado, args)}");
+    }
+
+    /// <summary>
+    /// La primera línea del resultado, con lo escrito tapado y DESPUÉS recortada a 90 (promesa 397).
+    /// </summary>
+    /// <remarks>
+    /// Para escribir, la primera línea es «escribí «…» y confirmé con Enter»: hasta el 2026-09-24 el valor
+    /// quedaba aquí además de en la línea «←» del mapa. Tapar antes de recortar, o un valor partido por el
+    /// corte ya no se reconoce y su mitad sale entera.
+    /// </remarks>
+    private static string LineaDelResultado(string resultado, IReadOnlyDictionary<string, string> args)
+    {
+        string linea = U.Graph.SinValor.Tapar(resultado.Split('\n')[0].Trim(), SurfaceMapTools.ValoresEscritos(args));
+        return linea.Length > 90 ? linea[..90] + "…" : linea;
     }
 
     /// <summary>La cola de una superficie, que es la parte que una persona reconoce.</summary>

@@ -732,7 +732,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                 }
                 catch (Exception e)
                 {
-                    LogBus.Log("nucleo-http", $"no pude {accion} «{dato}»: {e.Message}");
+                    LogBus.Log("nucleo-http", $"no pude {accion} {SinValor.Forma(dato)}: {e.Message}");
                     return false;
                 }
             };
@@ -852,7 +852,7 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
                             ok = sap.EscribirEnElFoco(texto, out string porFoco);
                             if (!ok) porque += (porque.Length > 0 ? "; y al foco tampoco: " : "") + porFoco;
                         }
-                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir «{texto}»: {porque}");
+                        if (!ok) LogBus.Log("sentido-sap", $"no pude escribir {SinValor.Forma(texto)}: {porque}");
                         return ok;
                     }).Escribe,
                 hayQueParar: () => Actions.Freno.Pidieron,

@@ -57,6 +57,36 @@ public static class SinValor
     }
 
     /// <summary>
+    /// Un texto que REPITE valores conocidos, con cada uno cambiado por su forma: entre comillas
+    /// —«valor», comillas incluidas— a partir de 1 carácter, y suelto a partir de 2, sin mirar
+    /// mayúsculas. Lo demás, tal cual.
+    /// </summary>
+    /// <remarks>
+    /// Para una respuesta o una cuenta que se escribe en el log y cita lo que se escribió: «escribí
+    /// «…» y confirmé con Enter» (<c>SurfaceMapTools.RelatoDeEscribir</c>), «no pude escribir «…»»
+    /// (el recorrido por lotes). Quien la construye no sabe que la cita va a acabar en el log, y
+    /// cambiarla allí dejaría al modelo sin saber qué escribió; se tapa en el borde, donde se anota.
+    ///
+    /// UNA SOLA PASADA, con todos los valores a la vez y el más largo primero: tapar valor a valor
+    /// volvería a mirar lo ya tapado, y un valor «car» encontraría el «car.» de un ‹16 car.›. Suelto
+    /// desde 2 y no desde 1, porque un valor de un carácter taparía cada letra igual del texto; entre
+    /// comillas sí, porque ahí la cita es inequívoca. Sin mirar mayúsculas porque SAP y el modelo
+    /// devuelven lo escrito cambiado de caja.
+    /// </remarks>
+    public static string Tapar(string texto, params string?[] valores)
+    {
+        if (string.IsNullOrEmpty(texto) || valores == null || valores.Length == 0) return texto ?? "";
+        var todos = valores.Where(v => !string.IsNullOrEmpty(v)).Select(v => v!)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderByDescending(v => v.Length).ToList();
+        if (todos.Count == 0) return texto;
+        string citados = string.Join("|", todos.Select(System.Text.RegularExpressions.Regex.Escape));
+        string sueltos = string.Join("|", todos.Where(v => v.Length >= 2).Select(System.Text.RegularExpressions.Regex.Escape));
+        string patron = $"«(?<v>{citados})»" + (sueltos.Length > 0 ? $"|(?<v>{sueltos})" : "");
+        return System.Text.RegularExpressions.Regex.Replace(texto, patron, m => Forma(m.Groups["v"].Value),
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>
     /// Una excepción por lo que es y por dónde nació, sin lo que dice: los tipos de la cadena, de fuera
     /// adentro (<c>A ← B</c>), y el método del primer marco de la pila de la más honda. Ningún
     /// <c>Message</c>.

@@ -532,7 +532,9 @@ public sealed class SapGuiSurface : IUiSurface
             string leido = Str(foco.Text);
             if (!leido.Equals(texto ?? "", StringComparison.OrdinalIgnoreCase))
             {
-                error = $"puse «{texto}» y el campo dice «{leido}»";
+                // El error entra al log por tres caminos (el rellenador, la línea ✗ del player, la respuesta
+                // del mapa): dice qué regla falló y la FORMA de lo escrito, nunca el valor (spec 051, E13).
+                error = $"el campo no se quedó con lo puesto: {SinValor.Contraste(texto, leido)}";
                 return false;
             }
             return true;
@@ -1032,7 +1034,9 @@ public sealed class SapGuiSurface : IUiSurface
         {
             string hay = opciones == null ? "ninguna opción legible"
                 : string.Join(", ", opciones.Take(12).Select(o => $"«{o.Label}» ({o.Value})"));
-            error = $"«{valor}» no es ni la clave ni el texto de ninguna opción de «{etiqueta}»; hay: {hay}";
+            // Las opciones del desplegable son metadatos del campo y se quedan: son lo que sirve para
+            // arreglarlo. Lo pedido, por su forma (spec 051, E14).
+            error = $"{SinValor.Forma(valor)} no es ni la clave ni el texto de ninguna opción de «{etiqueta}»; hay: {hay}";
             return false;
         }
         combo.Key = clave;

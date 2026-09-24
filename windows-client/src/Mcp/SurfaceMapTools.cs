@@ -1046,7 +1046,9 @@ public sealed class SurfaceMapTools
                 p.Texto.Length > 0 && nombreDelDato.TryGetValue(p.Exit, out var dato) ? dato : ""))
             : RecorrerPorElNucleo(pasos);
         string cuenta = res.Cuenta;
-        LogBus.Log("skill", "← " + cuenta);
+        // Los pasos llevan ya los DATOS de la corrida (InstanciarSkill), y la cuenta los cita igual que la del
+        // batch: se anota tapada (spec 051, fuera del censo de 35).
+        LogBus.Log("skill", "← " + SinValor.Tapar(cuenta, pasos.Select(p => (string?)p.Texto).ToArray()));
         return $"«{skill.Nombre}»: {cuenta}"
              + (enBlanco.Count > 0 ? $" Quedaron EN BLANCO por falta de dato: {string.Join(", ", enBlanco)}." : "")
              + (sobrantes.Count > 0
@@ -1129,10 +1131,11 @@ public sealed class SurfaceMapTools
 
         if (pasos.Count == 0) return "la lista de pasos vino vacía.";
 
-        LogBus.Log("batch", $"recorrido de {pasos.Count} paso(s): "
-            + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0 ? $"escribir «{p.Texto}»" : $"«{p.Exit}»")));
+        LogBus.Log("batch", LineaDelRecorrido(pasos));
         string cuenta = RecorrerPorElNucleo(pasos).Cuenta;
-        LogBus.Log("batch", "← " + cuenta);
+        // LA CUENTA CITA LO ESCRITO —«no pude escribir «…»», «escribí «…» y quedé en…»
+        // (RecorrerSegunElNucleo.cs:180, 337)—: se anota tapada; al modelo le llega entera.
+        LogBus.Log("batch", "← " + SinValor.Tapar(cuenta, pasos.Select(p => (string?)p.Texto).ToArray()));
         return cuenta;
     }
 
@@ -2064,9 +2067,8 @@ public sealed class SurfaceMapTools
         // Se registra CADA llamada y su respuesta. Sin esto, «el mapa no aportó nada» y «el modelo
         // ni lo intentó» se ven exactamente igual en el log — y esa ambigüedad me llevó a un
         // diagnóstico equivocado el 2026-07-31, buscando en el mapa un fallo que estaba en el
-        // lanzador de apps.
-        string args_ = string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"));
-        LogBus.Log("mapa-mcp", $"→ {tool} {args_}".TrimEnd());
+        // lanzador de apps. Lo que se escribe va por su longitud (promesa 397): ver LineaDeLlamada.
+        LogBus.Log("mapa-mcp", LineaDeLlamada(tool, args));
         var reloj = System.Diagnostics.Stopwatch.StartNew();
 
         // Si se pasa a hacer otra cosa, ya no se está mirando lo de antes: se suelta. Señalar es un
@@ -2155,9 +2157,117 @@ public sealed class SurfaceMapTools
         // DÓNDE QUEDAMOS, para la próxima. Lo que el modelo sabe de la pantalla es lo que esta
         // llamada le acaba de contar; comparar contra esto es comparar contra su último vistazo.
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, reloj.ElapsedMilliseconds);
-        LogBus.Log("mapa-mcp", $"← ({reloj.ElapsedMilliseconds} ms) "
-            + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | "));
+        LogBus.Log("mapa-mcp", LineaDeRespuesta(reloj.ElapsedMilliseconds, r, args));
         return r;
+    }
+
+    /// <summary>
+    /// Los argumentos que dicen DÓNDE, no QUÉ: con ellos se reconstruye el camino, y ninguno lleva lo
+    /// que se escribe. Cualquier otro —<c>text</c>, <c>decir</c>, <c>pasos</c>, <c>datos</c>,
+    /// <c>context</c>…— va al log por su longitud.
+    /// </summary>
+    /// <remarks>
+    /// LISTA BLANCA Y NO NEGRA, a propósito: el mapa suma herramientas a menudo (27 en <see cref="IsMapTool"/>
+    /// el 2026-09-24), y un argumento nuevo que lleve texto tiene que salir tapado sin que nadie se acuerde
+    /// de añadirlo a ninguna lista. Lo que se pierde por defecto es diagnóstico; lo que se perdía antes era
+    /// la historia clínica (spec 051, decisión 2).
+    /// </remarks>
+    internal static readonly IReadOnlySet<string> ArgumentosDeLugar = new HashSet<string>(
+        new[] { "target", "selector", "surface", "app", "path", "exit", "workflow_id" }, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// La línea «→» de una llamada: la herramienta, sus argumentos de lugar con su valor y los demás por su
+    /// longitud (promesa 397). <c>→ map_type text=‹16 car.› target=Talla</c>.
+    /// </summary>
+    /// <remarks>
+    /// Hasta el 2026-09-24 llevaba TODOS los argumentos con su valor, y el log sale del equipo por el espejo
+    /// desde el 2026-08-16: cada <c>map_type</c> subía entero lo que se escribía. Se registra cada llamada
+    /// por lo mismo de siempre —«el mapa no aportó nada» y «el modelo ni lo intentó» se ven igual sin ella
+    /// (2026-07-31)—, y para eso basta saber que hubo un texto y cuánto medía.
+    /// </remarks>
+    internal static string LineaDeLlamada(string tool, IReadOnlyDictionary<string, string> args)
+    {
+        string partes = string.Join(" ", (args ?? new Dictionary<string, string>()).Select(kv =>
+            $"{kv.Key}={(ArgumentosDeLugar.Contains(kv.Key) ? kv.Value : SinValor.Forma(kv.Value))}"));
+        return $"→ {tool} {partes}".TrimEnd();
+    }
+
+    /// <summary>
+    /// La línea «←» de una respuesta: con cada valor escrito que la respuesta repita cambiado por su forma,
+    /// y DESPUÉS recortada a 200 (promesa 397).
+    /// </summary>
+    /// <remarks>
+    /// Tapar antes de recortar no es un detalle: un valor partido por el corte ya no se reconoce, y su mitad
+    /// saldría entera. La respuesta que se DEVUELVE al modelo no se toca —necesita saber qué escribió—; solo
+    /// la que se anota.
+    /// </remarks>
+    internal static string LineaDeRespuesta(long ms, string respuesta, IReadOnlyDictionary<string, string> args)
+    {
+        string r = SinValor.Tapar(respuesta ?? "", ValoresEscritos(args));
+        return $"← ({ms} ms) " + (r.Length > 200 ? r[..200] + "…" : r).Replace("\n", " | ");
+    }
+
+    /// <summary>
+    /// Lo que una llamada trae para escribir: el valor de cada argumento que no es de lugar y, si ese valor
+    /// es JSON, también cada hoja suya que no cuelgue de una clave de lugar.
+    /// </summary>
+    /// <remarks>
+    /// POR QUÉ LAS HOJAS. <c>map_batch</c> trae los textos dentro de <c>pasos</c> y <c>map_skill_run</c> dentro
+    /// de <c>datos</c> (<c>{"peso":"68"}</c>), y sus respuestas los citan uno a uno —«no pude escribir «68»»,
+    /// «escribí «68»» (<c>RecorrerSegunElNucleo.cs:180, 337</c>)—. Tapar solo el JSON entero no taparía
+    /// ninguno. Si el valor no es JSON válido, el valor entero ya está en la lista: no hay otra lectura de ese
+    /// fallo que perder, y por eso el <c>catch</c> solo atrapa <see cref="System.Text.Json.JsonException"/>.
+    /// </remarks>
+    internal static string?[] ValoresEscritos(IReadOnlyDictionary<string, string>? args)
+    {
+        var valores = new List<string?>();
+        if (args == null) return valores.ToArray();
+        foreach (var kv in args)
+        {
+            if (ArgumentosDeLugar.Contains(kv.Key) || string.IsNullOrEmpty(kv.Value)) continue;
+            valores.Add(kv.Value);
+            string v = kv.Value.TrimStart();
+            if (!v.StartsWith('[') && !v.StartsWith('{')) continue;
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(kv.Value);
+                Hojas(doc.RootElement, valores);
+            }
+            catch (System.Text.Json.JsonException) { /* no es JSON: el valor entero ya está en la lista */ }
+        }
+        return valores.ToArray();
+
+        static void Hojas(System.Text.Json.JsonElement e, List<string?> destino)
+        {
+            switch (e.ValueKind)
+            {
+                case System.Text.Json.JsonValueKind.Object:
+                    foreach (var p in e.EnumerateObject())
+                        if (!ArgumentosDeLugar.Contains(p.Name)) Hojas(p.Value, destino);
+                    break;
+                case System.Text.Json.JsonValueKind.Array:
+                    foreach (var x in e.EnumerateArray()) Hojas(x, destino);
+                    break;
+                case System.Text.Json.JsonValueKind.String:
+                    destino.Add(e.GetString());
+                    break;
+                case System.Text.Json.JsonValueKind.Number:
+                    destino.Add(e.GetRawText());
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// La línea de un recorrido por lotes: cada paso de texto por su longitud (y el campo, si lo trae), cada
+    /// salida por su nombre (promesa 397). <c>recorrido de 2 paso(s): escribir ‹16 car.› → «Guardar»</c>.
+    /// </summary>
+    internal static string LineaDelRecorrido(IReadOnlyList<Navigation.RecorrerSegunElNucleo.Paso> pasos)
+    {
+        pasos ??= Array.Empty<Navigation.RecorrerSegunElNucleo.Paso>();
+        return $"recorrido de {pasos.Count} paso(s): " + string.Join(" → ", pasos.Select(p => p.Texto.Length > 0
+            ? $"escribir {SinValor.Forma(p.Texto)}" + (p.Exit.Length > 0 ? $" en «{p.Exit}»" : "")
+            : $"«{p.Exit}»"));
     }
 
     /// <summary>
@@ -2697,7 +2807,7 @@ public sealed class SurfaceMapTools
                 return $"no pude teclear en «{tituloVentana}»: {errTeclado}";
             }
             _ultimaMano = new Mano(true, true);
-            LogBus.Log("mapa-mcp", $"✓ tecleado «{texto}» en la terminal «{tituloVentana}»");
+            LogBus.Log("mapa-mcp", $"✓ tecleado {SinValor.Forma(texto)} en la terminal «{tituloVentana}»");
             return $"tecleé «{texto}» en la terminal «{tituloVentana}» y confirmé con Enter";
         }
         if (selector.Length == 0 && trabajoDetras)
@@ -2789,7 +2899,7 @@ public sealed class SurfaceMapTools
             // El Enter va a la ventana con el foco, que es la de la persona: se manda a la de trabajo con el
             // enganche que la trae un instante y devuelve el foco (235).
             if (!_uia.TeclearEnLaVentana(ventana, "", enter: true, out string errEnter))
-                LogBus.Log("mapa-mcp", $"escrito «{texto}» pero sin Enter: {errEnter}");
+                LogBus.Log("mapa-mcp", $"escrito {SinValor.Forma(texto)} pero sin Enter: {errEnter}");
         }
         else
         {
@@ -2816,7 +2926,7 @@ public sealed class SurfaceMapTools
             ahora = antes;   // se volvió: no se cuenta como una llegada
         }
 
-        LogBus.Log("mapa-mcp", $"✓ escrito «{texto}» en {selector}");
+        LogBus.Log("mapa-mcp", $"✓ escrito {SinValor.Forma(texto)} en {selector}");
         return RelatoDeEscribir(texto, antes, ahora);
     }
 

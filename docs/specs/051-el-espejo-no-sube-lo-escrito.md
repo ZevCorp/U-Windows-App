@@ -5,7 +5,8 @@ comprobadas ciertas y aplicadas) · **fase 0 hecha**: las seis promesas en `Cont
 razones, con los censos como datos y un lector de fuentes que corrigió tres medidas de esta spec
 (el ancla de E17, la quinta ruta `/agent/` y un sitio que la 399(b) encuentra fuera del censo) ·
 **fase 1 hecha** (396 verde) · **fase 2 hecha** (394 verde: el espejo sube por línea marcada) ·
-**fase 3 hecha** (395 verde: las salidas directas suben por forma, tipo y número) · Spec 051 · 2026-09-23 ·
+**fase 3 hecha** (395 verde: las salidas directas suben por forma, tipo y número) · **fase 4 hecha**
+(397 verde: lo que las manos escriben va al log por su longitud) · Spec 051 · 2026-09-23 ·
 Rama `jero/el-espejo-no-sube-lo-escrito`, desde `main` en `043addc` · promesas **394–399**
 
 > **Qué se arregla.** Lo que Ü escribe en SAP, lo que la persona le dice y lo que el piloto narra con
@@ -378,7 +379,7 @@ Una rama para la spec; cada fase un commit que pone verde su promesa sin romper 
 | **2** | **394** | `Diagnostics/LogBus.cs` (`Publico`, `AnotadoConMarca`) · `Telemetry/EspejoDelLog.cs` (cadencia y un solo `Emit`) · `Telemetry/Telemetry.cs` (`Emitido`) · `Backend/BackendClient.cs` (sus opciones JSON, en un solo sitio) · los 26 `Publico`: `App.xaml.cs`, `Update/Updater.cs`, `Ui/GuardiaDeInstancia.cs`, `Clinical/ArranqueDeConsulta.cs`, `Ui/FaceWindow.xaml.cs:4452`, `Clinical/Transcripcion/PoliticaDeReintento.cs`, `Clinical/EjecutorDeExportaciones.cs`, `Mcp/WorkflowMcpRunner.cs:36, 68, 77` | 1 (E11) + S1 + 26 líneas públicas | 394 verde; los dos sabotajes vistos rojos |
 | **3** | **395** | `Agent/AgentLoop.cs:96, 133, 181` · `Mcp/WorkflowMcpRunner.cs:39, 55, 69-72` | 6 de 10 salidas (S2, S3, S4, S8, S9, S10) | 395 verde; los dos sabotajes vistos rojos |
 | **4** | **397** | `Mcp/SurfaceMapTools.cs` (E3–E8: `LineaDeLlamada`, `LineaDeRespuesta`, `LineaDelRecorrido`, y `:2700`, `:2792`, `:2819` con `Forma`) · `Ui/FaceWindow.xaml.cs:735, 855` (E17, E9) · `Agent/AgentLoop.cs:295, 307` (E18, E10) y **su comentario falso de `:300-303`** · `Voice/ConversacionEnVivo.cs:1327` (E12, con `Tapar`) · `windows-graph/src/Surfaces/SapGuiSurface.cs:535, 1035` y `UiaSurface.cs:1542` (E13–E15: el error dice qué regla falló y la forma, no el valor) · `Ui/WorkflowLibraryWindow.xaml.cs:174` (E16) | 15 (E3–E10, E12–E18) | 397 verde; los dos sabotajes vistos rojos |
-| **5** | **398** y **399** | `Voice/ConversacionEnVivo.cs:1868, 1938, 1939, 2416` (D1–D4) · `Voice/RecordatoriosEnVivo.cs:29` (D5) · `Piloto/ElPiloto.cs:98, 101, 103` (N1–N3, con `LineaDelPiloto`) · `Ui/FaceWindow.xaml.cs:3186, 3325, 5599` (N4–N6) · `Ui/ConsultaWindow.cs:2090` (N7) · `Agent/AgentLoop.cs:92, 180` (O1, N8) · `Mcp/SurfaceMapTools.cs:1767, 1778` (O2, O3, con `Tapar`) · `Actions/Freno.cs:128` (O4) · y `Voice/MiradaSubida.cs:87`, que no es del censo pero la 399(b) lo encuentra por el embudo `anotar` (el cuerpo de un error de OpenAI: por su código y su longitud) | 17 (D1–D5, N1–N8, O1–O4) + 1 de la regla | 398 y 399 verdes (399: 35 de 35); sabotajes vistos rojos; `CONTRATO INTACTO` |
+| **5** | **398** y **399** | `Voice/ConversacionEnVivo.cs:1868, 1938, 1939, 2416` (D1–D4) · `Voice/RecordatoriosEnVivo.cs:29` (D5) · `Piloto/ElPiloto.cs:98, 101, 103` (N1–N3, con `LineaDelPiloto`) · `Ui/FaceWindow.xaml.cs:3186, 3325, 5599` (N4–N6) · `Ui/ConsultaWindow.cs:2090` (N7) · `Agent/AgentLoop.cs:92, 180` (O1, N8) · `Mcp/SurfaceMapTools.cs:1767, 1778` (O2, O3, con `Tapar`) · `Actions/Freno.cs:128` (O4) · y `Voice/MiradaSubida.cs:87`, que no es del censo pero la 399(b) lo encuentra por el embudo `anotar` (el cuerpo de un error de OpenAI: por su código y su longitud) · y `Navigation/ElTramo.cs:190`, la «←» del tramo con el objetivo entero, que no es del censo y la 399 no ve (hallazgo de la fase 4) | 17 (D1–D5, N1–N8, O1–O4) + 1 de la regla + 1 de la fase 4 | 398 y 399 verdes (399: 35 de 35); sabotajes vistos rojos; `CONTRATO INTACTO` |
 
 Total en origen: **35 sitios** (2 + 1 + 15 + 17), **7 salidas** (S1, S2, S3, S4, S8, S9, S10) y
 **26 líneas públicas** (23 que pasan de `Log` a `Publico`, 3 nuevas). El número va en cada commit de
@@ -473,7 +474,8 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   Corrige el encargo de esta spec: el espejo **no** es posterior a la 012 (nació el 2026-08-16) y la
   012 **sí** lo había nombrado; lo que faltó fue implementarla.
 - **2026-09-23 · Un comentario guardián falso.** `AgentLoop.cs:300-303` afirma que el texto de un
-  `type` «nunca sale hacia Graph»; sale desde que existe el espejo. Se corrige en la fase 4.
+  `type` «nunca sale hacia Graph»; sale desde que existe el espejo. **Corregido en la fase 4**: el
+  comentario dice ahora que el texto va por su longitud, y por qué el anterior era falso.
 - **2026-09-23 · La etiqueta `espejo` la usan dos cosas distintas** (`EspejoDelLog` y
   `EspejoDeConsulta`). Con la línea marcada deja de importar para lo que sale (P13 es de
   `EspejoDelLog`; `EspejoDeConsulta` sale como cadencia); confunde al leer el log.
@@ -600,6 +602,55 @@ Con la copia de la rama compilada en Release, el correo puesto (telemetría ence
   evento `log` **sin** `runId` (S1 no lo lleva): en el panel se casa con el `workflow_end` por la
   hora, no por la corrida. El diagnóstico no se pierde; se deja escrito en el código y aquí.
   Distinguirlo también en S10 es cambiar una fila del censo de la 395: decisión del dueño.
+- **2026-09-24 · Fase 4: la 397 en verde a la primera, y los 15 sitios del censo entran de una vez.**
+  `SinValor.Tapar` (una sola pasada con todos los valores, el más largo primero: tapar de uno en uno
+  volvería a mirar lo ya tapado, y un valor «car» encontraría el «car.» de un `‹16 car.›`). En
+  `SurfaceMapTools.cs`, `LineaDeLlamada` (lista **blanca** de argumentos de lugar —`target`,
+  `selector`, `surface`, `app`, `path`, `exit`, `workflow_id`—: un argumento nuevo sale por su
+  longitud sin que nadie se acuerde de listarlo), `LineaDeRespuesta` (tapa y **después** recorta a
+  200: un valor partido por el corte ya no se reconoce) y `LineaDelRecorrido` (el paso de texto dice
+  además en qué campo, si lo trae). Los 15 sitios **(M)**: E3–E8 en `SurfaceMapTools.cs`, E9 y E17
+  en `FaceWindow.xaml.cs`, E10 y E18 en `AgentLoop.cs` (y su comentario falso de `:300-303`, ahora
+  con el porqué), E12 en `ConversacionEnVivo.cs` (por `LineaDelResultado`, que también tapa antes de
+  recortar a 90), E13 y E14 en `SapGuiSurface.cs` (E13 por `SinValor.Contraste`: lo que la línea
+  vieja servía para ver —¿SAP transformó lo puesto?— sin el valor), E15 en `UiaSurface.cs` y E16 en
+  `WorkflowLibraryWindow.xaml.cs` (por `LineaDeLaForma`: los nombres de los campos y su tipo, que es
+  lo que sirve «para ajustar el parseo»). Contrato: 301 → **302** cumplidas; rojas solo 398 y 399, las
+  de la fase 5; la 399(a) pasa de 3 a **18 de 35** (+15, exactamente estos) y la 399(b) de 10 a **2**
+  (`ElPiloto.cs:98`, N1, y `MiradaSubida.cs:87`, los dos de la fase 5): se van E6–E9, E13, E14 y las
+  dos que colgaban de las lambdas de E9 y E17 (`MundoQueToca.cs:102`, `FaceWindow.xaml.cs:998`), y el
+  juez de embudos lo nota: 36 → **35** lambdas-embudo, 42 → **39** nombres, 147 → **144** sentencias
+  por las formas derivadas **(M)**. El de la voz, **VOZ ÍNTEGRA**. Sabotajes, cada uno aplicado con
+  `sed -b` (un `sed -i` sin `-b` convirtió el archivo entero a LF en el primer intento: visto con
+  `file` y un `diff` de 3037 líneas antes de juzgar, y restaurado), visto por `diff` contra una copia
+  (una sola línea, CRLF conservada), juzgado y restaurado con `cmp` y `diff` vacíos **(M)**: (función)
+  `(ArgumentosDeLugar.Contains(kv.Key) ? …)` → `(true ? …)` en `LineaDeLlamada` → la 397 roja solo
+  por (a), «anotó: «→ herramienta_de_prueba_051 text=ZZ-INVENTADO-051 decir=Paciente Inventado Cero
+  target=Talla»»; la 399 sin cambio (18 de 35, 2); (cableado) la línea «→» de `Call` vuelve a
+  `string.Join(" ", args.Select(kv => $"{kv.Key}={kv.Value}"))` → la 397 roja por (a) con la misma
+  línea, y la 399(a) de 18 a **17 de 35** nombrando «E4: falta el ancla «LineaDeLlamada(»»; la 399(b)
+  sigue en 2. En los dos, ningún otro veredicto cambió.
+- **2026-09-24 · La clase de E5 tenía tres sitios más que el censo, y se cierran con ella.** Buscando
+  `"← " +` y `$"← ` en el ámbito **(M)**: 7 sentencias. Dos citan lo escrito y se tapan en esta fase —la
+  cuenta del batch (`SurfaceMapTools.cs:1138`, «no pude escribir «…»», «escribí «…» y quedé en…»,
+  `RecorrerSegunElNucleo.cs:180, 337`) y la de una skill (`:1051`), cuyos pasos ya llevan los
+  **datos** de la corrida (`{"peso":"68"}`)—; y la «←» del mapa no tapaba nada para `map_batch`,
+  `map_skill_run` ni `leccion_plan`, porque sus textos viajan **dentro** de un JSON (`pasos`, `datos`):
+  `ValoresEscritos` toma también las hojas de un argumento JSON que no cuelgan de una clave de lugar,
+  y la usan E5, E12 y E18. De las otras cinco: `WorkflowPlayer.cs:434` no lleva texto; las dos de
+  `aprendizajes` (`FaceWindow.xaml.cs:5672`, `ConsultaWindow.cs:1719`) recorren una skill **sin
+  datos** (`InstanciarSkill.Pasos(skill, {})`, «mostrar es enseñar el camino»), leído **(M)**;
+  `ConversacionEnVivo.cs:1880` es D3; y **`ElTramo.cs:190`** —«← tramo «{_objetivo}»: …», por el embudo
+  `Log: l => LogBus.Log("tramo", l)` (`SurfaceMapTools.cs:1757`)— lleva el objetivo entero y **no está
+  en el censo**: es la clase O, y va con la fase 5 junto a O2 y O3 (la 399(b) no la ve porque el hueco
+  se llama `cuenta`). El juez dinámico de la 397 no ejercita estas tres: su (b) es la respuesta de
+  `map_type`. Queda dicho aquí, sin juez propio.
+- **2026-09-24 · Aviso al dueño del checkout principal, antes de tocar `SapGuiSurface.cs`.** Medido en
+  el checkout principal (`experimento/reemplazo-jeff`), sin tocarlo: su `M` sobre `SapGuiSurface.cs`
+  es **solo de fin de línea** —`git diff --numstat` vacío; la copia de trabajo mezcla CRLF y LF, y el
+  `HEAD` de esa rama la tiene en LF— **(M)**. Ningún cambio de contenido choca con las dos sentencias
+  que toca esta fase (E13 en `:535`, E14 en `:1035`, numeradas sobre `043addc`). El aviso va en el informe de esta fase y en el
+  PR; esta sesión no tiene Slack desde Claude Code.
 
 ## Revisiones
 

@@ -171,7 +171,7 @@ public partial class WorkflowLibraryWindow : Window
         {
             var raw = await _graphClient.ListWorkflowsAsync(CancellationToken.None);
             if (raw.Count > 0)
-                LogBus.Log("workflow-ui", $"primer workflow crudo (para ajustar el parseo si hace falta): {raw[0]}");
+                LogBus.Log("workflow-ui", $"primer workflow crudo (para ajustar el parseo si hace falta): {LineaDeLaForma(raw[0])}");
 
             // Mismo nombre y mismo orden que el carrusel de la carita (spec 007): dos listas del
             // mismo catálogo con nombres distintos serían dos catálogos.
@@ -187,6 +187,32 @@ public partial class WorkflowLibraryWindow : Window
             StatusLine.Text = $"No se pudo listar workflows: {ex.Message}";
         }
         finally { ReloadBtn.IsEnabled = true; }
+    }
+
+    /// <summary>
+    /// La forma de un workflow tal como llega: sus campos con el tipo de cada uno y, en las listas, cuántos
+    /// elementos traen. Ningún valor. <c>objeto con 3 campo(s): id (texto), name (texto), steps (lista de 12)</c>.
+    /// </summary>
+    /// <remarks>
+    /// La línea existe «para ajustar el parseo», y para eso sirven los NOMBRES de los campos y su tipo. Hasta
+    /// el 2026-09-24 llevaba el JSON entero, y si el resumen trae los pasos trae los valores grabados al
+    /// enseñar (spec 051, E16).
+    /// </remarks>
+    private static string LineaDeLaForma(JsonElement e)
+    {
+        static string Tipo(JsonElement x) => x.ValueKind switch
+        {
+            JsonValueKind.Object => "objeto",
+            JsonValueKind.Array => $"lista de {x.GetArrayLength()}",
+            JsonValueKind.String => "texto",
+            JsonValueKind.Number => "número",
+            JsonValueKind.True or JsonValueKind.False => "sí/no",
+            JsonValueKind.Null => "nulo",
+            _ => x.ValueKind.ToString(),
+        };
+        if (e.ValueKind != JsonValueKind.Object) return Tipo(e);
+        var campos = e.EnumerateObject().Select(p => $"{p.Name} ({Tipo(p.Value)})").ToList();
+        return $"objeto con {campos.Count} campo(s): {string.Join(", ", campos)}";
     }
 
     private async void OnRunSelected(object sender, RoutedEventArgs e)
