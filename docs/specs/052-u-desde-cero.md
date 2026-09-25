@@ -1,6 +1,6 @@
 # Plan de implementación: un ciclo de Ü cabe en medio segundo
 
-Estado: **en curso (noche del 2026-09-24)** · Nace de los tres audios del dueño del 2026-09-24 · Rama: `jose/u-desde-cero`
+Estado: **implementado; falta el nivel 4 a mano (hablarle, con micrófono y altavoz)** · noche del 2026-09-24 · Nace de los tres audios del dueño del 2026-09-24 · Rama: `jose/u-desde-cero`
 
 ## Qué es Ü, sin nada técnico
 
@@ -64,7 +64,7 @@ con temporizador, el MCP como camino del ciclo).
 
 ## La especificación
 
-Promesas de `u/Contrato/Contrato.cs`. Se numeran desde la 430 (las de `main` llegan a la 423).
+Promesas de `u/Contrato/Contrato.cs`, 430-454. Se numeran desde la 430 (las de `main` llegan a la 423). Cada enunciado es el que está literal en el contrato.
 
 | # | Promesa | Fase |
 |---|---|---|
@@ -83,6 +83,16 @@ Promesas de `u/Contrato/Contrato.cs`. Se numeran desde la 430 (las de `main` lle
 | 442 | Jev sabe lo que ya se hizo: el estado lleva, en orden, lo que ya se pulsó para este objetivo. | 5b |
 | 443 | La huella ve los textos: si lo único que cambia es lo que dice la pantalla, la huella cambia. | 5b |
 | 444 | Solo cuentan como emergentes las ventanas que pertenecen a la de delante: la barra de tareas no es un menú del Explorador. | 5b |
+| 445 | Un paso con prefijo es un gesto directo y no le pregunta a Jev: «abre:», «escribe:» y «tecla:». | 6 |
+| 446 | El plan se ejecuta en orden y para en el primer paso que falla; los que quedan salen Omitidos, y cada objetivo sabe lo que hicieron los pasos anteriores. | 6 |
+| 447 | Lo que se le devuelve a Luna cabe en 30.000 bytes: si no cabe, se recorta y se dice cuánto se mandó de cuánto. | 6 |
+| 448 | La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno. | 6 |
+| 449 | Una pantalla sin accionables se relee hasta 1 s antes de rendirse: una app que acaba de abrir todavía no pintó. | 7 |
+| 450 | El Escape que pulsa Ü no es el freno de la persona: solo frena un Escape que Ü no mandó. | 7 |
+| 451 | Si Jev dice que pulsar la elegida cumple el objetivo y la pantalla cambia al pulsarla, el objetivo termina sin otra llamada; si no cambia, se vuelve a preguntar. | 7 |
+| 452 | El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla. | 7 |
+| 453 | Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms. | 7 |
+| 454 | La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar. | 7 |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -97,7 +107,8 @@ La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 | 4 | el ciclo medido | 436–437 |
 | 5 | Luna planea; el ciclo obedece al plan | 438–441 |
 | 5b | lo que enseñó el primer banco: historia, textos, emergentes propias | 442–444 |
-| 6 | la voz y la burbuja | nivel 4, a mano |
+| 6 | el ejecutor del plan, la voz (GPT-Live + Luna delegada) y la burbuja | 445–448 + nivel 4 a mano |
+| 7 | lo que enseñaron las corridas reales: pantalla que aún pinta, Escape propio, un clic que termina, siseo, Enter, primera entrada | 449–454 |
 
 ## Lo que queda fuera
 
@@ -169,3 +180,49 @@ Horas sacadas de los commits y de los archivos del banco, no de memoria.
 **Lo que falta para la meta de 200 ms**: Jev solo ya se come ~210. Para bajar de ahí haría falta decidir varios clics
 por llamada (un plan de clics para la misma pantalla) o no preguntar «¿cumplido?» en una vuelta aparte — hoy cada
 objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms).
+- **23:14** — promesa 451 (Jev dice en la misma llamada si ese clic termina el objetivo) → **mediana con clic 261 ms**.
+- **23:16-23:21** — **la burbuja, con el ratón real y el micrófono real**: se pinta (captura), un clic abre la voz
+  (`session.started`), y se cierra sola tras 90 s de silencio. Dos fallos encontrados así y arreglados:
+  el `DragMove()` atrapaba el clic (la burbuja no despertaba) y Ctrl+Alt+Espacio lo ocupa otra app (error 1409,
+  y el fallo era mudo: ahora cae a Ctrl+Mayús+Espacio y lo dice). Y uno grave: **881 deltas de siseo del servidor
+  en 90 s, 0 con voz**; la compuerta del eco los tomaba por voz y habría dejado el micrófono mudo para siempre
+  (promesa 452).
+- **23:22** — Chrome: busca el clima en Medellín y lo lee (17 °C, nublado). Luna repetía la búsqueda porque miraba
+  25 ms después del Enter (promesa 453): 17,2 s → 9,1 s.
+- **23:25** — `reasoning.effort` de Luna: `none` 1,6-1,9 s, `low` 1,3-1,7 s por turno; `minimal` no existe para
+  Luna. Se queda en `low`: su tiempo es red y generación, no razonamiento.
+- **23:27** — promesa 454 (Luna recibe lo que hay delante con el pedido). Contrato de u **25/25**, cada una con su
+  sabotaje verificado por diff. **Batería de 7 pedidos: 7 de 7 cumplidos**, 5-15 s de principio a fin (de los que
+  el ciclo es < 3 s y el resto es Luna); vuelta con clic mediana 296 ms (261-343 entre corridas). Lo que pasa de
+  500 ms: picos de Jev (600-709 ms) y asentados de 320-430 ms mientras la app pinta la página nueva.
+
+## Cómo verificarlo por la mañana
+
+```powershell
+cd .claude\worktrees\u-desde-cero
+.\scripts\contrato-u.ps1          # 25 promesas, sin pantalla ni red, ~30 s
+.\scripts\bateria-u.ps1           # 7 pedidos reales de punta a punta; MUEVE EL RATÓN: no tocar el equipo
+dotnet build u\App\App.csproj -c Release -o $env:TEMP\u-nuevo-bin
+& $env:TEMP\u-nuevo-bin\U-nuevo.exe   # la burbuja, abajo a la derecha
+```
+
+**Nivel 4, lo único que no se pudo hacer de noche: hablarle.** Clic en la burbuja (o Ctrl+Mayús+Espacio), esperar
+el azul, y decir por ejemplo «abre la calculadora y calcula 45 por 12». Se mira en
+`%LOCALAPPDATA%\U-nuevo\logs\u-AAAAMMDD.log`: `🗣` lo que oyó, `🌙 Luna →` lo que planeó, `⏱` cada vuelta, `Ü:` lo
+que contestó, y al cerrar `N delta(s) de salida, M con voz` (M > 0 = sonó). Lo que no se sabe hasta hacerlo: si la
+voz habla (sin audio de entrada no dijo nada) y si el eco por turnos basta con altavoces.
+
+También: `U-nuevo.exe --hacer "pedido"` (sin voz), `--voz-prueba "pedido"` (voz real sin audio), `--plan "p1" "p2"`.
+
+## Lo que queda abierto
+
+1. **Jev es el suelo**: ~210 ms de mediana, con picos de 600-1.800 ms. Para la meta de 200 ms habría que decidir
+   varios clics de una misma pantalla en una sola llamada.
+2. **El asentado al navegar** (320-430 ms) es relectura mientras la app pinta. Escuchar eventos de UIA en vez de
+   releer podría recortarlo; no se midió.
+3. **Luna** tarda 1,3-3 s por turno y es la mayor parte del tiempo de un pedido. Está fuera del ciclo, pero la
+   persona lo nota.
+4. **Chrome** abre a veces el selector de perfiles y Luna elige el de la persona: funciona, pero es un paso que
+   nadie pidió.
+5. **SAP** no está: el ciclo nuevo es UIA puro. SAP necesita su propia pieza de accionables (Scripting COM).
+6. **La voz**: eco por turnos (no se le puede hablar encima), y la sesión se cierra a los 90 s de silencio.
