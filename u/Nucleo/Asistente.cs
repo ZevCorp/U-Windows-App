@@ -54,7 +54,7 @@ public sealed class Asistente : IDisposable
             AlTerminarVuelta = v => Log($"   ⏱ {v.Tiempos.Linea()} · {(v.Elegida.Length > 0 ? "pulsé " + v.Elegida : v.Resultado)}"),
         };
         var ejecutor = new Ejecutor(
-            app => Apps.Abrir(app).Llego,
+            AbrirYEsperarQueSeLea,
             texto => { Raton.Escribir(texto); Thread.Sleep(30); },
             tecla => { bool ok = Raton.Tecla(tecla); Thread.Sleep(60); return ok; },
             (objetivo, hecho) => motor.Objetivo(objetivo, MaxPasosPorObjetivo, hecho),
@@ -63,6 +63,22 @@ public sealed class Asistente : IDisposable
         var r = ejecutor.Ejecutar(pasos);
         Log("↩ " + r.Resultado.Resumen);
         return r.Relato() + "\n\nAhora:\n" + Mirar();
+    }
+
+    /// <summary>
+    /// ABRIR INCLUYE QUE SE PUEDA LEER. La primera lectura de una app recién abierta costó 351-469 ms en la
+    /// batería del 2026-09-24 (23:10): UIA en frío mientras la app aún pinta. Contada dentro del primer ciclo lo
+    /// sacaba del presupuesto; es tiempo de la app abriéndose, como el que espera una persona antes de mirar.
+    /// </summary>
+    private bool AbrirYEsperarQueSeLea(string app)
+    {
+        var (llego, ms) = Apps.Abrir(app);
+        if (!llego) { Log($"   abrir «{app}»: no llegó delante en {ms} ms"); return false; }
+        var r = Stopwatch.StartNew();
+        int n = 0;
+        while (r.ElapsedMilliseconds < 3000 && (n = _lector.Leer(Donde.Ahora()?.Ventana ?? IntPtr.Zero).Accionables.Count) == 0) Thread.Sleep(30);
+        Log($"   abrir «{app}»: delante en {ms} ms, legible en {r.ElapsedMilliseconds} ms más ({n} accionables)");
+        return true;
     }
 
     /// <summary>Atiende una llamada de Luna por su nombre. Lo desconocido se dice, no se ignora.</summary>

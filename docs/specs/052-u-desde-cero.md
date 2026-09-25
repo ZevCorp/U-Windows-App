@@ -141,3 +141,31 @@ Horas sacadas de los commits y de los archivos del banco, no de memoria.
 - **23:01** — **punta a punta sin voz** (`U-nuevo.exe --hacer`): «abre el bloc de notas y escribe: hola, soy Ü».
   Luna planeó en 2.778 ms `abre: notepad → escribe: hola, soy Ü`; el ejecutor lo hizo en 412 ms; Luna resumió en
   2.217 ms. Total 5,7 s, de los que el ciclo son 0,4: **el tiempo ahora es de Luna, no del harness**.
+- **23:02-23:05** — **la voz contra el servidor real** (`--voz-prueba`, sin micrófono ni altavoz): `session.started`
+  en 310-742 ms; Luna (delegada) llamó a `mirar` y `hacer`, se recuperó sola de un paso fallido, y la compuerta de
+  peligro paró «Cerrar Calculadora» (0,56). Sin audio de entrada la voz no produce eventos `session.output_*`: lo
+  que Luna escribe llega como `response.output_text.done`, y es lo que se cuenta. **La voz con altavoz y
+  micrófono queda para la corrida a mano (nivel 4).**
+- **23:05** — umbral de Jev 0,45 (no 0,70 como main): con 36 botones Jev eligió «Nueve», el correcto, con 0,52.
+- **23:07** — promesa 449 (pantalla vacía = todavía no pintó) roja → verde; sabotaje: roja.
+- **23:09** — **batería de punta a punta** (`scripts/bateria-u.ps1`, 6 pedidos): 6 de 6 cumplidos. Pero un Escape
+  que mandó Ü frenó a Ü (4 pasos omitidos) y el Bloc de notas recibió «Ãœ» porque el .ps1 no tenía BOM.
+- **23:10** — promesa 450 (el Escape de Ü no es el freno de la persona) roja → verde; sabotaje: roja. Contrato 21/21.
+- **23:12** — abrir una app ahora incluye esperar a que se pueda leer (la primera lectura en frío costaba 351-469 ms
+  dentro del primer ciclo). **Batería: 6 de 6 cumplidos · vuelta con clic mediana 343 ms, máx 691 · 2 de 18 fuera de
+  presupuesto**, las dos por asentar ~290 ms mientras Configuración y el Explorador pintan la página nueva.
+
+### Dónde está hoy cada fase (batería de las 23:12)
+
+| Fase | Mediana | Qué la domina |
+|---|---|---|
+| dónde estoy | 0,0-0,2 ms | nada: Win32 |
+| ver | 0 ms (reusa el asentado) / 23-160 ms | UIA; en frío ya no cuenta (va en «abre:») |
+| decidir | ~210 ms (180-350) | **Jev**: el suelo del ciclo, y no es nuestro |
+| pulsar | ~15 ms | SetCursorPos + SendInput; el resto es el hilo |
+| asentar | ~30 ms en la misma pantalla, ~290 ms al navegar | lo que tarda la app en pintar la página nueva |
+| **vuelta con clic** | **343 ms** | |
+
+**Lo que falta para la meta de 200 ms**: Jev solo ya se come ~210. Para bajar de ahí haría falta decidir varios clics
+por llamada (un plan de clics para la misma pantalla) o no preguntar «¿cumplido?» en una vuelta aparte — hoy cada
+objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms).
