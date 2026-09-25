@@ -42,8 +42,9 @@ internal static class Contrato
         Promesa(445, "Un paso con prefijo es un gesto directo y no le pregunta a Jev: «abre:», «escribe:» y «tecla:».", P445);
         Promesa(446, "El plan se ejecuta en orden y para en el primer paso que falla; los que quedan salen Omitidos, y cada objetivo sabe lo que hicieron los pasos anteriores.", P446);
         Promesa(447, "Lo que se le devuelve a Luna cabe en 30.000 bytes: si no cabe, se recorta y se dice cuánto se mandó de cuánto.", P447);
+        Promesa(448, "La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
         Promesa(449, "Una pantalla sin accionables se relee hasta 1 s antes de rendirse: una app que acaba de abrir todavía no pintó.", P449);
-        Promesa(448,"La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
+        Promesa(450, "El Escape que pulsa Ü no es el freno de la persona: solo frena un Escape que Ü no mandó.", P450);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -547,6 +548,16 @@ internal static class Contrato
         var m2 = N("Motor", dDonde, Delegado(typeof(Func<>).MakeGenericType(accionablesT), () => Lista()), dDecidir, dPulsar, (Func<bool>)(() => false));
         I(m2, "Objetivo", "pulsar siete", 3);
         Exige(reloj.ElapsedMilliseconds is >= 900 and <= 1600, $"con la pantalla siempre vacía tardó {reloj.ElapsedMilliseconds} ms en rendirse");
+    }
+
+    private static void P450()
+    {
+        var ahora = new DateTime(2026, 9, 24, 23, 10, 0);
+        bool Freno(bool abajo, DateTime? propia) => (bool)S("Raton", "EsFrenoDeLaPersona", abajo, ahora, propia)!;
+        Exige(Freno(true, null), "un Escape de la persona, sin ninguno de Ü, no frenó");
+        Exige(!Freno(true, ahora.AddMilliseconds(-80)), "el Escape que Ü mandó hace 80 ms frenó a Ü");
+        Exige(Freno(true, ahora.AddSeconds(-3)), "un Escape de la persona 3 s después del de Ü no frenó");
+        Exige(!Freno(false, null), "sin Escape, frenó");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

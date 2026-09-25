@@ -1,4 +1,4 @@
-# EL CONTRATO DE Ü DESDE CERO (spec 052, promesas 430-441). Sin pantalla y sin red.
+﻿# EL CONTRATO DE Ü DESDE CERO (spec 052, promesas 430-441). Sin pantalla y sin red.
 #
 #   .\scripts\contrato-u.ps1
 #

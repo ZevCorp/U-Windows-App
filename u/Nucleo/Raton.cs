@@ -83,6 +83,7 @@ public static class Raton
             vks.Add(vk);
         }
         if (vks.Count == 0) return false;
+        if (vks.Contains(0x1B)) _escapePropio = DateTime.Now;
         var e = new List<INPUT>();
         foreach (var vk in vks) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vk } } });
         for (int i = vks.Count - 1; i >= 0; i--) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vks[i], Flags = 0x0002 } } });
@@ -92,6 +93,20 @@ public static class Raton
 
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);
 
-    /// <summary>¿Se pulsó Escape desde la última vez que se preguntó? El freno de la promesa 441.</summary>
-    public static bool EscapePulsado() => (GetAsyncKeyState(0x1B) & 0x0001) != 0 || (GetAsyncKeyState(0x1B) & 0x8000) != 0;
+    private static DateTime? _escapePropio;
+
+    /// <summary>
+    /// ¿Se pulsó Escape? El freno de la promesa 441, pero SOLO el de la persona (promesa 450): en la batería
+    /// del 2026-09-24 (23:09) Luna planeó «tecla: Escape» para limpiar la Calculadora y el motor lo tomó
+    /// por «paren» — 1 de 5 pasos hechos, 4 omitidos, por un Escape que mandó Ü.
+    /// </summary>
+    public static bool EscapePulsado()
+    {
+        bool abajo = (GetAsyncKeyState(0x1B) & 0x0001) != 0 | (GetAsyncKeyState(0x1B) & 0x8000) != 0;
+        return EsFrenoDeLaPersona(abajo, DateTime.Now, _escapePropio);
+    }
+
+    /// <summary>La regla, pura: un Escape frena salvo que Ü haya mandado el suyo en los últimos 500 ms.</summary>
+    public static bool EsFrenoDeLaPersona(bool escapeAbajo, DateTime ahora, DateTime? escapePropio) =>
+        escapeAbajo && !(escapePropio is { } p && (ahora - p).TotalMilliseconds is >= 0 and < 500);
 }
