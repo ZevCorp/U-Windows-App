@@ -47,6 +47,7 @@ internal static class Contrato
         Promesa(450, "El Escape que pulsa Ü no es el freno de la persona: solo frena un Escape que Ü no mandó.", P450);
         Promesa(451, "Si Jev dice que pulsar la elegida cumple el objetivo y la pantalla cambia al pulsarla, el objetivo termina sin otra llamada; si no cambia, se vuelve a preguntar.", P451);
         Promesa(452, "El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla.", P452);
+        Promesa(453, "Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms.", P453);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -608,6 +609,14 @@ internal static class Contrato
         Exige(!Suena(Pcm(-17, -16, -12, -14, -17, -13)), "el siseo de −17..−12 que manda el servidor contó como voz");
         Exige(Suena(Pcm(0, 2800, -3100, 1500)), "una frase a −20 dBFS no contó como voz");
         Exige(!Suena(Array.Empty<byte>()), "un delta vacío sonó");
+    }
+
+    private static void P453()
+    {
+        int Espera(string t) => (int)S("Ejecutor", "EsperaTrasTecla", t)!;
+        Exige(Espera("Enter") == 1500 && Espera("intro") == 1500, $"tras Enter se espera {Espera("Enter")} ms");
+        Exige(Espera("Ctrl+L") == 150 && Espera("Escape") == 150 && Espera("Tab") == 150, "tras otra tecla no se esperan 150 ms");
+        Exige(Espera("Ctrl+Enter") == 1500, "Ctrl+Enter también navega");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

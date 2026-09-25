@@ -56,7 +56,7 @@ public sealed class Asistente : IDisposable
         var ejecutor = new Ejecutor(
             AbrirYEsperarQueSeLea,
             texto => { Raton.Escribir(texto); Thread.Sleep(30); },
-            tecla => { bool ok = Raton.Tecla(tecla); Thread.Sleep(60); return ok; },
+            PulsarTeclaYEsperar,
             (objetivo, hecho) => motor.Objetivo(objetivo, MaxPasosPorObjetivo, hecho),
             HayQueParar)
         { AlTerminarPaso = l => Log("   " + l) };
@@ -78,6 +78,17 @@ public sealed class Asistente : IDisposable
         int n = 0;
         while (r.ElapsedMilliseconds < 3000 && (n = _lector.Leer(Donde.Ahora()?.Ventana ?? IntPtr.Zero).Accionables.Count) == 0) Thread.Sleep(30);
         Log($"   abrir «{app}»: delante en {ms} ms, legible en {r.ElapsedMilliseconds} ms más ({n} accionables)");
+        return true;
+    }
+
+    private bool PulsarTeclaYEsperar(string tecla)
+    {
+        IntPtr Ventana() => Donde.Ahora()?.Ventana ?? IntPtr.Zero;
+        string antes = _lector.Leer(Ventana()).Huella;
+        if (!Raton.Tecla(tecla)) return false;
+        var reloj = Stopwatch.StartNew();
+        var a = Asentado.Esperar(() => _lector.Leer(Ventana()).Huella, antes, Ejecutor.EsperaTrasTecla(tecla), () => reloj.ElapsedMilliseconds);
+        Log($"   tecla «{tecla}»: {(a.Cambio ? "la pantalla cambió" : "la pantalla no cambió")} en {a.Ms} ms");
         return true;
     }
 

@@ -72,6 +72,15 @@ public sealed class Ejecutor
         return new EjecucionDelPlan(Plan.Resultado(pasos, hechos), detalle);
     }
 
+    /// <summary>
+    /// Cuánto se espera a que la pantalla cambie tras una tecla (promesa 453). Enter navega —envía una búsqueda,
+    /// abre una carpeta— y la página tarda: en Chrome, el «mirar» 25 ms después del Enter aún veía «Nueva
+    /// pestaña», y Luna repitió la búsqueda entera creyendo que había fallado (2026-09-24, 23:22).
+    /// Se sale en cuanto cambia (Asentado): una tecla que responde rápido no paga el techo.
+    /// </summary>
+    public static int EsperaTrasTecla(string tecla) =>
+        (tecla ?? "").Split('+').Last().Trim().ToLowerInvariant() is "enter" or "intro" ? 1500 : 150;
+
     private static bool Prefijo(string paso, string prefijo, out string resto)
     {
         var p = (paso ?? "").TrimStart();
