@@ -39,6 +39,10 @@ internal static class Contrato
         Promesa(442, "Jev sabe lo que ya se hizo: el estado lleva, en orden, lo que ya se pulsó para este objetivo.", P442);
         Promesa(443, "La huella ve los textos: si lo único que cambia es lo que dice la pantalla, la huella cambia.", P443);
         Promesa(444, "Solo cuentan como emergentes las ventanas que pertenecen a la de delante: la barra de tareas no es un menú del Explorador.", P444);
+        Promesa(445, "Un paso con prefijo es un gesto directo y no le pregunta a Jev: «abre:», «escribe:» y «tecla:».", P445);
+        Promesa(446, "El plan se ejecuta en orden y para en el primer paso que falla; los que quedan salen Omitidos, y cada objetivo sabe lo que hicieron los pasos anteriores.", P446);
+        Promesa(447, "Lo que se le devuelve a Luna cabe en 30.000 bytes: si no cabe, se recorta y se dice cuánto se mandó de cuánto.", P447);
+        Promesa(448, "La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -425,6 +429,100 @@ internal static class Contrato
         };
         var r = L(S("Emergentes", "Elegir", delante, encima)).Select(o => (IntPtr)o).ToList();
         Exige(r.SequenceEqual(new[] { new IntPtr(2), new IntPtr(3) }), $"emergentes elegidas: {string.Join(",", r)} (se esperaban 2 y 3)");
+    }
+
+    // Un ejecutor de mentira que anota todo lo que se le pide.
+    private static (object Ejecutor, List<string> Anotado) Ejecutor(Func<string, bool> cumpleObjetivo)
+    {
+        var anotado = new List<string>();
+        var recorridoT = T("Recorrido");
+        Func<string, bool> abrir = a => { anotado.Add("abrir " + a); return true; };
+        Action<string> escribir = t => anotado.Add("escribir " + t);
+        Func<string, bool> tecla = t => { anotado.Add("tecla " + t); return true; };
+        Func<string, IReadOnlyList<string>, object> objetivo = (o, hecho) =>
+        {
+            anotado.Add($"jev {o} | antes: {string.Join(" ; ", hecho)}");
+            var vueltas = Array.CreateInstance(T("Vuelta"), 0);
+            return N("Recorrido", vueltas, cumpleObjetivo(o) ? "cumplido" : "no pulso", cumpleObjetivo(o));
+        };
+        var objetivoT = typeof(Func<,,>).MakeGenericType(typeof(string), typeof(IReadOnlyList<string>), recorridoT);
+        var po = System.Linq.Expressions.Expression.Parameter(typeof(string));
+        var ph = System.Linq.Expressions.Expression.Parameter(typeof(IReadOnlyList<string>));
+        var dObjetivo = System.Linq.Expressions.Expression.Lambda(objetivoT,
+            System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.Invoke(
+                System.Linq.Expressions.Expression.Constant(objetivo), po, ph), recorridoT), po, ph).Compile();
+        return (N("Ejecutor", abrir, escribir, tecla, dObjetivo, (Func<bool>)(() => false)), anotado);
+    }
+
+    private static void P445()
+    {
+        var (e, anotado) = Ejecutor(_ => true);
+        var r = I(e, "Ejecutar", new List<string> { "abre: notepad", "escribe: hola, ¿qué tal?", "tecla: Ctrl+S" })!;
+        Exige(anotado.SequenceEqual(new[] { "abrir notepad", "escribir hola, ¿qué tal?", "tecla Ctrl+S" }),
+            $"los gestos directos no se hicieron tal cual: {string.Join(" | ", anotado)}");
+        Exige(!anotado.Any(a => a.StartsWith("jev")), "un gesto directo le preguntó a Jev");
+        var estados = L(P(P(r, "Resultado")!, "Pasos")).Select(p => (string)P(p, "Estado")!).ToList();
+        Exige(estados.All(s => s == "Hecho"), $"estados: {string.Join(",", estados)}");
+    }
+
+    private static void P446()
+    {
+        var (e, anotado) = Ejecutor(o => o != "ir a Pantalla");
+        var r = I(e, "Ejecutar", new List<string> { "abre: configuración", "ir a Sistema", "ir a Pantalla", "subir el brillo" })!;
+        var estados = L(P(P(r, "Resultado")!, "Pasos")).Select(p => (string)P(p, "Estado")!).ToList();
+        Exige(estados.SequenceEqual(new[] { "Hecho", "Hecho", "Fallido", "Omitido" }), $"estados: {string.Join(",", estados)}");
+        Exige(!anotado.Any(a => a.Contains("subir el brillo")), "se ejecutó un paso después del que falló");
+        var segundo = anotado.FirstOrDefault(a => a.StartsWith("jev ir a Pantalla")) ?? "";
+        Exige(segundo.Contains("abrí «configuración»") && segundo.Contains("ir a Sistema"),
+            $"el objetivo no supo lo que hicieron los pasos anteriores: {segundo}");
+        Exige(((string)P(P(r, "Resultado")!, "Resumen")!).Contains("2 de 4"), "el resumen no se cuenta sobre el plan");
+    }
+
+    private static void P447()
+    {
+        string corto = "abrí el Bloc de notas";
+        Exige((string)S("ParaLuna", "Recortar", corto)! == corto, "un resultado corto se tocó");
+        string largo = string.Concat(Enumerable.Repeat("á accionable 🙂 ", 5000));
+        string r = (string)S("ParaLuna", "Recortar", largo)!;
+        int bytes = System.Text.Encoding.UTF8.GetByteCount(r);
+        Exige(bytes <= 30_000, $"el recorte ocupa {bytes} bytes");
+        Exige(r.Contains("recortado") && r.Contains(System.Text.Encoding.UTF8.GetByteCount(largo).ToString()), "el recorte no dice cuánto se mandó de cuánto");
+        Exige(!r.Contains('�'), "el recorte partió un carácter");
+    }
+
+    private static void P448()
+    {
+        string apertura = (string)S("ProtocoloVivo", "Apertura", "instrucciones de Luna")!;
+        using (var d = JsonDocument.Parse(apertura))
+        {
+            var s = d.RootElement.GetProperty("session");
+            Exige(d.RootElement.GetProperty("type").GetString() == "session.start", "no abre con session.start");
+            Exige(s.GetProperty("model").GetString() == "gpt-live-1", "la voz no es gpt-live-1");
+            var resp = s.GetProperty("delegation").GetProperty("responses");
+            Exige(resp.GetProperty("model").GetString() == "gpt-5.6-luna", "la delegada no es Luna");
+            var nombres = resp.GetProperty("tools").EnumerateArray().Select(t => t.GetProperty("name").GetString()).ToList();
+            Exige(nombres.Contains("hacer") && nombres.Contains("mirar"), $"herramientas de Luna: {string.Join(",", nombres)}");
+        }
+        Exige(((string)S("ProtocoloVivo", "Direccion")!.ToString()!).Contains("/v1/live/sessions"), "no va por /v1/live/sessions");
+
+        // La MISMA llamada llega tres veces (medido en main el 2026-09-12): solo la terminada cuenta.
+        string Ev(string tipo, string args) => JsonSerializer.Serialize(new
+        {
+            type = "response.event",
+            @event = new { type = tipo, item = new { type = "function_call", call_id = "call_1", name = "hacer", arguments = args } },
+        });
+        var llamadas = new[] { Ev("response.output_item.added", ""), Ev("response.function_call_arguments.done", "{\"pasos\":[\"x\"]}"), Ev("response.output_item.done", "{\"pasos\":[\"x\"]}") }
+            .Select(j => S("ProtocoloVivo", "Llamada", j)).Where(x => x != null).ToList();
+        Exige(llamadas.Count == 1, $"la llamada se atendió {llamadas.Count} veces");
+        Exige((string)P(llamadas[0]!, "CallId")! == "call_1" && ((string)P(llamadas[0]!, "Argumentos")!).Contains("pasos"), "la llamada no trae su id y sus argumentos");
+
+        var salida = L(S("ProtocoloVivo", "Resultado", "call_1", "hecho")).Select(o => (string)o).ToList();
+        Exige(salida.Count == 2, $"el resultado no son dos mensajes: {salida.Count}");
+        using (var d = JsonDocument.Parse(salida[0]))
+            Exige(d.RootElement.GetProperty("item").GetProperty("call_id").GetString() == "call_1"
+                && d.RootElement.GetProperty("item").GetProperty("type").GetString() == "function_call_output", "el resultado no lleva su call_id");
+        using (var d = JsonDocument.Parse(salida[1]))
+            Exige(d.RootElement.GetProperty("type").GetString() == "response.create", "después del resultado no se pide turno");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────
