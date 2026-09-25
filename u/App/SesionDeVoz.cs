@@ -28,6 +28,7 @@ public sealed class SesionDeVoz : IAsyncDisposable
     private DateTime _sonoHasta = DateTime.MinValue;
     private DateTime _ultimaActividad = DateTime.Now;
     private readonly HashSet<string> _tiposVistos = new();
+    private int _deltasDeSalida, _deltasConVoz;
 
     public event Action<string>? Estado;       // «escuchando», «pensando», «actuando», «cerrada»
     public event Action<string>? DiceUsuario;
@@ -71,7 +72,7 @@ public sealed class SesionDeVoz : IAsyncDisposable
         _micro.DataAvailable += (_, e) =>
         {
             if (!Abierta || _ws?.State != WebSocketState.Open) return;
-            if (DateTime.Now < _sonoHasta || (_salida?.BufferedDuration ?? TimeSpan.Zero) > TimeSpan.Zero) return;   // Ü está sonando
+            if (DateTime.Now < _sonoHasta) return;   // Ü está sonando DE VERDAD (Eco.Suena, promesa 452)
             _ = EnviarAsync(ProtocoloVivo.Audio(e.Buffer.AsSpan(0, e.BytesRecorded)));
         };
         _micro.StartRecording();
@@ -131,9 +132,12 @@ public sealed class SesionDeVoz : IAsyncDisposable
                 if (b64.Length > 0)
                 {
                     var pcm = Convert.FromBase64String(b64);
-                    if (!EsSilencio(pcm))
+                    _deltasDeSalida++;
+                    if (!EsSilencio(pcm)) _salida?.AddSamples(pcm, 0, pcm.Length);
+                    // El micrófono se calla solo con voz de verdad: el siseo entre frases no cuenta.
+                    if (Eco.Suena(pcm))
                     {
-                        _salida?.AddSamples(pcm, 0, pcm.Length);
+                        _deltasConVoz++;
                         _sonoHasta = DateTime.Now + (_salida?.BufferedDuration ?? TimeSpan.Zero) + TimeSpan.FromMilliseconds(300);
                     }
                 }
@@ -213,7 +217,7 @@ public sealed class SesionDeVoz : IAsyncDisposable
         try { _altavoz?.Stop(); _altavoz?.Dispose(); } catch { }
         try { if (_ws?.State == WebSocketState.Open) await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, porque, CancellationToken.None); } catch { }
         _fin.Cancel();
-        Registro.Log("voz: cerrada · " + porque);
+        Registro.Log($"voz: cerrada · {porque} · {_deltasDeSalida} delta(s) de salida, {_deltasConVoz} con voz");
         Estado?.Invoke("cerrada");
     }
 

@@ -46,6 +46,7 @@ internal static class Contrato
         Promesa(449, "Una pantalla sin accionables se relee hasta 1 s antes de rendirse: una app que acaba de abrir todavía no pintó.", P449);
         Promesa(450, "El Escape que pulsa Ü no es el freno de la persona: solo frena un Escape que Ü no mandó.", P450);
         Promesa(451, "Si Jev dice que pulsar la elegida cumple el objetivo y la pantalla cambia al pulsarla, el objetivo termina sin otra llamada; si no cambia, se vuelve a preguntar.", P451);
+        Promesa(452, "El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla.", P452);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -595,6 +596,18 @@ internal static class Contrato
             Exige((bool)P(r, "Cumplido")!, $"cambia={cambia}: no terminó cumplido ({P(r, "PorQueParo")})");
             Exige(llamadas == (cambia ? 1 : 2), $"cambia={cambia}: {llamadas} llamadas a Jev (se esperaban {(cambia ? 1 : 2)})");
         }
+    }
+
+    private static byte[] Pcm(params short[] muestras) { var b = new byte[muestras.Length * 2]; Buffer.BlockCopy(muestras, 0, b, 0, b.Length); return b; }
+
+    private static void P452()
+    {
+        bool Suena(byte[] pcm) => (bool)S("Eco", "Suena", pcm)!;
+        Exige(!Suena(Pcm(0, 0, 0, 0)), "los ceros sonaron");
+        // Lo medido el 2026-09-24 (23:17): deltas de −17 a −12 con la voz callada.
+        Exige(!Suena(Pcm(-17, -16, -12, -14, -17, -13)), "el siseo de −17..−12 que manda el servidor contó como voz");
+        Exige(Suena(Pcm(0, 2800, -3100, 1500)), "una frase a −20 dBFS no contó como voz");
+        Exige(!Suena(Array.Empty<byte>()), "un delta vacío sonó");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────
