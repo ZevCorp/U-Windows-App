@@ -76,8 +76,9 @@ public sealed class Asistente : IDisposable
         if (!llego) { Log($"   abrir «{app}»: no llegó delante en {ms} ms"); return false; }
         var r = Stopwatch.StartNew();
         int n = 0;
-        while (r.ElapsedMilliseconds < 3000 && (n = _lector.Leer(Donde.Ahora()?.Ventana ?? IntPtr.Zero).Accionables.Count) == 0) Thread.Sleep(30);
-        Log($"   abrir «{app}»: delante en {ms} ms, legible en {r.ElapsedMilliseconds} ms más ({n} accionables)");
+        var q = Asentado.Quieta(() => { var l = _lector.Leer(Donde.Ahora()?.Ventana ?? IntPtr.Zero); n = l.Accionables.Count; return l; },
+            3000, () => r.ElapsedMilliseconds);
+        Log($"   abrir «{app}»: delante en {ms} ms, {(q.Cambio ? "quieta" : "todavía moviéndose")} en {q.Ms} ms más ({n} accionables, {q.Lecturas} lecturas)");
         return true;
     }
 

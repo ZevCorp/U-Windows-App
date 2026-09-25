@@ -50,6 +50,7 @@ internal static class Contrato
         Promesa(453, "Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms.", P453);
         Promesa(454, "La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar.", P454);
         Promesa(455, "El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está.", P455);
+        Promesa(456, "Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s.", P456);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -662,6 +663,30 @@ internal static class Contrato
             DelegadoAccion(typeof(Action<>).MakeGenericType(T("Accionable")), _ => { }), (Func<bool>)(() => false));
         I(motor, "Objetivo", "buscar", 2);
         Exige(visto == "Cuadro de búsqueda", $"el motor no le pasó el foco a Jev: «{visto}»");
+    }
+
+    private static void P456()
+    {
+        // Lo que se vio en el Explorador (2026-09-25, 01:17): vacío, 4 botones a medio pintar, y luego 59 y 59.
+        long reloj = 0; int n = 0;
+        var secuencia = new Func<object>[]
+        {
+            () => Lista(),
+            () => Lista(("Atrás", "Button"), ("Adelante", "Button"), ("Subir", "Button"), ("Actualizar", "Button")),
+            () => Lista(("Atrás", "Button"), ("Documentos", "TreeItem"), ("Descargas", "TreeItem")),
+            () => Lista(("Atrás", "Button"), ("Documentos", "TreeItem"), ("Descargas", "TreeItem")),
+        };
+        var lecturaT = T("Lectura");
+        Func<object> leer = () => { reloj += 40; var l = secuencia[Math.Min(n++, secuencia.Length - 1)](); return N("Lectura", l, new List<string>()); };
+        var dLeer = Delegado(typeof(Func<>).MakeGenericType(lecturaT), () => leer());
+        var r = S("Asentado", "Quieta", dLeer, 3000, (Func<long>)(() => reloj))!;
+        Exige((bool)P(r, "Cambio")! && (int)P(r, "Lecturas")! == 4, $"no esperó a dos lecturas iguales con accionables: {r}");
+
+        // Una app que nunca se queda quieta: se rinde a los 3 s.
+        reloj = 0; int k = 0;
+        Func<object> inquieta = () => { reloj += 100; k++; return N("Lectura", Lista(("Reloj " + k, "Button")), new List<string>()); };
+        var r2 = S("Asentado", "Quieta", Delegado(typeof(Func<>).MakeGenericType(lecturaT), () => inquieta()), 3000, (Func<long>)(() => reloj))!;
+        Exige(!(bool)P(r2, "Cambio")! && (long)P(r2, "Ms")! is >= 3000 and <= 3100, $"con una app que no para se esperó {P(r2, "Ms")} ms");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

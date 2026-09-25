@@ -30,6 +30,28 @@ public static class Asentado
             if (pasado >= techoMs) return new Asentamiento(false, pasado, lecturas);
         }
     }
+
+    /// <summary>
+    /// ¿LA APP YA ESTÁ QUIETA? (promesa 456). Dos lecturas seguidas con la misma huella y con accionables. «Abrir»
+    /// paraba con el primer botón que aparecía: el Explorador daba 4 de sus 59 a medio pintar, y su primer ciclo
+    /// pagaba ver 203-404 ms + asentar ~320 ms dentro del presupuesto (rondas del 2026-09-25, 00:46 y 01:17).
+    /// </summary>
+    public static Asentamiento Quieta(Func<Lectura> leer, int techoMs, Func<long> relojMs)
+    {
+        long inicio = relojMs();
+        int lecturas = 0;
+        string? anterior = null;
+        while (true)
+        {
+            var l = leer();
+            lecturas++;
+            long pasado = relojMs() - inicio;
+            string h = l.Huella;
+            if (l.Accionables.Count > 0 && h == anterior) return new Asentamiento(true, pasado, lecturas);
+            if (pasado >= techoMs) return new Asentamiento(false, pasado, lecturas);
+            anterior = h;
+        }
+    }
 }
 
 /// <summary>Los cinco tiempos de un ciclo, en ms (promesa 437).</summary>

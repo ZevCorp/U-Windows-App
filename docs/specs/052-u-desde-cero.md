@@ -94,6 +94,7 @@ Promesas de `u/Contrato/Contrato.cs`, 430-454. Se numeran desde la 430 (las de `
 | 453 | Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms. | 7 |
 | 454 | La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar. | 7 |
 | 455 | El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está. | 7 |
+| 456 | Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s. | 7 |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -213,7 +214,7 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
 
 ```powershell
 cd .claude\worktrees\u-desde-cero
-.\scripts\contrato-u.ps1          # 26 promesas, sin pantalla ni red, ~30 s
+.\scripts\contrato-u.ps1          # 27 promesas, sin pantalla ni red, ~30 s
 .\scripts\bateria-u.ps1           # 7 pedidos reales de punta a punta; MUEVE EL RATÓN: no tocar el equipo
 dotnet build u\App\App.csproj -c Release -o $env:TEMP\u-nuevo-bin
 & $env:TEMP\u-nuevo-bin\U-nuevo.exe   # la burbuja, abajo a la derecha
