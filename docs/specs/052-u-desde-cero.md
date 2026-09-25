@@ -231,6 +231,11 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   quieta. Y al medirlo apareció lo peor: **se perdían letras** («tercera prueba de la aaaaaaaaa»). Un lote de
   SendInput Unicode lo corrompe 1 de cada 4 veces (4 de 5 bien); con 3 ms entre letras, 5 de 5 (y 2, 5 y 10 ms
   también bien). Promesa 460. Repetido: 2 de 2 a la primera, 5,5 y 6,4 s. Contrato de u 31/31.
+- **06:10** — ronda: 6 de 6, mediana con clic 274 ms. Los dos pedidos de la Calculadora científica agotaron el tope
+  (Luna no siempre sigue la regla de teclear, y Jev pulsa «Cuatro» por «Uno»; Luna lo rescata tecleando). **Sonda de
+  solo lectura** (`banco-u --sonda-jev`, mismo estado, 8 preguntas por variante) para la hipótesis de que el número
+  del historial empuja a Jev a repetir el id: con número 6 de 8 aciertos, sin número 7 de 8. La hipótesis **no se
+  sostiene** y la 442 no se toca. Lo que sí mide: **Jev se equivoca ~1 de cada 5 veces** eligiendo entre 50 botones.
 ### La noche entera, en números (`%TEMP%\u-medicion\noche.log`, 10 rondas de 00:15 a 05:02)
 
 | | |

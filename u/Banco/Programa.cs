@@ -24,6 +24,7 @@ if (typesafe == null) { Console.WriteLine("✘ sin clave de TypeSafe no hay Jev:
 using var jev = new ClienteJev(typesafe) { Umbral = Jev.UmbralPorDefecto };
 using var lector = new LectorUia();
 Console.WriteLine($"Jev calentado en {jev.Calentar()} ms · segunda {jev.Calentar()} ms");
+if (args.Contains("--sonda-jev")) return SondaJev.Correr(jev, 8);
 
 // Las primitivas, sobre lo que haya delante.
 {
