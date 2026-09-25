@@ -77,10 +77,14 @@ public sealed class Burbuja : Window
         menu.Items.Add(Item("Salir", () => Application.Current.Shutdown()));
         _circulo.ContextMenu = menu;
 
+        // El rótulo dice lo último que pasó y se apaga a los 6 s: quieta es quieta, también a la vista.
+        var apagar = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+        apagar.Tick += (_, _) => { apagar.Stop(); fondoRotulo.Visibility = Visibility.Collapsed; };
         Registro.Linea += l => Dispatcher.BeginInvoke(() =>
         {
             _rotulo.Text = l.Length > 140 ? l[..140] + "…" : l;
             fondoRotulo.Visibility = Visibility.Visible;
+            apagar.Stop(); apagar.Start();
         });
         PonerEstado("quieta");
     }

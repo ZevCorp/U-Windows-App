@@ -93,6 +93,7 @@ Promesas de `u/Contrato/Contrato.cs`, 430-454. Se numeran desde la 430 (las de `
 | 452 | El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla. | 7 |
 | 453 | Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms. | 7 |
 | 454 | La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar. | 7 |
+| 455 | El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está. | 7 |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -196,11 +197,18 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   el ciclo es < 3 s y el resto es Luna); vuelta con clic mediana 296 ms (261-343 entre corridas). Lo que pasa de
   500 ms: picos de Jev (600-709 ms) y asentados de 320-430 ms mientras la app pinta la página nueva.
 
+- **23:29-23:40** — **pedidos nunca vistos: 5 de 5** (Documentos, menú Editar, Calculadora científica, Paint, fondo
+  de escritorio). Dos fallos nuevos, arreglados: pulsar un campo que toma el foco «no cambiaba nada» (promesa 455:
+  el foco entra en la huella y Jev sabe dónde está), y un `abre:` con un nombre inventado lanzaba en vez de fallar.
+  La batería se colgó porque `Start-Process -Wait` espera al árbol entero y Ü había abierto un `cmd`: ahora espera
+  solo a Ü. Luna aprende que `abre:` acepta `ms-settings:…`: «busca fondo de escritorio» pasó de 20,7 s a 4,2 s.
+- **23:41** — un sabotaje restaurado con `Copy-Item` dejó el contrato rojo: la fecha vieja hizo que msbuild no
+  recompilara (ya estaba en la memoria como quinto punto ciego). Se tocó la fecha y volvió a INTACTO 26/26.
 ## Cómo verificarlo por la mañana
 
 ```powershell
 cd .claude\worktrees\u-desde-cero
-.\scripts\contrato-u.ps1          # 25 promesas, sin pantalla ni red, ~30 s
+.\scripts\contrato-u.ps1          # 26 promesas, sin pantalla ni red, ~30 s
 .\scripts\bateria-u.ps1           # 7 pedidos reales de punta a punta; MUEVE EL RATÓN: no tocar el equipo
 dotnet build u\App\App.csproj -c Release -o $env:TEMP\u-nuevo-bin
 & $env:TEMP\u-nuevo-bin\U-nuevo.exe   # la burbuja, abajo a la derecha
