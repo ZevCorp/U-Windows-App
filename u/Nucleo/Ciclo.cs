@@ -65,26 +65,35 @@ public static class Ciclo
 public sealed class Motor
 {
     private readonly Func<Ubicacion?> _donde;
-    private readonly Func<IReadOnlyList<Accionable>> _ver;
-    private readonly Func<string, string, IReadOnlyList<Accionable>, Eleccion> _decidir;
+    private readonly Func<Lectura> _leer;
+    private readonly Func<Contexto, Eleccion> _decidir;
     private readonly Action<Accionable> _pulsar;
     private readonly Func<bool> _hayQueParar;
 
     /// <summary>Cada vuelta, en cuanto termina: el log y la burbuja la ven en vivo.</summary>
     public Action<Vuelta>? AlTerminarVuelta { get; set; }
 
-    public Motor(Func<Ubicacion?> donde, Func<IReadOnlyList<Accionable>> ver,
-        Func<string, string, IReadOnlyList<Accionable>, Eleccion> decidir, Action<Accionable> pulsar, Func<bool> hayQueParar)
+    /// <summary>El motor completo: lee accionables Y textos, y Jev decide con lo ya hecho (promesas 442-443).</summary>
+    public Motor(Func<Ubicacion?> donde, Func<Lectura> leer, Func<Contexto, Eleccion> decidir, Action<Accionable> pulsar, Func<bool> hayQueParar)
     {
-        _donde = donde; _ver = ver; _decidir = decidir; _pulsar = pulsar; _hayQueParar = hayQueParar;
+        _donde = donde; _leer = leer; _decidir = decidir; _pulsar = pulsar; _hayQueParar = hayQueParar;
     }
 
-    public Recorrido Objetivo(string objetivo, int maxPasos)
+    /// <summary>La forma mínima: solo accionables, y un decisor que no mira la historia.</summary>
+    public Motor(Func<Ubicacion?> donde, Func<IReadOnlyList<Accionable>> ver,
+        Func<string, string, IReadOnlyList<Accionable>, Eleccion> decidir, Action<Accionable> pulsar, Func<bool> hayQueParar)
+        : this(donde, () => new Lectura(ver(), Array.Empty<string>()), c => decidir(c.Pantalla, c.Objetivo, c.Accionables), pulsar, hayQueParar) { }
+
+    public Recorrido Objetivo(string objetivo, int maxPasos) => Objetivo(objetivo, maxPasos, Array.Empty<string>());
+
+    /// <param name="yaHecho">Lo que se hizo antes de este objetivo (los pasos anteriores del plan), para que Jev lo sepa.</param>
+    public Recorrido Objetivo(string objetivo, int maxPasos, IReadOnlyList<string> yaHecho)
     {
         var vueltas = new List<Vuelta>();
+        var hecho = new List<string>(yaHecho ?? Array.Empty<string>());
         var reloj = Stopwatch.StartNew();
         int numeroPrevio = -1, repeticiones = 0;
-        IReadOnlyList<Accionable>? yaLeidos = null;   // lo que leyó el asentado: el ciclo siguiente no lo relee
+        Lectura? yaLeida = null;   // lo que leyó el asentado: el ciclo siguiente no lo relee
 
         for (int paso = 1; paso <= maxPasos; paso++)
         {
@@ -96,12 +105,13 @@ public sealed class Motor
             if (aqui == null) return new Recorrido(vueltas, "no sé dónde estoy: no hay ninguna ventana delante", false);
 
             r.Restart();
-            var lista = yaLeidos ?? _ver();
-            yaLeidos = null;
+            var lectura = yaLeida ?? _leer();
+            yaLeida = null;
+            var lista = lectura.Accionables;
             double tVer = r.Elapsed.TotalMilliseconds;
 
             r.Restart();
-            var e = _decidir(aqui.Pantalla, objetivo, lista);
+            var e = _decidir(new Contexto(aqui.Pantalla, objetivo, lista, lectura.Textos, hecho.ToArray()));
             double tDecidir = r.Elapsed.TotalMilliseconds;
 
             if (e.Cumplido >= Jev.CumplidoMinimo)
@@ -120,17 +130,18 @@ public sealed class Motor
             // El freno se mira OTRA VEZ justo antes de tocar nada: Jev tarda 200 ms y Escape pudo llegar entretanto.
             if (_hayQueParar()) return new Recorrido(vueltas, "Escape: paré sin pulsar nada más", false);
 
-            string antes = Accionables.Huella(lista);
+            string antes = lectura.Huella;
             r.Restart();
             _pulsar(a);
             double tPulsar = r.Elapsed.TotalMilliseconds;
 
             r.Restart();
-            IReadOnlyList<Accionable>? ultima = null;
-            var asentado = Asentado.Esperar(() => Accionables.Huella(ultima = _ver()), antes, Asentado.TechoMs, () => reloj.ElapsedMilliseconds);
+            Lectura? ultima = null;
+            var asentado = Asentado.Esperar(() => (ultima = _leer()).Huella, antes, Asentado.TechoMs, () => reloj.ElapsedMilliseconds);
             double tAsentar = r.Elapsed.TotalMilliseconds;
-            yaLeidos = ultima;
+            yaLeida = ultima;
 
+            hecho.Add($"pulsé «{a.Id}»" + (asentado.Cambio ? "" : " y la pantalla no cambió"));
             Anota(vueltas, new Vuelta(paso, new Tiempos(tDonde, tVer, tDecidir, tPulsar, tAsentar), aqui.Pantalla, lista.Count,
                 a.Id, asentado.Cambio ? "cambió" : "no cambió"));
 

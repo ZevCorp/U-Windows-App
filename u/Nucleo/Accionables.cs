@@ -42,11 +42,20 @@ public static class Accionables
     /// Main miraba la VENTANA, que no cambia al pasar de Inicio a Sistema en Configuración, y esperaba 1,8 s
     /// por nada; los accionables sí cambian.
     /// </summary>
-    public static string Huella(IReadOnlyList<Accionable> lista)
+    public static string Huella(IReadOnlyList<Accionable> lista) => Huella(lista, Array.Empty<string>());
+
+    /// <summary>
+    /// La huella con los textos (promesa 443). En la Calculadora pulsar «7» no cambia ningún botón: cambia
+    /// «La pantalla muestra 7». Sin los textos, el banco del 2026-09-24 vio «no cambió» tres veces seguidas
+    /// y el motor paró por repetición con el clic funcionando.
+    /// </summary>
+    public static string Huella(IReadOnlyList<Accionable> lista, IReadOnlyList<string> textos)
     {
         unchecked
         {
             long h = 1469598103934665603;
+            foreach (var t in textos ?? Array.Empty<string>())
+                foreach (char ch in t) h = (h ^ ch) * 1099511628211;
             foreach (var a in lista)
             {
                 foreach (char ch in a.Nombre) h = (h ^ ch) * 1099511628211;
@@ -54,7 +63,39 @@ public static class Accionables
                 h = (h ^ a.Caja.X) * 1099511628211;
                 h = (h ^ a.Caja.Y) * 1099511628211;
             }
-            return lista.Count + ":" + h.ToString("x");
+            return lista.Count + ":" + (textos?.Count ?? 0) + ":" + h.ToString("x");
         }
+    }
+}
+
+/// <summary>Lo que se lee en un ciclo: lo que se puede pulsar, y lo que la pantalla dice.</summary>
+public sealed record Lectura(IReadOnlyList<Accionable> Accionables, IReadOnlyList<string> Textos)
+{
+    public static readonly Lectura Vacia = new(Array.Empty<Accionable>(), Array.Empty<string>());
+    public string Huella => U.Ciclo.Accionables.Huella(Accionables, Textos);
+}
+
+/// <summary>Todo lo que Jev necesita para decidir UNA vuelta, incluido lo ya hecho (promesa 442).</summary>
+public sealed record Contexto(string Pantalla, string Objetivo, IReadOnlyList<Accionable> Accionables,
+    IReadOnlyList<string> Textos, IReadOnlyList<string> Hecho);
+
+/// <summary>
+/// Qué ventanas de encima cuentan como parte de la de delante (promesa 444). Las del mismo proceso no
+/// basta: la barra de tareas y el escritorio son de explorer.exe, y el banco del 2026-09-24 leyó 60
+/// «accionables» del Explorador en 319 ms porque se llevaba la barra entera.
+/// </summary>
+public static class Emergentes
+{
+    public static IReadOnlyList<IntPtr> Elegir(IntPtr delante, IReadOnlyList<(IntPtr Ventana, IntPtr Duenno, string Clase, bool MismoProceso)> encima)
+    {
+        var salida = new List<IntPtr>();
+        foreach (var (v, dueno, clase, mismo) in encima ?? Array.Empty<(IntPtr, IntPtr, string, bool)>())
+        {
+            if (!mismo) continue;
+            // Suya: la ventana de delante es su dueña. O un menú clásico (#32768), que no tiene dueño pero
+            // solo existe mientras alguien de ese proceso lo tiene abierto.
+            if (dueno == delante || clase == "#32768") salida.Add(v);
+        }
+        return salida;
     }
 }

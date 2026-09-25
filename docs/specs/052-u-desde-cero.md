@@ -80,6 +80,9 @@ Promesas de `u/Contrato/Contrato.cs`. Se numeran desde la 430 (las de `main` lle
 | 439 | Un paso del plan que no se ejecutó deja rastro (`Omitido`); el denominador del resultado es el plan. | 5 |
 | 440 | El ciclo para al primer «cumplido», al tope de pasos, o cuando Jev repite la misma puerta tres veces sin cambio. | 5 |
 | 441 | Escape detiene todo en el ciclo siguiente, sin pulsar nada más. | 5 |
+| 442 | Jev sabe lo que ya se hizo: el estado lleva, en orden, lo que ya se pulsó para este objetivo. | 5b |
+| 443 | La huella ve los textos: si lo único que cambia es lo que dice la pantalla, la huella cambia. | 5b |
+| 444 | Solo cuentan como emergentes las ventanas que pertenecen a la de delante: la barra de tareas no es un menú del Explorador. | 5b |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -93,6 +96,7 @@ La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 | 3 | Jev | 434–435 |
 | 4 | el ciclo medido | 436–437 |
 | 5 | Luna planea; el ciclo obedece al plan | 438–441 |
+| 5b | lo que enseñó el primer banco: historia, textos, emergentes propias | 442–444 |
 | 6 | la voz y la burbuja | nivel 4, a mano |
 
 ## Lo que queda fuera
@@ -104,3 +108,28 @@ La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 ## Bitácora
 
 - **22:42** — medición de `main` hecha (tabla de arriba). Pulsar 3–4,6 s; la espera se come 1,8 s.
+- **23:05** — promesas 430-441 escritas y ROJAS (12 pendientes). Commit `232ea21`.
+- **23:10** — núcleo `u/Nucleo` en verde 12/12. Sabotaje por diff en 7 promesas, las 7 rojas (el primer
+  sabotaje de la 441 quitaba solo uno de los dos frenos y siguió verde: se rehízo).
+- **23:12** — **banco 1 sobre el PC real** (`u/Banco`, mismas 5 tareas que main): mediana con clic
+  **373 ms**, máx 485; 1 de 14 vueltas fuera de presupuesto. Pero solo 1 de 5 tareas cumplida: Jev no
+  sabía lo ya hecho (abría y cerraba «Archivo»), la huella no veía el texto de la Calculadora, y el
+  Explorador leía la barra de tareas (mismo proceso, 60 accionables, 319 ms).
+- **23:20** — promesas 442-444 rojas → verdes; sabotaje por diff de las tres, rojas (la primera de la 442 no
+  compilaba y no juzgó: se rehízo con una que compila).
+- **23:22** — **banco 2 sobre el PC real**: **4 de 5 tareas CUMPLIDAS** (Bloc de notas, Explorador →
+  Documentos, Calculadora 7×8, Sistema → Pantalla). Mediana con clic **432 ms**, máx 724; 4 de 14 fuera de
+  presupuesto — dos por Jev (617 y 972 ms) y dos por un asentado que espera a una app que aún carga
+  (406-462 ms). Bluetooth: llegó, pero Jev dudó (0,58) en vez de decir «cumplido».
+
+### main contra u, mismas cinco tareas, mismo PC
+
+| | main (`334f144`) | u (banco 2) |
+|---|---|---|
+| dónde estoy | 48-590 ms | 0,02 ms |
+| ver | 108-313 ms | 31-67 ms (0 cuando la reusa del asentado) |
+| decidir (Jev) | 200-625 ms | 177-972 ms (mediana 236) |
+| pulsar | 290-4.628 ms | 1,5-61 ms (mediana 11) |
+| asentar | incluido en pulsar: 1.814 ms | 28-462 ms (mediana 128) |
+| **vuelta con clic** | **3.579-5.176 ms** | **mediana 432 ms** |
+| tareas cumplidas | 0 de 5 (Sistema llegó, sin «cumplido») | **4 de 5** |

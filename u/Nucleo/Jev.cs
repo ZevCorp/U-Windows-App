@@ -23,11 +23,30 @@ public static class Jev
     public const double PeligroMaximo = 0.50;
 
     /// <summary>El cuerpo de la pregunta (promesa 435). La clave NO va aquí: va en la cabecera.</summary>
-    public static string Cuerpo(string pantalla, string objetivo, IReadOnlyList<Accionable> ofrecidas, string modelo)
+    public static string Cuerpo(string pantalla, string objetivo, IReadOnlyList<Accionable> ofrecidas, string modelo) =>
+        Cuerpo(new Contexto(pantalla, objetivo, ofrecidas, Array.Empty<string>(), Array.Empty<string>()), modelo);
+
+    /// <summary>
+    /// Con lo que la pantalla dice y lo ya hecho (promesa 442). Sin lo ya hecho, en el banco del 2026-09-24
+    /// Jev abría «Archivo» y lo volvía a pulsar —cerrándolo— porque cada vuelta empezaba de cero.
+    /// </summary>
+    public static string Cuerpo(Contexto c, string modelo)
     {
+        string pantalla = c.Pantalla, objetivo = c.Objetivo;
+        var ofrecidas = c.Accionables;
         var estado = new StringBuilder();
         estado.Append("Pantalla actual: ").Append(pantalla).Append('\n');
         estado.Append("Lo que se quiere conseguir: ").Append(objetivo).Append('\n');
+        if (c.Hecho.Count > 0)
+        {
+            estado.Append("Ya hecho para este objetivo, en orden:\n");
+            foreach (var h in c.Hecho) estado.Append("  - ").Append(h).Append('\n');
+        }
+        if (c.Textos.Count > 0)
+        {
+            estado.Append("Lo que dice la pantalla:\n");
+            foreach (var t in c.Textos) estado.Append("  · ").Append(t).Append('\n');
+        }
         estado.Append("Accionables en esta pantalla, en orden de lectura:\n");
         foreach (var a in ofrecidas) estado.Append("  - ").Append(a.Id).Append('\n');
 
@@ -152,10 +171,14 @@ public sealed class ClienteJev : IDisposable
         return texto;
     }
 
-    public Eleccion Decidir(string pantalla, string objetivo, IReadOnlyList<Accionable> ofrecidas)
+    public Eleccion Decidir(string pantalla, string objetivo, IReadOnlyList<Accionable> ofrecidas) =>
+        Decidir(new Contexto(pantalla, objetivo, ofrecidas, Array.Empty<string>(), Array.Empty<string>()));
+
+    public Eleccion Decidir(Contexto c)
     {
+        var ofrecidas = c.Accionables;
         if (ofrecidas.Count == 0) return new Eleccion(false, 0, 0, 0, "no hay ningún accionable en esta pantalla");
-        try { return Jev.Interpretar(Preguntar(Jev.Cuerpo(pantalla, objetivo, ofrecidas, Modelo)), ofrecidas, Umbral); }
+        try { return Jev.Interpretar(Preguntar(Jev.Cuerpo(c, Modelo)), ofrecidas, Umbral); }
         catch (Exception e)
         {
             string causa = "";

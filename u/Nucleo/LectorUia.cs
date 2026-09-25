@@ -18,6 +18,9 @@ namespace U.Ciclo;
 /// </summary>
 public sealed class LectorUia : IDisposable
 {
+    private const int TipoTexto = 50020;
+    /// <summary>Cuántos textos viajan a Jev como mucho, y de qué largo. La pantalla, no un documento.</summary>
+    public int MaxTextos { get; init; } = 30;
     private const int PropNombre = 30005, PropTipo = 30003, PropCaja = 30001, PropFuera = 30022, PropHabilitado = 30010;
 
     private static readonly (int Id, string Nombre)[] TiposAccionables =
@@ -44,7 +47,9 @@ public sealed class LectorUia : IDisposable
             _peticion.AutomationElementMode = AutomationElementMode.AutomationElementMode_None;
             _peticion.TreeScope = TreeScope.TreeScope_Element;
 
-            var tipos = TiposAccionables.Select(t => _uia.CreatePropertyCondition(PropTipo, t.Id)).ToArray();
+            // Y los textos (50020): no se ofrecen para pulsar, pero dicen lo que la pantalla muestra (promesa 443).
+            var tipos = TiposAccionables.Select(t => _uia.CreatePropertyCondition(PropTipo, t.Id))
+                .Append(_uia.CreatePropertyCondition(PropTipo, TipoTexto)).ToArray();
             _condicion = _uia.CreateAndCondition(
                 _uia.CreateOrConditionFromArray(tipos),
                 _uia.CreatePropertyCondition(PropFuera, false));
@@ -61,12 +66,19 @@ public sealed class LectorUia : IDisposable
     /// Los accionables de una ventana y de sus ventanas hermanas del mismo proceso (los menús de Windows 11
     /// y los desplegables son ventanas aparte: sin ellas, abrir «Archivo» no enseñaría sus opciones).
     /// </summary>
-    public IReadOnlyList<Accionable> Leer(IntPtr ventana)
+    public Lectura Leer(IntPtr ventana)
     {
-        var tcs = new TaskCompletionSource<IReadOnlyList<Accionable>>();
+        var tcs = new TaskCompletionSource<Lectura>();
         _cola.Add(() =>
         {
-            try { tcs.SetResult(Accionables.Numerar(LeerEnElHilo(ventana))); }
+            try
+            {
+                var crudos = LeerEnElHilo(ventana);
+                var textos = crudos.Where(c => c.Tipo == "Text" && !c.FueraDePantalla && c.Caja.Ancho > 0)
+                    .Select(c => (c.Nombre ?? "").Trim()).Where(t => t.Length > 0)
+                    .Select(t => t.Length > 80 ? t[..80] + "…" : t).Distinct().Take(MaxTextos).ToList();
+                tcs.SetResult(new Lectura(Accionables.Numerar(crudos.Where(c => c.Tipo != "Text")), textos));
+            }
             catch (Exception e) { tcs.SetException(e); }
         });
         return tcs.Task.GetAwaiter().GetResult();
@@ -109,6 +121,7 @@ public sealed class LectorUia : IDisposable
 
     private static string NombreDelTipo(int id)
     {
+        if (id == TipoTexto) return "Text";
         foreach (var t in TiposAccionables) if (t.Id == id) return t.Nombre;
         return id.ToString();
     }
@@ -122,24 +135,29 @@ public sealed class LectorUia : IDisposable
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out RECT r);
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int L, T, R, B; }
 
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr h, uint cmd);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int max);
+
     /// <summary>
-    /// Las ventanas visibles del mismo proceso que están POR ENCIMA de la de delante en el orden Z: menús,
-    /// desplegables, diálogos. EnumWindows recorre de arriba abajo, así que basta con parar al llegar a ella.
+    /// Las ventanas visibles POR ENCIMA de la de delante en el orden Z (EnumWindows va de arriba abajo), y de
+    /// ellas solo las que le pertenecen (promesa 444): la regla está en <see cref="Emergentes.Elegir"/>.
     /// </summary>
-    private static List<IntPtr> Emergentes(IntPtr ventana)
+    private static IReadOnlyList<IntPtr> Emergentes(IntPtr ventana)
     {
-        var salida = new List<IntPtr>();
+        var encima = new List<(IntPtr, IntPtr, string, bool)>();
         GetWindowThreadProcessId(ventana, out uint pid);
         EnumWindows((h, _) =>
         {
             if (h == ventana) return false;
             if (!IsWindowVisible(h)) return true;
+            if (!GetWindowRect(h, out var r) || r.R - r.L <= 1 || r.B - r.T <= 1) return true;
             GetWindowThreadProcessId(h, out uint p);
-            if (p != pid) return true;
-            if (GetWindowRect(h, out var r) && r.R - r.L > 1 && r.B - r.T > 1) salida.Add(h);
-            return salida.Count < 4;
+            var sb = new System.Text.StringBuilder(64);
+            GetClassName(h, sb, sb.Capacity);
+            encima.Add((h, GetWindow(h, 4 /* GW_OWNER */), sb.ToString(), p == pid));
+            return encima.Count < 40;
         }, IntPtr.Zero);
-        return salida;
+        return U.Ciclo.Emergentes.Elegir(ventana, encima);
     }
 
     public void Dispose() => _cola.CompleteAdding();

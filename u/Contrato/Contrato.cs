@@ -36,6 +36,9 @@ internal static class Contrato
         Promesa(439, "Un paso del plan que no se ejecutó deja rastro (Omitido); el denominador del resultado es el plan.", P439);
         Promesa(440, "El ciclo para al primer «cumplido», al tope de pasos, o cuando Jev repite la misma puerta tres veces sin cambio.", P440);
         Promesa(441, "Escape detiene todo en el ciclo siguiente, sin pulsar nada más.", P441);
+        Promesa(442, "Jev sabe lo que ya se hizo: el estado lleva, en orden, lo que ya se pulsó para este objetivo.", P442);
+        Promesa(443, "La huella ve los textos: si lo único que cambia es lo que dice la pantalla, la huella cambia.", P443);
+        Promesa(444, "Solo cuentan como emergentes las ventanas que pertenecen a la de delante: la barra de tareas no es un menú del Explorador.", P444);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -356,6 +359,72 @@ internal static class Contrato
         var (m, p) = Motor(_ => Eleccion(true, 2), true, parar: pulsos => pulsos >= 1);
         var r = I(m, "Objetivo", "seguir", 10)!;
         Exige(p.Count == 1 && ((string)P(r, "PorQueParo")!).Contains("Escape"), $"Escape no detuvo: {p.Count} pulsos · {P(r, "PorQueParo")}");
+    }
+
+    private static void P442()
+    {
+        // El cuerpo lleva lo ya hecho, en orden, bajo su propio encabezado.
+        var ofrecidas = Lista(("Archivo", "MenuItem"), ("Nuevo", "MenuItem"));
+        var hecho = new List<string> { "pulsé «4) Archivo (MenuItem)»", "escribí «hola»" };
+        var ctx = N("Contexto", "notepad · Sin título", "abrir el menú Archivo", ofrecidas, new List<string> { "Ln 1, Col 1" }, hecho);
+        string cuerpo = (string)S("Jev", "Cuerpo", ctx, "jev-latest")!;
+        using var doc = JsonDocument.Parse(cuerpo);
+        string estado = doc.RootElement.GetProperty("state").GetString() ?? "";
+        int a = estado.IndexOf("pulsé «4) Archivo (MenuItem)»", StringComparison.Ordinal), b = estado.IndexOf("escribí «hola»", StringComparison.Ordinal);
+        Exige(estado.Contains("Ya hecho") && a >= 0 && b > a, $"el estado no lleva lo ya hecho en orden:\n{estado}");
+        Exige(estado.Contains("Ln 1, Col 1"), "el estado no lleva lo que dice la pantalla");
+
+        // Y el motor se lo pasa: en la segunda vuelta, lo pulsado en la primera.
+        var vistos = new List<List<string>>();
+        var contextoT = T("Contexto");
+        var decidirT = typeof(Func<,>).MakeGenericType(contextoT, T("Eleccion"));
+        int vuelta = 0;
+        var p = System.Linq.Expressions.Expression.Parameter(contextoT, "c");
+        var dDecidir = System.Linq.Expressions.Expression.Lambda(decidirT,
+            System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.Invoke(
+                System.Linq.Expressions.Expression.Constant((Func<object, object>)(c =>
+                {
+                    vistos.Add(L(P(c, "Hecho")).Select(o => (string)o).ToList());
+                    return ++vuelta >= 2 ? Eleccion(false, 0, cumplido: 0.9) : Eleccion(true, 2);
+                })),
+                System.Linq.Expressions.Expression.Convert(p, typeof(object))), T("Eleccion")), p).Compile();
+
+        int pantalla = 0;
+        var lecturaT = T("Lectura");
+        Func<object> leer = () => N("Lectura", Lista(("Pantalla " + pantalla, "Text"), ("Siguiente", "Button")), new List<string> { "texto " + pantalla });
+        var dLeer = Delegado(typeof(Func<>).MakeGenericType(lecturaT), () => leer());
+        var dDonde = Delegado(typeof(Func<>).MakeGenericType(T("Ubicacion")), () => Ubicacion(7, "notepad"));
+        var dPulsar = DelegadoAccion(typeof(Action<>).MakeGenericType(T("Accionable")), _ => pantalla++);
+        var motor = N("Motor", dDonde, dLeer, dDecidir, dPulsar, (Func<bool>)(() => false));
+        I(motor, "Objetivo", "llegar", 5);
+        Exige(vistos.Count == 2 && vistos[0].Count == 0, $"la primera vuelta no empezó sin historia: {vistos.Count} vueltas");
+        Exige(vistos[1].Count == 1 && vistos[1][0].Contains("2) Siguiente (Button)"), $"la segunda vuelta no supo lo pulsado: {string.Join(" | ", vistos.ElementAtOrDefault(1) ?? new())}");
+    }
+
+    private static void P443()
+    {
+        var lista = Lista(("Siete", "Button"), ("Ocho", "Button"));
+        string h1 = (string)S("Accionables", "Huella", lista, new List<string> { "La pantalla muestra 0" })!;
+        string h2 = (string)S("Accionables", "Huella", lista, new List<string> { "La pantalla muestra 7" })!;
+        string h3 = (string)S("Accionables", "Huella", lista, new List<string> { "La pantalla muestra 7" })!;
+        Exige(h1 != h2, "la huella no cambió cuando solo cambió el texto de la pantalla");
+        Exige(h2 == h3, "la huella cambió sin que cambiara nada");
+    }
+
+    private static void P444()
+    {
+        var delante = new IntPtr(100);
+        // (ventana, dueño, clase, proceso igual)
+        var encima = new List<(IntPtr, IntPtr, string, bool)>
+        {
+            (new IntPtr(1), IntPtr.Zero, "Shell_TrayWnd", true),        // la barra de tareas: mismo proceso, de nadie
+            (new IntPtr(2), delante, "Xaml_WindowedPopupClass", true),   // el menú de la ventana de delante
+            (new IntPtr(3), IntPtr.Zero, "#32768", true),               // un menú clásico: es de quien lo abrió
+            (new IntPtr(4), new IntPtr(999), "#32770", true),           // un diálogo de OTRA ventana del mismo proceso
+            (new IntPtr(5), delante, "Chrome_WidgetWin_1", false),       // de delante pero de otro proceso: tampoco
+        };
+        var r = L(S("Emergentes", "Elegir", delante, encima)).Select(o => (IntPtr)o).ToList();
+        Exige(r.SequenceEqual(new[] { new IntPtr(2), new IntPtr(3) }), $"emergentes elegidas: {string.Join(",", r)} (se esperaban 2 y 3)");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────
