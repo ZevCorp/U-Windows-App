@@ -223,6 +223,19 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   contrato salió verde y **el PC real siguió abriendo el diálogo** — la hipótesis era falsa, y la 457 se quedó con
   el enunciado de lo que de verdad garantiza. El arreglo real: «mirar» dice lo que contienen los campos (promesa
   458) y Luna sabe que los atajos dependen del idioma. Repetido: 2 de 2, 5-8 s, verificando sobre el contenido.
+### La noche entera, en números (`%TEMP%\u-medicion\noche.log`, 10 rondas de 00:15 a 05:02)
+
+| | |
+|---|---|
+| pedidos | **59 de 60 cumplidos** — el que no, el Bloc de notas de las 02:21 (arreglado con la 458); desde entonces 24 de 24 |
+| vueltas del ciclo | 132, de las que **25 (19 %) pasaron de 500 ms** |
+| mediana de la vuelta con clic, por ronda | 273-463 ms (y dos rondas de madrugada con muy pocos clics: 749 y 1.078 ms, por Jev lento) |
+| lo que se pasa de 500 ms | **siempre las mismas dos causas**: el asentado al navegar (Explorador → Descargas, Configuración → Sonido: 300-380 ms mientras la app pinta) y los picos de Jev (600-1.741 ms) |
+| lo que nunca se pasó | dónde estoy (≤ 0,1 ms), pulsar (≤ 60 ms), ver en caliente (≤ 100 ms) |
+
+**Honestamente**: la meta de 500 ms por vuelta se cumple en el 81 % de las vueltas, no en todas. Lo que falta no es
+el harness —sus tres piezas nunca pasaron de 100 ms— sino esperar menos a que la app pinte (punto abierto 2) y el
+suelo de Jev (punto abierto 1).
 ## Cómo verificarlo por la mañana
 
 ```powershell
