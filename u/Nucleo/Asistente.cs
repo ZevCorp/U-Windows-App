@@ -39,6 +39,7 @@ public sealed class Asistente : IDisposable
         var sb = new StringBuilder();
         sb.Append("Ventana delante: ").Append(aqui.Pantalla).Append('\n');
         if (l.Textos.Count > 0) sb.Append("Dice: ").Append(string.Join(" · ", l.Textos)).Append('\n');
+        if (l.Campos.Count > 0) sb.Append("Campos:\n").Append(Accionables.DescribirCampos(l.Campos)).Append('\n');
         sb.Append($"Se puede pulsar ({l.Accionables.Count}): ");
         sb.Append(string.Join(", ", l.Accionables.Select(a => $"{a.Nombre} ({a.Tipo})")));
         Log($"👁 mirar en {r.ElapsedMilliseconds} ms · {aqui.Pantalla} · {l.Accionables.Count} accionables");

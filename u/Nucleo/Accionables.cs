@@ -45,6 +45,23 @@ public static class Accionables
     public static string Huella(IReadOnlyList<Accionable> lista) => Huella(lista, Array.Empty<string>());
 
     /// <summary>
+    /// Lo que contienen los campos de texto, para Luna (promesa 458). El Bloc de notas enseña en su pestaña «*prue»
+    /// —el título recortado— y Luna, que no veía el contenido, creyó que faltaba texto y gastó 8 turnos «arreglando»
+    /// algo que estaba bien (2026-09-25, 02:21). Solo viaja a Luna por «mirar», nunca a Jev.
+    /// </summary>
+    public static string DescribirCampos(IReadOnlyList<(string Nombre, string Valor)> campos)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var (nombre, valor) in campos ?? Array.Empty<(string, string)>())
+        {
+            string v = (valor ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+            if (v.Length > 80) v = v[..80] + "…";
+            sb.Append(v.Length == 0 ? $"«{nombre}» está vacío" : $"«{nombre}» contiene «{v}»").Append('\n');
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
     /// La huella con los textos (promesa 443). En la Calculadora pulsar «7» no cambia ningún botón: cambia
     /// «La pantalla muestra 7». Sin los textos, el banco del 2026-09-24 vio «no cambió» tres veces seguidas
     /// y el motor paró por repetición con el clic funcionando.
@@ -80,6 +97,8 @@ public static class Accionables
 public sealed record Lectura(IReadOnlyList<Accionable> Accionables, IReadOnlyList<string> Textos)
 {
     public static readonly Lectura Vacia = new(Array.Empty<Accionable>(), Array.Empty<string>());
+    /// <summary>Los campos de texto y lo que contienen (promesa 458).</summary>
+    public IReadOnlyList<(string Nombre, string Valor)> Campos { get; set; } = Array.Empty<(string, string)>();
     /// <summary>El nombre del accionable que tiene el foco del teclado, o vacío (promesa 455).</summary>
     public string Foco { get; set; } = "";
     public string Huella => U.Ciclo.Accionables.Huella(Accionables, Textos, Foco);

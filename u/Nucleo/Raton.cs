@@ -64,6 +64,33 @@ public static class Raton
     /// <summary>Una tecla por su nombre: Enter, Escape, Tab, Abajo, Arriba, Borrar, F1…F12, o «Ctrl+L».</summary>
     public static bool Tecla(string nombre)
     {
+        var eventos = Eventos(nombre);
+        if (eventos == null) return false;
+        if (eventos.Any(x => x.Vk == 0x1B)) _escapePropio = DateTime.Now;
+        var e = eventos.Select(x => new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = x.Vk, Scan = x.Scan, Flags = x.Flags } } }).ToArray();
+        SendInput((uint)e.Length, e, Marshal.SizeOf<INPUT>());
+        return true;
+    }
+
+    [DllImport("user32.dll")] private static extern uint MapVirtualKey(uint code, uint tipo);
+
+    /// <summary>
+    /// Lo que se va a mandar, dicho (promesa 457): «vk scan abajo|arriba [ext]» por evento, en hexadecimal.
+    /// </summary>
+    /// <remarks>
+    /// CON SU CÓDIGO DE EXPLORACIÓN. La primera versión mandaba solo la tecla virtual: el Bloc de notas de Windows 11
+    /// (XAML) sigue los modificadores por el código de exploración, así que el Ctrl de «Ctrl+A» no se le soltaba y la
+    /// «o» de «nocturna» se volvía Ctrl+O — el diálogo Abrir, cuatro veces en una ronda (2026-09-25, 02:21).
+    /// </remarks>
+    public static IReadOnlyList<string> EventosDeTecla(string nombre) =>
+        (IReadOnlyList<string>?)Eventos(nombre)?.Select(x =>
+            $"{x.Vk:X2} {x.Scan:X} {((x.Flags & 0x0002) != 0 ? "arriba" : "abajo")}{((x.Flags & 0x0001) != 0 ? " ext" : "")}").ToList()
+        ?? Array.Empty<string>();
+
+    private static readonly HashSet<ushort> Extendidas = new() { 0x25, 0x26, 0x27, 0x28, 0x2E, 0x24, 0x23, 0x5B, 0x21, 0x22, 0x2D };
+
+    private static List<(ushort Vk, ushort Scan, uint Flags)>? Eventos(string nombre)
+    {
         var partes = (nombre ?? "").Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var vks = new List<ushort>();
         foreach (var p in partes)
@@ -79,16 +106,17 @@ public static class Raton
                 _ when p.Length >= 2 && (p[0] == 'F' || p[0] == 'f') && int.TryParse(p[1..], out int f) && f is >= 1 and <= 12 => (ushort)(0x6F + f),
                 _ => 0,
             };
-            if (vk == 0) return false;
+            if (vk == 0) return null;
             vks.Add(vk);
         }
-        if (vks.Count == 0) return false;
-        if (vks.Contains(0x1B)) _escapePropio = DateTime.Now;
-        var e = new List<INPUT>();
-        foreach (var vk in vks) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vk } } });
-        for (int i = vks.Count - 1; i >= 0; i--) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vks[i], Flags = 0x0002 } } });
-        SendInput((uint)e.Count, e.ToArray(), Marshal.SizeOf<INPUT>());
-        return true;
+        if (vks.Count == 0) return null;
+        (ushort, ushort, uint) Ev(ushort vk, bool arriba) =>
+            (vk, (ushort)MapVirtualKey(vk, 0 /* VK → código de exploración */),
+             (arriba ? 0x0002u : 0u) | (Extendidas.Contains(vk) ? 0x0001u : 0u));
+        var e = new List<(ushort, ushort, uint)>();
+        foreach (var vk in vks) e.Add(Ev(vk, false));
+        for (int i = vks.Count - 1; i >= 0; i--) e.Add(Ev(vks[i], true));
+        return e;
     }
 
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);

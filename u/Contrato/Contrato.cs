@@ -51,6 +51,8 @@ internal static class Contrato
         Promesa(454, "La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar.", P454);
         Promesa(455, "El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está.", P455);
         Promesa(456, "Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s.", P456);
+        Promesa(457, "Una combinación de teclas lleva el código de exploración de cada tecla y suelta lo que pulsó en orden inverso.", P457);
+        Promesa(458, "Mirar dice lo que contienen los campos de texto, recortado a 80 caracteres: Luna comprueba lo que escribió en vez de adivinarlo por el título.", P458);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -687,6 +689,28 @@ internal static class Contrato
         Func<object> inquieta = () => { reloj += 100; k++; return N("Lectura", Lista(("Reloj " + k, "Button")), new List<string>()); };
         var r2 = S("Asentado", "Quieta", Delegado(typeof(Func<>).MakeGenericType(lecturaT), () => inquieta()), 3000, (Func<long>)(() => reloj))!;
         Exige(!(bool)P(r2, "Cambio")! && (long)P(r2, "Ms")! is >= 3000 and <= 3100, $"con una app que no para se esperó {P(r2, "Ms")} ms");
+    }
+
+    private static void P457()
+    {
+        // Cada evento: «vk scan abajo|arriba [ext]». Lo que se manda, dicho; Raton.Tecla lo ejecuta tal cual.
+        var e = L(S("Raton", "EventosDeTecla", "Ctrl+A")).Select(o => o.ToString()!).ToList();
+        Exige(e.Count == 4, $"Ctrl+A no son 4 eventos: {string.Join(" | ", e)}");
+        Exige(e[0].StartsWith("11 ") && e[0].Contains("abajo") && e[1].StartsWith("41 ") && e[1].Contains("abajo")
+            && e[2].StartsWith("41 ") && e[2].Contains("arriba") && e[3].StartsWith("11 ") && e[3].Contains("arriba"),
+            $"no se suelta en orden inverso: {string.Join(" | ", e)}");
+        Exige(e.All(x => x.Split(' ')[1] != "0"), $"un evento va sin código de exploración: {string.Join(" | ", e)}");
+        var flecha = L(S("Raton", "EventosDeTecla", "Abajo")).Select(o => o.ToString()!).ToList();
+        Exige(flecha.All(x => x.Contains("ext")), $"una flecha va sin la marca de tecla extendida: {string.Join(" | ", flecha)}");
+    }
+
+    private static void P458()
+    {
+        var campos = new List<(string, string)> { ("Editor de texto", "prueba nocturna de Ü"), ("Buscar", ""), ("Largo", new string('x', 200)) };
+        string r = (string)S("Accionables", "DescribirCampos", campos)!;
+        Exige(r.Contains("«Editor de texto» contiene «prueba nocturna de Ü»"), $"no dice lo que contiene el campo: {r}");
+        Exige(r.Contains("«Buscar» está vacío"), $"un campo vacío no se dice vacío: {r}");
+        Exige(r.Contains(new string('x', 80) + "…") && !r.Contains(new string('x', 81)), $"no se recorta a 80: {r}");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

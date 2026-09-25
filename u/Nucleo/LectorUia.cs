@@ -21,14 +21,14 @@ public sealed class LectorUia : IDisposable
     private const int TipoTexto = 50020;
     /// <summary>Cuántos textos viajan a Jev como mucho, y de qué largo. La pantalla, no un documento.</summary>
     public int MaxTextos { get; init; } = 30;
-    private const int PropFoco = 30008;
+    private const int PropFoco = 30008, PropValor = 30045;
     private const int PropNombre = 30005, PropTipo = 30003, PropCaja = 30001, PropFuera = 30022, PropHabilitado = 30010;
 
     private static readonly (int Id, string Nombre)[] TiposAccionables =
     {
         (50000, "Button"), (50002, "CheckBox"), (50003, "ComboBox"), (50004, "Edit"), (50005, "Hyperlink"),
         (50007, "ListItem"), (50011, "MenuItem"), (50013, "RadioButton"), (50015, "Slider"), (50019, "TabItem"),
-        (50024, "TreeItem"), (50029, "DataItem"), (50031, "SplitButton"), (50035, "HeaderItem"),
+        (50024, "TreeItem"), (50029, "DataItem"), (50031, "SplitButton"), (50035, "HeaderItem"), (50030, "Document"),
     };
 
     private readonly BlockingCollection<Action> _cola = new();
@@ -37,6 +37,7 @@ public sealed class LectorUia : IDisposable
     private IUIAutomationCacheRequest _peticion = null!;
     private IUIAutomationCondition _condicion = null!;
     private string _foco = "";
+    private readonly List<(string, string)> _campos = new();
 
     public LectorUia()
     {
@@ -45,7 +46,7 @@ public sealed class LectorUia : IDisposable
         {
             _uia = new CUIAutomation8();
             _peticion = _uia.CreateCacheRequest();
-            foreach (int p in new[] { PropNombre, PropTipo, PropCaja, PropFuera, PropHabilitado, PropFoco }) _peticion.AddProperty(p);
+            foreach (int p in new[] { PropNombre, PropTipo, PropCaja, PropFuera, PropHabilitado, PropFoco, PropValor }) _peticion.AddProperty(p);
             _peticion.AutomationElementMode = AutomationElementMode.AutomationElementMode_None;
             _peticion.TreeScope = TreeScope.TreeScope_Element;
 
@@ -79,7 +80,7 @@ public sealed class LectorUia : IDisposable
                 var textos = crudos.Where(c => c.Tipo == "Text" && !c.FueraDePantalla && c.Caja.Ancho > 0)
                     .Select(c => (c.Nombre ?? "").Trim()).Where(t => t.Length > 0)
                     .Select(t => t.Length > 80 ? t[..80] + "…" : t).Distinct().Take(MaxTextos).ToList();
-                tcs.SetResult(new Lectura(Accionables.Numerar(crudos.Where(c => c.Tipo != "Text")), textos) { Foco = _foco });
+                tcs.SetResult(new Lectura(Accionables.Numerar(crudos.Where(c => c.Tipo != "Text")), textos) { Foco = _foco, Campos = _campos.ToArray() });
             }
             catch (Exception e) { tcs.SetException(e); }
         });
@@ -90,6 +91,7 @@ public sealed class LectorUia : IDisposable
     {
         var crudos = new List<Crudo>();
         _foco = "";
+        _campos.Clear();
         if (ventana == IntPtr.Zero) return crudos;
         // Las emergentes primero: un menú abierto tapa la ventana, y lo de arriba es lo que se pulsa.
         foreach (var h in Emergentes(ventana)) LeerUna(h, crudos);
@@ -112,6 +114,8 @@ public sealed class LectorUia : IDisposable
                 var r = e.CachedBoundingRectangle;
                 int tipo = e.CachedControlType;
                 if (_foco.Length == 0 && e.GetCachedPropertyValue(PropFoco) is bool conFoco && conFoco) _foco = (e.CachedName ?? "").Trim();
+                if ((tipo == 50004 || tipo == 50030) && _campos.Count < 12 && e.CachedIsOffscreen == 0)
+                    _campos.Add(((e.CachedName ?? "").Trim(), e.GetCachedPropertyValue(PropValor) as string ?? ""));
                 crudos.Add(new Crudo(
                     e.CachedName ?? "",
                     NombreDelTipo(tipo),

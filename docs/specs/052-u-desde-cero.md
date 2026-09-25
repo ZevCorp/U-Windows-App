@@ -95,6 +95,8 @@ Promesas de `u/Contrato/Contrato.cs`, 430-454. Se numeran desde la 430 (las de `
 | 454 | La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar. | 7 |
 | 455 | El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está. | 7 |
 | 456 | Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s. | 7 |
+| 457 | Una combinación de teclas lleva el código de exploración de cada tecla y suelta lo que pulsó en orden inverso. | 7 |
+| 458 | Mirar dice lo que contienen los campos de texto, recortado a 80 caracteres: Luna comprueba lo que escribió en vez de adivinarlo por el título. | 7 |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -210,11 +212,22 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
 - **00:15** — ronda: 6 de 6 pedidos · mediana con clic 282 ms · 2 de 23 fuera de presupuesto. Un fallo de Jev, no
   del harness: con la Calculadora en modo científico (50 botones) pulsó «Cuatro» en vez de «Uno» y agotó el tope;
   Luna lo rescató tecleando `45*12`. Luna ahora prefiere «escribe:» cuando la app acepta teclado.
+- **00:46-01:50** — rondas nocturnas: 6 de 6 cada una; vuelta con clic mediana 282-410 ms. Lo que pasa de 500 ms
+  es siempre lo mismo: picos de Jev (hasta 1.741 ms de madrugada) y asentados de 300-380 ms al navegar.
+- **01:19** — promesa 456: abrir espera a que la app esté quieta (dos lecturas iguales). El primer «ver» del
+  Explorador bajó de 203-404 a 70-98 ms; su asentado al cambiar de carpeta (255-343 ms) es el Explorador pintando.
+- **02:21** — **un pedido descontrolado**: «abre el bloc de notas y escribe…» gastó los 8 turnos de Luna. Causa, medida
+  paso a paso: el primer «escribe» SÍ funcionó, pero la pestaña mostraba «*prue» (el título recortado) y Luna creyó
+  que faltaba texto; para «arreglarlo» usó Ctrl+A, que **en el Bloc de notas en español es «Abrir»** (confirmado con
+  keybd_event fuera de Ü: no era nuestro SendInput). Se probó primero la hipótesis del código de exploración: el
+  contrato salió verde y **el PC real siguió abriendo el diálogo** — la hipótesis era falsa, y la 457 se quedó con
+  el enunciado de lo que de verdad garantiza. El arreglo real: «mirar» dice lo que contienen los campos (promesa
+  458) y Luna sabe que los atajos dependen del idioma. Repetido: 2 de 2, 5-8 s, verificando sobre el contenido.
 ## Cómo verificarlo por la mañana
 
 ```powershell
 cd .claude\worktrees\u-desde-cero
-.\scripts\contrato-u.ps1          # 27 promesas, sin pantalla ni red, ~30 s
+.\scripts\contrato-u.ps1          # 29 promesas, sin pantalla ni red, ~30 s
 .\scripts\bateria-u.ps1           # 7 pedidos reales de punta a punta; MUEVE EL RATÓN: no tocar el equipo
 dotnet build u\App\App.csproj -c Release -o $env:TEMP\u-nuevo-bin
 & $env:TEMP\u-nuevo-bin\U-nuevo.exe   # la burbuja, abajo a la derecha

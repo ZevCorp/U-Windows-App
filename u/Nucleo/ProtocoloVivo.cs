@@ -45,6 +45,7 @@ public static class ProtocoloVivo
         + "que ponga el foco en ese campo y después «escribe:». "
         + "Si «hacer» dice que un paso falló, mira y vuelve a planear desde donde quedó; no repitas lo ya hecho. "
         + "Si la app acepta teclado para lo que se pide (números en una calculadora, texto en un buscador), prefiere «escribe:» a pulsar botón por botón: es exacto y no hace dudar al ejecutor. "
+        + "Los atajos dependen del idioma de la app: en Windows en español, Ctrl+A en el Bloc de notas es «Abrir» y seleccionar todo es Ctrl+E; ante la duda, un objetivo en pantalla. Para saber si algo se escribió, mira lo que contienen los campos, no el título. "
         + "Nada irreversible (enviar, borrar, pagar) sin que la persona lo haya pedido explícitamente.";
 
     public static string Apertura(string instruccionesDeLuna) => JsonSerializer.Serialize(new
