@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- EL NÚCLEO DE Ü DESDE CERO (spec 052). Solo el ciclo: dónde estoy · accionables · Jev · ratón ·
+       asentado, y el plan de Luna. Sin WPF, sin grafo, sin MCP: lo que no cabe en 500 ms no entra. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>U.Ciclo</AssemblyName>
+    <RootNamespace>U.Ciclo</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- UIA por COM crudo (IUIAutomation), no System.Windows.Automation: el envoltorio gestionado
+         añade viajes y no deja pedir la condición del lado del proveedor. -->
+    <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
+  </ItemGroup>
+</Project>

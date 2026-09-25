@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- LA SONDA DEL CICLO (spec 052, fase 0): mide el ciclo de main TAL CUAL corre hoy, fase por fase
+       —dónde estoy · qué veo · decide Jev · pulsa— sobre U.exe vivo, hablándole por su MCP (8790) y
+       decidiendo con el MISMO ElDecisor que usa la app. Sin métricas viejas: todo sale de esta corrida.
+
+       Referencia los BINARIOS de main, no el proyecto, por el mismo motivo que la sonda del decisor. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <AssemblyName>sonda-del-ciclo</AssemblyName>
+    <UBin Condition="'$(UBin)' == ''">$(TEMP)\u-medicion\bin-app</UBin>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="U"><HintPath>$(UBin)\U.dll</HintPath></Reference>
+    <Reference Include="U.Graph" Condition="Exists('$(UBin)\U.Graph.dll')"><HintPath>$(UBin)\U.Graph.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
