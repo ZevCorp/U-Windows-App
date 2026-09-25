@@ -29,6 +29,10 @@ extension AgentTests {
         do { _ = try await pending.value; XCTFail("Cancellation ignored") } catch {}
     }
     func testLiveOneWireAndUTF8Limit() throws {
+        let billingError = LiveProtocol.errorMessage(code: "credit_balance_exhausted")
+        XCTAssertEqual(billingError.contains("no tiene saldo"), true)
+        XCTAssertEqual(billingError.contains("permisos del Mac no corrige"), true)
+        XCTAssertEqual(LiveProtocol.errorMessage(code: "insufficient_quota.credit_balance_exhausted"), billingError)
         let start = LiveProtocol.start()
         XCTAssertEqual(start["type"] as? String, "session.start")
         let session = start["session"] as! [String: Any]

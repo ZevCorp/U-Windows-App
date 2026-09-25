@@ -84,7 +84,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             self.work?.cancel(); self.work = nil; self.runID = UUID()
             self.desktop.stop(); self.busy = false; self.liveConnected = false; self.microphone = false
-            self.fail(text + " Puedes volver a conectar o activar el dictado nativo en Configuración.")
+            self.fail(text)
         }
         liveVoice.onTool = { [weak self] name, args in
             guard let self else { throw CancellationError() }

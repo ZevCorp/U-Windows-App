@@ -198,7 +198,7 @@ public final class LiveVoice {
         case "error":
             // Do not log the raw response: it can include user data or authentication details.
             let code = (event["error"] as? [String: Any])?["code"] as? String ?? "unknown"
-            if code != "response_cancel_not_active" { fail("El servicio de voz rechazó una operación (\(code)).") }
+            if code != "response_cancel_not_active" { fail(LiveProtocol.errorMessage(code: code)) }
         default: break
         }
     }

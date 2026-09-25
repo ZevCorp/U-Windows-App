@@ -2,6 +2,18 @@ import Foundation
 
 /// GPT-Live has its own wire protocol; it is not a Realtime model override.
 public enum LiveProtocol {
+    public static func errorMessage(code: String) -> String {
+        switch code {
+        case "credit_balance_exhausted", "insufficient_quota.credit_balance_exhausted":
+            return "Live 1 no pudo iniciar: la cuenta de OpenAI asociada a la credencial de voz no tiene saldo disponible. Añade créditos en esa cuenta o configura en Graph una credencial con saldo. Después vuelve a conectar el micrófono. Reconectar o cambiar los permisos del Mac no corrige este error. (credit_balance_exhausted)"
+        case "invalid_api_key":
+            return "OpenAI rechazó la credencial de voz. Revisa la clave de OpenAI configurada en Graph. (invalid_api_key)"
+        case "invalid_model", "model_not_found":
+            return "La cuenta de OpenAI no pudo acceder al modelo solicitado para la voz. Revisa su disponibilidad y los permisos del proyecto. (\(code))"
+        default:
+            return "El servicio de voz rechazó una operación (\(code))."
+        }
+    }
     public static func start(model: String = "gpt-live-1") -> [String: Any] {
         ["type": "session.start", "session": [
             "model": model,
