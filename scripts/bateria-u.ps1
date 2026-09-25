@@ -34,7 +34,10 @@ $vueltas = @(); $filas = @()
 foreach ($p in $Pedidos) {
     $antes = if (Test-Path $log) { (Get-Content $log -Encoding UTF8).Count } else { 0 }
     $reloj = [Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process $exe -ArgumentList '--hacer', ('"' + $p + '"') -PassThru -Wait
+    # WaitForExit y no -Wait: -Wait espera al árbol entero, y una app que Ü abre (un cmd, un Chrome) dejaba la
+    # batería colgada aunque Ü ya hubiera terminado (2026-09-24, 23:29).
+    $proc = Start-Process $exe -ArgumentList '--hacer', ('"' + $p + '"') -PassThru
+    $proc.WaitForExit()
     $reloj.Stop()
     $nuevas = Get-Content $log -Encoding UTF8 | Select-Object -Skip $antes
     $mias = $nuevas | Where-Object { $_ -match '⏱' }

@@ -49,6 +49,7 @@ internal static class Contrato
         Promesa(452, "El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla.", P452);
         Promesa(453, "Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms.", P453);
         Promesa(454, "La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar.", P454);
+        Promesa(455, "El foco es parte de la pantalla: pulsar un campo que lo toma cambia la huella, y Jev sabe dónde está.", P455);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -626,6 +627,41 @@ internal static class Contrato
         Exige(e.StartsWith("calcula 9 por 7"), "la entrada no empieza por el pedido");
         Exige(e.Contains("Ventana delante: Calculadora") && e.Contains("Nueve (Button)"), "la entrada no lleva lo que hay delante");
         Exige((string)S("LunaPorTexto", "PrimeraEntrada", "hola", "")! == "hola", "sin nada delante, la entrada no es el pedido tal cual");
+    }
+
+    private static void P455()
+    {
+        var lista = Lista(("Cuadro de búsqueda", "Edit"), ("Sistema", "ListItem"));
+        var textos = new List<string> { "Inicio" };
+        string sin = (string)S("Accionables", "Huella", lista, textos, "")!;
+        string con = (string)S("Accionables", "Huella", lista, textos, "Cuadro de búsqueda")!;
+        Exige(sin != con, "pulsar un campo que toma el foco no cambia la huella");
+
+        var ctx = N("Contexto", "Configuración", "buscar fondo", lista, textos, new List<string>());
+        (ctx.GetType().GetProperty("Foco") ?? throw new Pendiente("Contexto.Foco")).SetValue(ctx, "Cuadro de búsqueda");
+        string cuerpo = (string)S("Jev", "Cuerpo", ctx, "jev-latest")!;
+        using var d = JsonDocument.Parse(cuerpo);
+        Exige((d.RootElement.GetProperty("state").GetString() ?? "").Contains("El foco está en: «Cuadro de búsqueda»"), "Jev no sabe dónde está el foco");
+
+        // Y el motor se lo pasa, leído de la pantalla.
+        string? visto = null;
+        var lecturaT = T("Lectura"); var contextoT = T("Contexto");
+        Func<object> leer = () =>
+        {
+            var l = N("Lectura", Lista(("Cuadro de búsqueda", "Edit")), new List<string>());
+            (lecturaT.GetProperty("Foco") ?? throw new Pendiente("Lectura.Foco")).SetValue(l, "Cuadro de búsqueda");
+            return l;
+        };
+        var p = System.Linq.Expressions.Expression.Parameter(contextoT, "c");
+        var dDecidir = System.Linq.Expressions.Expression.Lambda(typeof(Func<,>).MakeGenericType(contextoT, T("Eleccion")),
+            System.Linq.Expressions.Expression.Convert(System.Linq.Expressions.Expression.Invoke(
+                System.Linq.Expressions.Expression.Constant((Func<object, object>)(c => { visto = (string?)P(c, "Foco"); return Eleccion(false, 0, cumplido: 0.9); })),
+                System.Linq.Expressions.Expression.Convert(p, typeof(object))), T("Eleccion")), p).Compile();
+        var motor = N("Motor", Delegado(typeof(Func<>).MakeGenericType(T("Ubicacion")), () => Ubicacion(7, "settings")),
+            Delegado(typeof(Func<>).MakeGenericType(lecturaT), () => leer()), dDecidir,
+            DelegadoAccion(typeof(Action<>).MakeGenericType(T("Accionable")), _ => { }), (Func<bool>)(() => false));
+        I(motor, "Objetivo", "buscar", 2);
+        Exige(visto == "Cuadro de búsqueda", $"el motor no le pasó el foco a Jev: «{visto}»");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

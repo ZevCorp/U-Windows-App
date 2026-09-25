@@ -58,6 +58,7 @@ public static class Jev
             estado.Append("Ya hecho para este objetivo, en orden:\n");
             foreach (var h in c.Hecho) estado.Append("  - ").Append(h).Append('\n');
         }
+        if (!string.IsNullOrWhiteSpace(c.Foco)) estado.Append("El foco está en: «").Append(c.Foco).Append("»\n");
         if (c.Textos.Count > 0)
         {
             estado.Append("Lo que dice la pantalla:\n");

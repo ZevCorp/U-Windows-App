@@ -49,11 +49,19 @@ public static class Accionables
     /// «La pantalla muestra 7». Sin los textos, el banco del 2026-09-24 vio «no cambió» tres veces seguidas
     /// y el motor paró por repetición con el clic funcionando.
     /// </summary>
-    public static string Huella(IReadOnlyList<Accionable> lista, IReadOnlyList<string> textos)
+    public static string Huella(IReadOnlyList<Accionable> lista, IReadOnlyList<string> textos) => Huella(lista, textos, "");
+
+    /// <summary>
+    /// Con el foco (promesa 455). Pulsar el buscador de Configuración le da el foco y no cambia nada más: sin
+    /// esto, la batería del 2026-09-24 (23:28) vio «no cambió» tres veces y paró con el clic funcionando.
+    /// </summary>
+    public static string Huella(IReadOnlyList<Accionable> lista, IReadOnlyList<string> textos, string foco)
     {
         unchecked
         {
             long h = 1469598103934665603;
+            foreach (char ch in foco ?? "") h = (h ^ ch) * 1099511628211;
+            h = (h ^ '|') * 1099511628211;
             foreach (var t in textos ?? Array.Empty<string>())
                 foreach (char ch in t) h = (h ^ ch) * 1099511628211;
             foreach (var a in lista)
@@ -72,12 +80,18 @@ public static class Accionables
 public sealed record Lectura(IReadOnlyList<Accionable> Accionables, IReadOnlyList<string> Textos)
 {
     public static readonly Lectura Vacia = new(Array.Empty<Accionable>(), Array.Empty<string>());
-    public string Huella => U.Ciclo.Accionables.Huella(Accionables, Textos);
+    /// <summary>El nombre del accionable que tiene el foco del teclado, o vacío (promesa 455).</summary>
+    public string Foco { get; set; } = "";
+    public string Huella => U.Ciclo.Accionables.Huella(Accionables, Textos, Foco);
 }
 
 /// <summary>Todo lo que Jev necesita para decidir UNA vuelta, incluido lo ya hecho (promesa 442).</summary>
 public sealed record Contexto(string Pantalla, string Objetivo, IReadOnlyList<Accionable> Accionables,
-    IReadOnlyList<string> Textos, IReadOnlyList<string> Hecho);
+    IReadOnlyList<string> Textos, IReadOnlyList<string> Hecho)
+{
+    /// <summary>Dónde está el foco del teclado (promesa 455): lo que decide si «escribe:» caerá donde se quiere.</summary>
+    public string Foco { get; set; } = "";
+}
 
 /// <summary>
 /// Qué ventanas de encima cuentan como parte de la de delante (promesa 444). Las del mismo proceso no

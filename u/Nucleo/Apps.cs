@@ -30,7 +30,10 @@ public static class Apps
     {
         var antes = GetForegroundWindow();
         var r = Stopwatch.StartNew();
-        Process.Start(new ProcessStartInfo(Comando(nombre)) { UseShellExecute = true })?.Dispose();
+        // Un nombre que Windows no sabe abrir es «no llegó», no una excepción que tumbe el plan entero
+        // (Luna pidió «abre: comando de Windows» el 2026-09-24, 23:29, y el Win32Exception subió hasta arriba).
+        try { Process.Start(new ProcessStartInfo(Comando(nombre)) { UseShellExecute = true })?.Dispose(); }
+        catch (System.ComponentModel.Win32Exception) { return (false, r.ElapsedMilliseconds); }
         while (r.ElapsedMilliseconds < techoMs)
         {
             var ahora = GetForegroundWindow();

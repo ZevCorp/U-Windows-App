@@ -123,7 +123,7 @@ public sealed class Motor
             double tVer = r.Elapsed.TotalMilliseconds;
 
             r.Restart();
-            var e = _decidir(new Contexto(aqui.Pantalla, objetivo, lista, lectura.Textos, hecho.ToArray()));
+            var e = _decidir(new Contexto(aqui.Pantalla, objetivo, lista, lectura.Textos, hecho.ToArray()) { Foco = lectura.Foco });
             double tDecidir = r.Elapsed.TotalMilliseconds;
 
             if (e.Cumplido >= Jev.CumplidoMinimo)
