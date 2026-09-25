@@ -51,7 +51,24 @@ public sealed class Burbuja : Window
         fila.Children.Add(fondoRotulo); fila.Children.Add(circulo);
         Content = fila;
 
-        _circulo.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 1) { var p = e.GetPosition(this); DragMove(); if ((e.GetPosition(this) - p).Length < 3) _ = Despertar(); } };
+        // CLIC AL SOLTAR, ARRASTRE SOLO SI SE MUEVE. La primera versión llamaba a DragMove() en el MouseDown, y
+        // DragMove entra en un bucle modal que espera el MouseUp: un clic rápido (el del ratón real, o el de una
+        // persona decidida) quedaba atrapado ahí y la burbuja no despertaba nunca (2026-09-24, 23:16).
+        Point? abajo = null;
+        _circulo.MouseLeftButtonDown += (_, e) => { abajo = e.GetPosition(this); _circulo.CaptureMouse(); };
+        _circulo.MouseMove += (_, e) =>
+        {
+            if (abajo is { } a && e.LeftButton == MouseButtonState.Pressed && (e.GetPosition(this) - a).Length > 4)
+            {
+                abajo = null; _circulo.ReleaseMouseCapture();
+                try { DragMove(); } catch (InvalidOperationException) { }
+            }
+        };
+        _circulo.MouseLeftButtonUp += (_, e) =>
+        {
+            _circulo.ReleaseMouseCapture();
+            if (abajo != null) { abajo = null; _ = Despertar(); }
+        };
         var menu = new ContextMenu();
         menu.Items.Add(Item("Hablarle", () => _ = Despertar()));
         menu.Items.Add(Item("Escribirle un pedido…", Escribir));
@@ -77,7 +94,17 @@ public sealed class Burbuja : Window
         _hwnd = new WindowInteropHelper(this).Handle;
         SetWindowLong(_hwnd, -20, GetWindowLong(_hwnd, -20) | 0x08000000 /* NOACTIVATE */ | 0x00000080 /* TOOLWINDOW */);
         HwndSource.FromHwnd(_hwnd)?.AddHook(Gancho);
-        RegisterHotKey(_hwnd, 1, 0x0001 | 0x0002 /* Alt+Ctrl */, 0x20 /* Espacio */);
+        // EL ATAJO SE DICE SI NO SE PUDO PONER. Ctrl+Alt+Espacio lo ocupa la app de escritorio de Claude en esta
+        // máquina, y un RegisterHotKey fallido sin log dejaba el atajo muerto sin que nadie lo supiera (23:16).
+        var atajos = new (uint Mods, uint Vk, string Nombre)[]
+        {
+            (0x0002 | 0x0001, 0x20, "Ctrl+Alt+Espacio"), (0x0002 | 0x0004, 0x20, "Ctrl+Mayús+Espacio"), (0x0002 | 0x0001, 0x59, "Ctrl+Alt+Y"),
+        };
+        string puesto = "";
+        foreach (var (mods, vk, nombre) in atajos)
+            if (RegisterHotKey(_hwnd, 1, mods, vk)) { puesto = nombre; break; }
+            else Registro.Log($"burbuja: el atajo {nombre} está ocupado (error {Marshal.GetLastWin32Error()})");
+        Registro.Log(puesto.Length > 0 ? $"burbuja: para hablarle, clic o {puesto}" : "burbuja: ningún atajo libre; para hablarle, clic en la burbuja");
     }
 
     private IntPtr Gancho(IntPtr h, int msg, IntPtr w, IntPtr l, ref bool manejado)
@@ -148,5 +175,5 @@ public sealed class Burbuja : Window
 
     [DllImport("user32.dll")] private static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll")] private static extern int SetWindowLong(IntPtr h, int i, int v);
-    [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
 }
