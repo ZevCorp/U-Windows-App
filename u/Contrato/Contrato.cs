@@ -42,7 +42,8 @@ internal static class Contrato
         Promesa(445, "Un paso con prefijo es un gesto directo y no le pregunta a Jev: «abre:», «escribe:» y «tecla:».", P445);
         Promesa(446, "El plan se ejecuta en orden y para en el primer paso que falla; los que quedan salen Omitidos, y cada objetivo sabe lo que hicieron los pasos anteriores.", P446);
         Promesa(447, "Lo que se le devuelve a Luna cabe en 30.000 bytes: si no cabe, se recorta y se dice cuánto se mandó de cuánto.", P447);
-        Promesa(448, "La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
+        Promesa(449, "Una pantalla sin accionables se relee hasta 1 s antes de rendirse: una app que acaba de abrir todavía no pintó.", P449);
+        Promesa(448,"La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -523,6 +524,29 @@ internal static class Contrato
                 && d.RootElement.GetProperty("item").GetProperty("type").GetString() == "function_call_output", "el resultado no lleva su call_id");
         using (var d = JsonDocument.Parse(salida[1]))
             Exige(d.RootElement.GetProperty("type").GetString() == "response.create", "después del resultado no se pide turno");
+    }
+
+    private static void P449()
+    {
+        // Vacía las tres primeras lecturas, con botones a la cuarta: se espera y se pulsa.
+        int lecturas = 0, pulsos = 0;
+        var accionablesT = typeof(IReadOnlyList<>).MakeGenericType(T("Accionable"));
+        object Ver() => ++lecturas <= 3 ? Lista() : Lista(("Siete", "Button"));
+        var dDonde = Delegado(typeof(Func<>).MakeGenericType(T("Ubicacion")), () => Ubicacion(7, "calc"));
+        var dVer = Delegado(typeof(Func<>).MakeGenericType(accionablesT), () => Ver());
+        var decidirT = typeof(Func<,,,>).MakeGenericType(typeof(string), typeof(string), accionablesT, T("Eleccion"));
+        var dDecidir = DelegadoDe3(decidirT, (_, _, l) => L(l).Count == 0 ? Eleccion(false, 0, porque: "vacía") : (pulsos > 0 ? Eleccion(false, 0, cumplido: 0.9) : Eleccion(true, 1)));
+        var dPulsar = DelegadoAccion(typeof(Action<>).MakeGenericType(T("Accionable")), _ => pulsos++);
+        var m = N("Motor", dDonde, dVer, dDecidir, dPulsar, (Func<bool>)(() => false));
+        var r = I(m, "Objetivo", "pulsar siete", 3)!;
+        Exige(pulsos == 1 && (bool)P(r, "Cumplido")!, $"no esperó a que la app pintara: {pulsos} pulsos · {P(r, "PorQueParo")}");
+
+        // Vacía siempre: se rinde, y no antes de ~1 s ni mucho después.
+        lecturas = -1000; pulsos = 0;
+        var reloj = Stopwatch.StartNew();
+        var m2 = N("Motor", dDonde, Delegado(typeof(Func<>).MakeGenericType(accionablesT), () => Lista()), dDecidir, dPulsar, (Func<bool>)(() => false));
+        I(m2, "Objetivo", "pulsar siete", 3);
+        Exige(reloj.ElapsedMilliseconds is >= 900 and <= 1600, $"con la pantalla siempre vacía tardó {reloj.ElapsedMilliseconds} ms en rendirse");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

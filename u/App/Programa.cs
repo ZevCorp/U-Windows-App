@@ -33,6 +33,29 @@ public static class Programa
             Registro.Log($"Ü: {dicho}  ({r.ElapsedMilliseconds} ms de principio a fin)");
             return 0;
         }
+        i = Array.IndexOf(args, "--voz-prueba");
+        if (i >= 0 && i + 1 < args.Length)
+        {
+            // La sesión de voz DE VERDAD contra el servidor, sin micrófono ni altavoz: el pedido entra escrito.
+            if (openai == null) { Registro.Log("✘ sin clave de OpenAI no hay voz"); return 2; }
+            var voz = new SesionDeVoz(openai, ü) { SinAudio = true };
+            string dicho = "";
+            var ultimaPalabra = DateTime.Now;
+            voz.DiceU += t => { dicho += t; ultimaPalabra = DateTime.Now; };
+            voz.AbrirAsync().GetAwaiter().GetResult();
+            var reloj = System.Diagnostics.Stopwatch.StartNew();
+            while (!voz.Abierta && reloj.ElapsedMilliseconds < 15000) Thread.Sleep(50);
+            Registro.Log($"voz-prueba: {(voz.Abierta ? "abierta" : "NO ABRIÓ")} en {reloj.ElapsedMilliseconds} ms");
+            if (!voz.Abierta) return 3;
+            voz.EscribirAsync(args[i + 1]).GetAwaiter().GetResult();
+            // Hasta que Luna haya actuado, sus resultados hayan vuelto y la voz lleve 3 s callada. O 90 s.
+            while (reloj.ElapsedMilliseconds < 90000
+                   && !(voz.Llamadas > 0 && voz.ResultadosEnviados == voz.Llamadas && dicho.Length > 0 && (DateTime.Now - ultimaPalabra).TotalSeconds > 3))
+                Thread.Sleep(250);
+            Registro.Log($"voz-prueba: {voz.Llamadas} llamada(s) de Luna, {voz.ResultadosEnviados} resultado(s) devuelto(s) · la voz dijo: «{dicho.Trim()}»");
+            voz.CerrarAsync("fin de la prueba").GetAwaiter().GetResult();
+            return voz.Llamadas > 0 ? 0 : 1;
+        }
         i = Array.IndexOf(args, "--plan");
         if (i >= 0)
         {

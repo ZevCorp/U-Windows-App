@@ -27,6 +27,7 @@ public sealed class SesionDeVoz : IAsyncDisposable
     private readonly CancellationTokenSource _fin = new();
     private DateTime _sonoHasta = DateTime.MinValue;
     private DateTime _ultimaActividad = DateTime.Now;
+    private readonly HashSet<string> _tiposVistos = new();
 
     public event Action<string>? Estado;       // «escuchando», «pensando», «actuando», «cerrada»
     public event Action<string>? DiceUsuario;
@@ -35,6 +36,14 @@ public sealed class SesionDeVoz : IAsyncDisposable
 
     /// <summary>Quieta hasta que se le habla: sin nada que oír ni hacer en este tiempo, se cierra sola.</summary>
     public TimeSpan CierreEnSilencio { get; init; } = TimeSpan.FromSeconds(90);
+
+    /// <summary>Sin micrófono ni altavoz: para probar la sesión contra el servidor de noche, sin sonar.</summary>
+    public bool SinAudio { get; init; }
+
+    /// <summary>Cuántas llamadas de Luna se atendieron y cuántas frases dijo la voz: lo que mira la prueba.</summary>
+    public int Llamadas { get; private set; }
+    public int TurnosTerminados { get; private set; }
+    public int ResultadosEnviados { get; private set; }
 
     public SesionDeVoz(string claveOpenAI, Asistente ü) { _clave = claveOpenAI; _ü = ü; }
 
@@ -103,12 +112,18 @@ public sealed class SesionDeVoz : IAsyncDisposable
     {
         using var d = JsonDocument.Parse(json);
         var m = d.RootElement;
-        switch (ProtocoloVivo.Texto(m, "type"))
+        string tipo = ProtocoloVivo.Texto(m, "type");
+        // PREGUNTARLE A LA API ANTES DE CREERLE AL CÓDIGO (aprendizaje nº13): cada tipo de evento nuevo se anota
+        // una vez, con su forma. La primera prueba de voz (2026-09-24, 23:02) actuó bien y no dijo nada, y sin
+        // esto no había forma de saber qué había mandado el servidor en su lugar.
+        if (_tiposVistos.Add(tipo + (tipo == "response.event" && m.TryGetProperty("event", out var ev0) ? ":" + ProtocoloVivo.Texto(ev0, "type") : "")))
+            Registro.Log($"voz: evento nuevo «{tipo}» {(json.Length > 220 ? json[..220] + "…" : json)}");
+        switch (tipo)
         {
             case "session.started":
                 Abierta = true;
                 Registro.Log("voz: sesión abierta, el servidor la confirmó");
-                EmpezarAudio();
+                if (!SinAudio) EmpezarAudio();
                 Estado?.Invoke("escuchando");
                 break;
             case "session.output_audio.delta":
@@ -130,11 +145,18 @@ public sealed class SesionDeVoz : IAsyncDisposable
             case "session.output_transcript.delta":
                 DiceU?.Invoke(ProtocoloVivo.Texto(m, "delta"));
                 break;
+            case "session.output_transcript.done":
+                TurnosTerminados++;
+                break;
             case "response.event":
+                // Lo que Luna dice por escrito (sin audio, la voz no habla: medido el 2026-09-24, 23:05).
+                if (m.TryGetProperty("event", out var evTexto) && ProtocoloVivo.Texto(evTexto, "type") == "response.output_text.done")
+                    DiceU?.Invoke(ProtocoloVivo.Texto(evTexto, "text"));
                 var llamada = ProtocoloVivo.Llamada(json);
                 if (llamada != null)
                 {
                     _ultimaActividad = DateTime.Now;
+                    Llamadas++;
                     _ = Task.Run(() => EjecutarAsync(llamada));
                 }
                 break;
@@ -154,6 +176,7 @@ public sealed class SesionDeVoz : IAsyncDisposable
         Registro.Log($"🌙 Luna → {l.Nombre} {l.Argumentos}");
         string salida = _ü.Atender(l.Nombre, l.Argumentos);
         foreach (var msg in ProtocoloVivo.Resultado(l.CallId, salida)) await EnviarAsync(msg);
+        ResultadosEnviados++;
         _ultimaActividad = DateTime.Now;
         Estado?.Invoke("escuchando");
     }

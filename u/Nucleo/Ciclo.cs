@@ -73,6 +73,9 @@ public sealed class Motor
     /// <summary>Cada vuelta, en cuanto termina: el log y la burbuja la ven en vivo.</summary>
     public Action<Vuelta>? AlTerminarVuelta { get; set; }
 
+    /// <summary>Cuánto se relee una pantalla sin accionables antes de rendirse (promesa 449).</summary>
+    public const int EsperaSiVacia = 1000;
+
     /// <summary>El motor completo: lee accionables Y textos, y Jev decide con lo ya hecho (promesas 442-443).</summary>
     public Motor(Func<Ubicacion?> donde, Func<Lectura> leer, Func<Contexto, Eleccion> decidir, Action<Accionable> pulsar, Func<bool> hayQueParar)
     {
@@ -107,6 +110,15 @@ public sealed class Motor
             r.Restart();
             var lectura = yaLeida ?? _leer();
             yaLeida = null;
+            // UNA PANTALLA VACÍA TODAVÍA NO PINTÓ (promesa 449). La Calculadora, recién abierta, dio 0
+            // accionables a los 120 ms y 34 un segundo después (voz-prueba del 2026-09-24, 23:02): rendirse
+            // a la primera lectura convertía «abre y calcula» en un fallo que Luna tenía que replanear.
+            var esperaVacia = Stopwatch.StartNew();
+            while (lectura.Accionables.Count == 0 && esperaVacia.ElapsedMilliseconds < EsperaSiVacia && !_hayQueParar())
+            {
+                Thread.Sleep(30);
+                lectura = _leer();
+            }
             var lista = lectura.Accionables;
             double tVer = r.Elapsed.TotalMilliseconds;
 

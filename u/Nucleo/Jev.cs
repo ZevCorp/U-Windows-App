@@ -22,6 +22,14 @@ public static class Jev
     public const double CumplidoMinimo = 0.70;
     public const double PeligroMaximo = 0.50;
 
+    /// <summary>
+    /// 0,45 y no 0,70 como main. Con 36 botones la probabilidad se reparte: en la Calculadora Jev eligió
+    /// «Nueve» —el correcto— con 0,52 y el umbral de 0,60 lo rechazó (voz-prueba del 2026-09-24, 23:05).
+    /// Lo que no se debe pulsar lo paran las otras compuertas, que no dependen de este número: «no se
+    /// ofreció» y «peligro».
+    /// </summary>
+    public const double UmbralPorDefecto = 0.45;
+
     /// <summary>El cuerpo de la pregunta (promesa 435). La clave NO va aquí: va en la cabecera.</summary>
     public static string Cuerpo(string pantalla, string objetivo, IReadOnlyList<Accionable> ofrecidas, string modelo) =>
         Cuerpo(new Contexto(pantalla, objetivo, ofrecidas, Array.Empty<string>(), Array.Empty<string>()), modelo);
@@ -143,7 +151,7 @@ public sealed class ClienteJev : IDisposable
     private readonly HttpClient _http;
     private readonly string _clave;
     public string Modelo { get; init; } = Jev.ModeloPorDefecto;
-    public double Umbral { get; init; } = 0.60;
+    public double Umbral { get; init; } = Jev.UmbralPorDefecto;
 
     public ClienteJev(string clave, int plazoMs = 3000)
     {

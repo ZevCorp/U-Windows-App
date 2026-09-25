@@ -21,7 +21,7 @@ var (_, typesafe, estado) = Claves.Traer();
 Console.WriteLine(estado);
 if (typesafe == null) { Console.WriteLine("✘ sin clave de TypeSafe no hay Jev: no mido un ciclo sin decisor."); return 2; }
 
-using var jev = new ClienteJev(typesafe) { Umbral = 0.60 };
+using var jev = new ClienteJev(typesafe) { Umbral = Jev.UmbralPorDefecto };
 using var lector = new LectorUia();
 Console.WriteLine($"Jev calentado en {jev.Calentar()} ms · segunda {jev.Calentar()} ms");
 

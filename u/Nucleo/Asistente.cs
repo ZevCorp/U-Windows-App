@@ -24,7 +24,7 @@ public sealed class Asistente : IDisposable
     public Asistente(string claveTypeSafe)
     {
         Raton.AsegurarDpi();
-        _jev = new ClienteJev(claveTypeSafe) { Umbral = 0.60 };
+        _jev = new ClienteJev(claveTypeSafe) { Umbral = Jev.UmbralPorDefecto };
     }
 
     public long Calentar() => _jev.Calentar();
