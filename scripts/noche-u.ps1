@@ -10,7 +10,11 @@ New-Item -ItemType Directory -Force (Split-Path $noche) | Out-Null
 function Anota($t) { $l = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm')] $t"; Add-Content -Path $noche -Value $l -Encoding UTF8; Write-Host $l }
 
 $bloqueado = [bool](Get-Process LogonUI -ErrorAction SilentlyContinue)
-$salvapantallas = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*.scr' -or $_.ProcessName -match 'OLED|ScreenSaver' })
+# Se le PREGUNTA a Windows, no se adivina por el nombre del proceso: «AsusOLEDShifter» corre siempre (desplaza
+# píxeles, no es un salvapantallas) y la primera ronda de la noche se saltó por él (2026-09-25, 00:14).
+Add-Type -Name P -Namespace NocheU -MemberDefinition '[DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint a, uint b, ref bool c, uint d);'
+$corriendo = $false; [NocheU.P]::SystemParametersInfo(0x0072, 0, [ref]$corriendo, 0) | Out-Null
+$salvapantallas = @(if ($corriendo) { [pscustomobject]@{ ProcessName = 'salvapantallas' } })
 if ($bloqueado -or $salvapantallas.Count -gt 0) {
     Anota ("ronda SALTADA: " + ($(if ($bloqueado) { "sesión bloqueada" } else { "" }) + " " + (($salvapantallas | ForEach-Object ProcessName) -join ',')).Trim())
     exit 0

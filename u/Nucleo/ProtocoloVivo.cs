@@ -44,6 +44,7 @@ public static class ProtocoloVivo
         + "si el pedido trae lo que hay delante, planea con eso sin volver a mirar; si no sabes qué hay delante, llama a «mirar». Si hace falta escribir en un campo, primero un objetivo "
         + "que ponga el foco en ese campo y después «escribe:». "
         + "Si «hacer» dice que un paso falló, mira y vuelve a planear desde donde quedó; no repitas lo ya hecho. "
+        + "Si la app acepta teclado para lo que se pide (números en una calculadora, texto en un buscador), prefiere «escribe:» a pulsar botón por botón: es exacto y no hace dudar al ejecutor. "
         + "Nada irreversible (enviar, borrar, pagar) sin que la persona lo haya pedido explícitamente.";
 
     public static string Apertura(string instruccionesDeLuna) => JsonSerializer.Serialize(new

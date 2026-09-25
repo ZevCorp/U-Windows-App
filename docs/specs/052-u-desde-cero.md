@@ -204,6 +204,11 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   solo a Ü. Luna aprende que `abre:` acepta `ms-settings:…`: «busca fondo de escritorio» pasó de 20,7 s a 4,2 s.
 - **23:41** — un sabotaje restaurado con `Copy-Item` dejó el contrato rojo: la fecha vieja hizo que msbuild no
   recompilara (ya estaba en la memoria como quinto punto ciego). Se tocó la fecha y volvió a INTACTO 26/26.
+- **00:14** — primera ronda nocturna (`scripts/noche-u.ps1`): se saltó por un falso positivo —`AsusOLEDShifter` corre
+  siempre y el guion lo tomaba por salvapantallas—; ahora se le pregunta a Windows (`SPI_GETSCREENSAVERRUNNING`).
+- **00:15** — ronda: 6 de 6 pedidos · mediana con clic 282 ms · 2 de 23 fuera de presupuesto. Un fallo de Jev, no
+  del harness: con la Calculadora en modo científico (50 botones) pulsó «Cuatro» en vez de «Uno» y agotó el tope;
+  Luna lo rescató tecleando `45*12`. Luna ahora prefiere «escribe:» cuando la app acepta teclado.
 ## Cómo verificarlo por la mañana
 
 ```powershell
