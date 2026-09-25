@@ -139,11 +139,21 @@ public sealed class LunaPorTexto : IDisposable
         _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", claveOpenAI);
     }
 
+    /// <summary>
+    /// EL PEDIDO Y LO QUE HAY DELANTE, juntos (promesa 454). En la batería del 2026-09-24 (23:24) Luna gastó un
+    /// turno entero —1,1-2,2 s— en llamar a «mirar» antes de planear cada pedido que hablaba de algo ya abierto.
+    /// Mirar cuesta ~40 ms aquí; se le da hecho.
+    /// </summary>
+    public static string PrimeraEntrada(string pedido, string loQueHayDelante) =>
+        string.IsNullOrWhiteSpace(loQueHayDelante)
+            ? pedido
+            : pedido + Environment.NewLine + Environment.NewLine + "(Lo que hay delante ahora mismo:" + Environment.NewLine + loQueHayDelante + ")";
+
     /// <summary>Hasta que Luna conteste con palabras, o 8 turnos de herramientas.</summary>
     public string Pedir(string pedido, Asistente ü)
     {
         string? anterior = null;
-        object entrada = pedido;
+        object entrada = PrimeraEntrada(pedido, ü.Mirar());
         for (int turno = 0; turno < 8; turno++)
         {
             var cuerpo = new Dictionary<string, object?>

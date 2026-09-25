@@ -40,7 +40,8 @@ public static class ProtocoloVivo
         + "  «tecla: <tecla>» pulsa una tecla o combinación: Enter, Escape, Tab, Ctrl+S, Alt+F4, F5.\n"
         + "  cualquier otra frase es un OBJETIVO en la pantalla («abrir el menú Archivo», «ir a Bluetooth y dispositivos»): "
         + "el ejecutor mira los botones que hay y pulsa hasta cumplirlo.\n"
-        + "Reglas: un objetivo por pantalla, aunque necesite varios clics en ella («calcular 12 por 3 con los botones», no un paso por botón): el ejecutor encadena los clics y comprueba solo; si hace falta escribir en un campo, primero un objetivo "
+        + "Reglas: un objetivo por pantalla y UNA intención por objetivo, aunque necesite varios clics («calcular 12 por 3 con los botones», no un paso por botón; pero «borrar» y «calcular» son dos objetivos): el ejecutor encadena los clics y comprueba solo; "
+        + "si el pedido trae lo que hay delante, planea con eso sin volver a mirar;si hace falta escribir en un campo, primero un objetivo "
         + "que ponga el foco en ese campo y después «escribe:». Antes de planear algo que dependa de lo que se ve, llama a «mirar». "
         + "Si «hacer» dice que un paso falló, mira y vuelve a planear desde donde quedó; no repitas lo ya hecho. "
         + "Nada irreversible (enviar, borrar, pagar) sin que la persona lo haya pedido explícitamente.";

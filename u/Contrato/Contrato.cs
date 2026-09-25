@@ -48,6 +48,7 @@ internal static class Contrato
         Promesa(451, "Si Jev dice que pulsar la elegida cumple el objetivo y la pantalla cambia al pulsarla, el objetivo termina sin otra llamada; si no cambia, se vuelve a preguntar.", P451);
         Promesa(452, "El micrófono se calla solo mientras Ü suena de verdad: el siseo que el servidor manda entre frases no lo calla.", P452);
         Promesa(453, "Tras una tecla que navega (Enter) se espera a que la pantalla cambie, hasta 1,5 s; tras cualquier otra, hasta 150 ms.", P453);
+        Promesa(454, "La primera entrada a Luna lleva, además del pedido, lo que hay delante ahora: no gasta un turno en mirar.", P454);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -617,6 +618,14 @@ internal static class Contrato
         Exige(Espera("Enter") == 1500 && Espera("intro") == 1500, $"tras Enter se espera {Espera("Enter")} ms");
         Exige(Espera("Ctrl+L") == 150 && Espera("Escape") == 150 && Espera("Tab") == 150, "tras otra tecla no se esperan 150 ms");
         Exige(Espera("Ctrl+Enter") == 1500, "Ctrl+Enter también navega");
+    }
+
+    private static void P454()
+    {
+        string e = (string)S("LunaPorTexto", "PrimeraEntrada", "calcula 9 por 7", "Ventana delante: Calculadora" + Environment.NewLine + "Se puede pulsar (36): Nueve (Button)")!;
+        Exige(e.StartsWith("calcula 9 por 7"), "la entrada no empieza por el pedido");
+        Exige(e.Contains("Ventana delante: Calculadora") && e.Contains("Nueve (Button)"), "la entrada no lleva lo que hay delante");
+        Exige((string)S("LunaPorTexto", "PrimeraEntrada", "hola", "")! == "hola", "sin nada delante, la entrada no es el pedido tal cual");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────
