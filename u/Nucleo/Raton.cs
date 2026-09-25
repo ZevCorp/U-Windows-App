@@ -1,0 +1,97 @@
+using System.Runtime.InteropServices;
+
+namespace U.Ciclo;
+
+/// <summary>
+/// EL RATÓN REAL, y nada más (promesa 433). Decisión del dueño, 2026-09-24: «pongámoslo a controlar el
+/// mouse». Main tenía una escalera de gestos —patrón UIA, mensaje a la ventana, ratón suavizado— con
+/// esperas fijas de 20-200 ms entre peldaños: 470-540 ms por clic. SetCursorPos + SendInput cuesta 0,46 ms.
+/// </summary>
+public static class Raton
+{
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint n, INPUT[] entradas, int tam);
+    [DllImport("user32.dll")] private static extern IntPtr SetProcessDpiAwarenessContext(IntPtr valor);
+
+    [StructLayout(LayoutKind.Sequential)] private struct INPUT { public uint Tipo; public UNION U; }
+    [StructLayout(LayoutKind.Explicit)] private struct UNION { [FieldOffset(0)] public MOUSEINPUT M; [FieldOffset(0)] public KEYBDINPUT K; }
+    [StructLayout(LayoutKind.Sequential)] private struct MOUSEINPUT { public int Dx, Dy; public uint Datos, Flags, Tiempo; public IntPtr Extra; }
+    [StructLayout(LayoutKind.Sequential)] private struct KEYBDINPUT { public ushort Vk, Scan; public uint Flags, Tiempo; public IntPtr Extra; }
+
+    private const uint IzquierdoAbajo = 0x0002, IzquierdoArriba = 0x0004;
+
+    /// <summary>
+    /// Coordenadas físicas en todo el proceso: UIA da la caja en píxeles físicos y SetCursorPos solo los
+    /// entiende así si el proceso es consciente del DPI por monitor. Sin esto, en una pantalla al 150 % el
+    /// clic cae desplazado — contención no es alineación (patrón nº7).
+    /// </summary>
+    public static void AsegurarDpi()
+    {
+        try { SetProcessDpiAwarenessContext(new IntPtr(-4) /* PER_MONITOR_AWARE_V2 */); } catch { }
+    }
+
+    public static (int X, int Y) Centro(Caja c) => (c.X + c.Ancho / 2, c.Y + c.Alto / 2);
+
+    /// <summary>Lo que se va a hacer, dicho. Es lo que juzga el contrato; <see cref="Clic"/> lo ejecuta tal cual.</summary>
+    public static IReadOnlyList<string> Gesto(int x, int y) =>
+        new[] { $"mover {x},{y}", "izquierdo abajo", "izquierdo arriba" };
+
+    public static void Clic(int x, int y)
+    {
+        SetCursorPos(x, y);
+        var e = new INPUT[]
+        {
+            new() { Tipo = 0, U = new UNION { M = new MOUSEINPUT { Flags = IzquierdoAbajo } } },
+            new() { Tipo = 0, U = new UNION { M = new MOUSEINPUT { Flags = IzquierdoArriba } } },
+        };
+        SendInput((uint)e.Length, e, Marshal.SizeOf<INPUT>());
+    }
+
+    public static void Clic(Accionable a) { var (x, y) = Centro(a.Caja); Clic(x, y); }
+
+    /// <summary>Texto por teclado real, en Unicode: vale para cualquier distribución de teclado.</summary>
+    public static void Escribir(string texto)
+    {
+        var e = new List<INPUT>();
+        foreach (char ch in texto ?? "")
+        {
+            e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 } } });
+            e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 | 0x0002 } } });
+        }
+        if (e.Count > 0) SendInput((uint)e.Count, e.ToArray(), Marshal.SizeOf<INPUT>());
+    }
+
+    /// <summary>Una tecla por su nombre: Enter, Escape, Tab, Abajo, Arriba, Borrar, F1…F12, o «Ctrl+L».</summary>
+    public static bool Tecla(string nombre)
+    {
+        var partes = (nombre ?? "").Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var vks = new List<ushort>();
+        foreach (var p in partes)
+        {
+            ushort vk = p.ToLowerInvariant() switch
+            {
+                "enter" or "intro" => 0x0D, "escape" or "esc" => 0x1B, "tab" => 0x09, "espacio" or "space" => 0x20,
+                "borrar" or "backspace" => 0x08, "suprimir" or "delete" => 0x2E, "abajo" or "down" => 0x28,
+                "arriba" or "up" => 0x26, "izquierda" or "left" => 0x25, "derecha" or "right" => 0x27,
+                "ctrl" or "control" => 0x11, "alt" => 0x12, "shift" or "mayus" => 0x10, "win" => 0x5B,
+                "inicio" or "home" => 0x24, "fin" or "end" => 0x23,
+                _ when p.Length == 1 && char.IsLetterOrDigit(p[0]) => (ushort)char.ToUpperInvariant(p[0]),
+                _ when p.Length >= 2 && (p[0] == 'F' || p[0] == 'f') && int.TryParse(p[1..], out int f) && f is >= 1 and <= 12 => (ushort)(0x6F + f),
+                _ => 0,
+            };
+            if (vk == 0) return false;
+            vks.Add(vk);
+        }
+        if (vks.Count == 0) return false;
+        var e = new List<INPUT>();
+        foreach (var vk in vks) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vk } } });
+        for (int i = vks.Count - 1; i >= 0; i--) e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Vk = vks[i], Flags = 0x0002 } } });
+        SendInput((uint)e.Count, e.ToArray(), Marshal.SizeOf<INPUT>());
+        return true;
+    }
+
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vk);
+
+    /// <summary>¿Se pulsó Escape desde la última vez que se preguntó? El freno de la promesa 441.</summary>
+    public static bool EscapePulsado() => (GetAsyncKeyState(0x1B) & 0x0001) != 0 || (GetAsyncKeyState(0x1B) & 0x8000) != 0;
+}
