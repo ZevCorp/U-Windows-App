@@ -81,6 +81,13 @@ public sealed class Ejecutor
     public static int EsperaTrasTecla(string tecla) =>
         (tecla ?? "").Split('+').Last().Trim().ToLowerInvariant() is "enter" or "intro" ? 1500 : 150;
 
+    /// <summary>
+    /// Cuánto se espera, como mucho, a que la app termine de teclear (promesa 459). SendInput vuelve en cuanto encola
+    /// las teclas; el Bloc de notas las consume a ~12 ms por carácter, y el «mirar» de 200 ms después veía «*pru»,
+    /// «*prue», «*prueb»: Luna creía que faltaba texto y lo volvía a escribir (rondas del 2026-09-25, 02:21 y 05:34).
+    /// </summary>
+    public static int EsperaTrasEscribir(string texto) => Math.Min(1500, 150 + 15 * (texto ?? "").Length);
+
     private static bool Prefijo(string paso, string prefijo, out string resto)
     {
         var p = (paso ?? "").TrimStart();

@@ -97,6 +97,8 @@ Promesas de `u/Contrato/Contrato.cs`, 430-454. Se numeran desde la 430 (las de `
 | 456 | Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s. | 7 |
 | 457 | Una combinación de teclas lleva el código de exploración de cada tecla y suelta lo que pulsó en orden inverso. | 7 |
 | 458 | Mirar dice lo que contienen los campos de texto, recortado a 80 caracteres: Luna comprueba lo que escribió en vez de adivinarlo por el título. | 7 |
+| 459 | Tras «escribe:» se espera a que la app termine de teclearlo —la pantalla quieta—, con un techo de 150 ms más 15 por carácter y nunca más de 1,5 s. | 7 |
+| 460 | Escribir manda las letras de una en una, con al menos 3 ms entre ellas: de un solo lote, el Bloc de notas cambiaba letras por otras. | 7 |
 
 La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
@@ -223,6 +225,12 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   contrato salió verde y **el PC real siguió abriendo el diálogo** — la hipótesis era falsa, y la 457 se quedó con
   el enunciado de lo que de verdad garantiza. El arreglo real: «mirar» dice lo que contienen los campos (promesa
   458) y Luna sabe que los atajos dependen del idioma. Repetido: 2 de 2, 5-8 s, verificando sobre el contenido.
+- **05:34-05:38** — el Bloc de notas volvió a tardar (13 s) aun con la 458. Midiendo: el editor del Bloc de notas no
+  expone su contenido como valor (la 458 no le llega) y el título de la pestaña crecía mientras «mirar» lo leía
+  —«*pru», «*prue», «*prueb»—: la app seguía tecleando. Promesa 459: tras «escribe:» se espera a que se quede
+  quieta. Y al medirlo apareció lo peor: **se perdían letras** («tercera prueba de la aaaaaaaaa»). Un lote de
+  SendInput Unicode lo corrompe 1 de cada 4 veces (4 de 5 bien); con 3 ms entre letras, 5 de 5 (y 2, 5 y 10 ms
+  también bien). Promesa 460. Repetido: 2 de 2 a la primera, 5,5 y 6,4 s. Contrato de u 31/31.
 ### La noche entera, en números (`%TEMP%\u-medicion\noche.log`, 10 rondas de 00:15 a 05:02)
 
 | | |
@@ -240,7 +248,7 @@ suelo de Jev (punto abierto 1).
 
 ```powershell
 cd .claude\worktrees\u-desde-cero
-.\scripts\contrato-u.ps1          # 29 promesas, sin pantalla ni red, ~30 s
+.\scripts\contrato-u.ps1          # 31 promesas, sin pantalla ni red, ~30 s
 .\scripts\bateria-u.ps1           # 7 pedidos reales de punta a punta; MUEVE EL RATÓN: no tocar el equipo
 dotnet build u\App\App.csproj -c Release -o $env:TEMP\u-nuevo-bin
 & $env:TEMP\u-nuevo-bin\U-nuevo.exe   # la burbuja, abajo a la derecha

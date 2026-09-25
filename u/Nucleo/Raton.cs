@@ -50,13 +50,27 @@ public static class Raton
     public static void Clic(Accionable a) { var (x, y) = Centro(a.Caja); Clic(x, y); }
 
     /// <summary>Texto por teclado real, en Unicode: vale para cualquier distribución de teclado.</summary>
+    /// <summary>
+    /// Pausa entre letras al escribir, en ms (promesa 460). DE UN SOLO LOTE, el Bloc de notas de Windows 11 cambiaba
+    /// letras por otras —«tercera prueba de la aaaaaaaaa»—: 4 de 5 bien sin pausa, 5 de 5 con 3 ms, y también bien
+    /// con 2, 5 y 10 (medido en esta máquina el 2026-09-25, 05:38). Cuesta ~3 ms por letra. U_PAUSA_LETRAS la
+    /// cambia, para volver a medir en otra máquina.
+    /// </summary>
+    public static int PausaEntreLetrasMs { get; set; } =
+        int.TryParse(Environment.GetEnvironmentVariable("U_PAUSA_LETRAS"), out var p) && p > 0 ? p : 3;
+
     public static void Escribir(string texto)
     {
         var e = new List<INPUT>();
         foreach (char ch in texto ?? "")
         {
-            e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 } } });
-            e.Add(new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 | 0x0002 } } });
+            var par = new[]
+            {
+                new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 } } },
+                new INPUT { Tipo = 1, U = new UNION { K = new KEYBDINPUT { Scan = ch, Flags = 0x0004 | 0x0002 } } },
+            };
+            if (PausaEntreLetrasMs > 0) { SendInput(2, par, Marshal.SizeOf<INPUT>()); Thread.Sleep(PausaEntreLetrasMs); }
+            else e.AddRange(par);
         }
         if (e.Count > 0) SendInput((uint)e.Count, e.ToArray(), Marshal.SizeOf<INPUT>());
     }

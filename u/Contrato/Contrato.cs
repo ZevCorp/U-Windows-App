@@ -53,6 +53,8 @@ internal static class Contrato
         Promesa(456, "Abrir termina cuando la app está quieta —dos lecturas seguidas iguales y con accionables—, no con el primer botón que aparece; y nunca pasa de 3 s.", P456);
         Promesa(457, "Una combinación de teclas lleva el código de exploración de cada tecla y suelta lo que pulsó en orden inverso.", P457);
         Promesa(458, "Mirar dice lo que contienen los campos de texto, recortado a 80 caracteres: Luna comprueba lo que escribió en vez de adivinarlo por el título.", P458);
+        Promesa(459, "Tras «escribe:» se espera a que la app termine de teclearlo —la pantalla quieta—, con un techo de 150 ms más 15 por carácter y nunca más de 1,5 s.", P459);
+        Promesa(460, "Escribir manda las letras de una en una, con al menos 3 ms entre ellas: de un solo lote, el Bloc de notas cambiaba letras por otras.", P460);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -711,6 +713,22 @@ internal static class Contrato
         Exige(r.Contains("«Editor de texto» contiene «prueba nocturna de Ü»"), $"no dice lo que contiene el campo: {r}");
         Exige(r.Contains("«Buscar» está vacío"), $"un campo vacío no se dice vacío: {r}");
         Exige(r.Contains(new string('x', 80) + "…") && !r.Contains(new string('x', 81)), $"no se recorta a 80: {r}");
+    }
+
+    private static void P459()
+    {
+        int Techo(string t) => (int)S("Ejecutor", "EsperaTrasEscribir", t)!;
+        Exige(Techo("hola") == 150 + 4 * 15, $"«hola» espera {Techo("hola")} ms");
+        Exige(Techo("prueba nocturna de Ü") == 150 + 20 * 15, $"20 caracteres esperan {Techo("prueba nocturna de Ü")} ms");
+        Exige(Techo(new string('x', 500)) == 1500, $"un texto largo espera {Techo(new string('x', 500))} ms, más de 1,5 s");
+        Exige(Techo("") == 150, "un texto vacío no espera el mínimo");
+    }
+
+    private static void P460()
+    {
+        var prop = T("Raton").GetProperty("PausaEntreLetrasMs") ?? throw new Pendiente("Raton.PausaEntreLetrasMs");
+        int pausa = (int)prop.GetValue(null)!;
+        Exige(pausa >= 3, $"la pausa entre letras por defecto es {pausa} ms; sin pausa se corrompía 1 de cada 4 veces");
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

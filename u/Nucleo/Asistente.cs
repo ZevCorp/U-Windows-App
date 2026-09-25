@@ -56,7 +56,7 @@ public sealed class Asistente : IDisposable
         };
         var ejecutor = new Ejecutor(
             AbrirYEsperarQueSeLea,
-            texto => { Raton.Escribir(texto); Thread.Sleep(30); },
+            EscribirYEsperar,
             PulsarTeclaYEsperar,
             (objetivo, hecho) => motor.Objetivo(objetivo, MaxPasosPorObjetivo, hecho),
             HayQueParar)
@@ -81,6 +81,14 @@ public sealed class Asistente : IDisposable
             3000, () => r.ElapsedMilliseconds);
         Log($"   abrir «{app}»: delante en {ms} ms, {(q.Cambio ? "quieta" : "todavía moviéndose")} en {q.Ms} ms más ({n} accionables, {q.Lecturas} lecturas)");
         return true;
+    }
+
+    private void EscribirYEsperar(string texto)
+    {
+        Raton.Escribir(texto);
+        var reloj = Stopwatch.StartNew();
+        var q = Asentado.Quieta(() => _lector.Leer(Donde.Ahora()?.Ventana ?? IntPtr.Zero), Ejecutor.EsperaTrasEscribir(texto), () => reloj.ElapsedMilliseconds);
+        Log($"   escribir {texto.Length} caracteres: {(q.Cambio ? "quieta" : "todavía tecleando")} en {q.Ms} ms");
     }
 
     private bool PulsarTeclaYEsperar(string tecla)
