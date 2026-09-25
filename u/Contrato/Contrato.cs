@@ -45,6 +45,7 @@ internal static class Contrato
         Promesa(448, "La voz abre con session.start en gpt-live-1 y Luna como delegada con «hacer» y «mirar»; una llamada se atiende UNA vez aunque llegue tres, y su resultado vuelve con su call_id y pide turno.", P448);
         Promesa(449, "Una pantalla sin accionables se relee hasta 1 s antes de rendirse: una app que acaba de abrir todavía no pintó.", P449);
         Promesa(450, "El Escape que pulsa Ü no es el freno de la persona: solo frena un Escape que Ü no mandó.", P450);
+        Promesa(451, "Si Jev dice que pulsar la elegida cumple el objetivo y la pantalla cambia al pulsarla, el objetivo termina sin otra llamada; si no cambia, se vuelve a preguntar.", P451);
 
         Console.WriteLine();
         int incumplidas = _mal + _pendientes + _arnes;
@@ -558,6 +559,42 @@ internal static class Contrato
         Exige(!Freno(true, ahora.AddMilliseconds(-80)), "el Escape que Ü mandó hace 80 ms frenó a Ü");
         Exige(Freno(true, ahora.AddSeconds(-3)), "un Escape de la persona 3 s después del de Ü no frenó");
         Exige(!Freno(false, null), "sin Escape, frenó");
+    }
+
+    private static void P451()
+    {
+        // La pregunta viaja en la misma llamada, y la respuesta se lee.
+        var ofrecidas = Lista(("Igual", "Button"));
+        string cuerpo = (string)S("Jev", "Cuerpo", "calc", "calcular", ofrecidas, "jev-latest")!;
+        using (var d = JsonDocument.Parse(cuerpo))
+            Exige(d.RootElement.GetProperty("questions").TryGetProperty("cumple_al_pulsar", out _), "no se pregunta si pulsar la elegida cumple el objetivo");
+        string resp = JsonSerializer.Serialize(new { answers = new Dictionary<string, object>
+            { ["puerta"] = new { choice = "1) Igual (Button)", confidence = 0.9 }, ["cumple_al_pulsar"] = new { noul = 0.92 } } });
+        var e = S("Jev", "Interpretar", resp, ofrecidas, 0.45)!;
+        Exige(Math.Abs((double)P(e, "CumpleAlPulsar")! - 0.92) < 1e-9, "la respuesta «cumple al pulsar» no se leyó");
+
+        // En el motor: con cambio, una sola llamada; sin cambio, otra.
+        foreach (var cambia in new[] { true, false })
+        {
+            int llamadas = 0, pulsos = 0;
+            var accionablesT = typeof(IReadOnlyList<>).MakeGenericType(T("Accionable"));
+            var dDonde = Delegado(typeof(Func<>).MakeGenericType(T("Ubicacion")), () => Ubicacion(7, "calc"));
+            var dVer = Delegado(typeof(Func<>).MakeGenericType(accionablesT), () => Lista(("Pantalla " + (cambia ? pulsos : 0), "Text"), ("Igual", "Button")));
+            var decidirT = typeof(Func<,,,>).MakeGenericType(typeof(string), typeof(string), accionablesT, T("Eleccion"));
+            var dDecidir = DelegadoDe3(decidirT, (_, _, _) =>
+            {
+                llamadas++;
+                if (llamadas >= 2) return Eleccion(false, 0, cumplido: 0.9);
+                var el = Eleccion(true, 2);
+                (el.GetType().GetProperty("CumpleAlPulsar") ?? throw new Pendiente("Eleccion.CumpleAlPulsar")).SetValue(el, 0.9);
+                return el;
+            });
+            var dPulsar = DelegadoAccion(typeof(Action<>).MakeGenericType(T("Accionable")), _ => pulsos++);
+            var m = N("Motor", dDonde, dVer, dDecidir, dPulsar, (Func<bool>)(() => false));
+            var r = I(m, "Objetivo", "calcular", 5)!;
+            Exige((bool)P(r, "Cumplido")!, $"cambia={cambia}: no terminó cumplido ({P(r, "PorQueParo")})");
+            Exige(llamadas == (cambia ? 1 : 2), $"cambia={cambia}: {llamadas} llamadas a Jev (se esperaban {(cambia ? 1 : 2)})");
+        }
     }
 
     // ── Delegados tipados sobre tipos que el contrato solo conoce por nombre ───────────────────

@@ -157,6 +157,11 @@ public sealed class Motor
             Anota(vueltas, new Vuelta(paso, new Tiempos(tDonde, tVer, tDecidir, tPulsar, tAsentar), aqui.Pantalla, lista.Count,
                 a.Id, asentado.Cambio ? "cambió" : "no cambió"));
 
+            // CUMPLIDO SIN PREGUNTAR OTRA VEZ (promesa 451): Jev dijo que esta era la última, y la pantalla cambió.
+            // Sin cambio no se da por hecho: el clic pudo no agarrar, y se vuelve a preguntar.
+            if (asentado.Cambio && e.CumpleAlPulsar >= Jev.CumplidoMinimo)
+                return new Recorrido(vueltas, $"cumplido: Jev dijo que pulsar «{a.Nombre}» lo cumplía ({e.CumpleAlPulsar:0.00}) y la pantalla cambió", true);
+
             repeticiones = asentado.Cambio ? 0 : (e.Numero == numeroPrevio ? repeticiones + 1 : 1);
             numeroPrevio = e.Numero;
             if (repeticiones >= 3)

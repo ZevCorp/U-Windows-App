@@ -8,7 +8,15 @@ using System.Text.Json;
 namespace U.Ciclo;
 
 /// <summary>Lo que decidió Jev, ya validado. <see cref="Numero"/> es 0 cuando no se pulsa nada.</summary>
-public sealed record Eleccion(bool Pulsar, int Numero, double Confianza, double Cumplido, string Porque);
+public sealed record Eleccion(bool Pulsar, int Numero, double Confianza, double Cumplido, string Porque)
+{
+    /// <summary>
+    /// ¿Pulsar la elegida cumple el objetivo? (promesa 451). Si sí y la pantalla cambia al pulsarla, el objetivo
+    /// termina sin la llamada de confirmación: en la batería del 2026-09-24 (23:12) cada objetivo gastaba una
+    /// vuelta de ~200 ms solo para oír «cumplido».
+    /// </summary>
+    public double CumpleAlPulsar { get; init; }
+}
 
 /// <summary>
 /// JEV (TypeSafe, systemone): elige UN número entre los accionables de la pantalla. Es la única pieza del
@@ -85,6 +93,15 @@ public static class Jev
             w.WriteEndObject();
             w.WriteEndObject();
 
+            w.WriteStartObject("cumple_al_pulsar");
+            w.WriteString("type", "noul");
+            w.WriteString("instructions", "Si se pulsa el accionable elegido, ¿con eso queda cumplido TODO el objetivo, sin pulsar nada más después?");
+            w.WriteStartObject("criteria");
+            w.WriteString("true", "Pulsar la elegida es el último paso: después el objetivo ya está conseguido");
+            w.WriteString("false", "Después de pulsarla todavía faltará pulsar algo más");
+            w.WriteEndObject();
+            w.WriteEndObject();
+
             w.WriteStartObject("peligro");
             w.WriteString("type", "noul");
             w.WriteString("instructions",
@@ -107,7 +124,7 @@ public static class Jev
     /// </summary>
     public static Eleccion Interpretar(string json, IReadOnlyList<Accionable> ofrecidas, double umbral)
     {
-        string elegida; double conf, cumplido = 0, peligro = 0;
+        string elegida; double conf, cumplido = 0, peligro = 0, alPulsar = 0;
         try
         {
             using var doc = JsonDocument.Parse(json ?? "");
@@ -117,6 +134,7 @@ public static class Jev
             conf = p.TryGetProperty("confidence", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetDouble() : 0;
             cumplido = Noul(answers, "cumplido");
             peligro = Noul(answers, "peligro");
+            alPulsar = Noul(answers, "cumple_al_pulsar");
         }
         catch (Exception e)
         {
@@ -134,7 +152,7 @@ public static class Jev
             return new Eleccion(false, a.Numero, conf, cumplido, $"Jev dice que pulsar «{a.Nombre}» es peligroso ({C(peligro)}): no lo pulso sin que me lo confirmes");
         if (conf < umbral)
             return new Eleccion(false, a.Numero, conf, cumplido, $"Jev eligió «{a.Nombre}» con confianza {C(conf)}, por debajo de {C(umbral)}");
-        return new Eleccion(true, a.Numero, conf, cumplido, $"Jev eligió «{a.Nombre}» ({C(conf)})");
+        return new Eleccion(true, a.Numero, conf, cumplido, $"Jev eligió «{a.Nombre}» ({C(conf)})") { CumpleAlPulsar = alPulsar };
     }
 
     private static double Noul(JsonElement answers, string id) =>
