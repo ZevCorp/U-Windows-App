@@ -236,17 +236,17 @@ objetivo gasta una llamada de Jev más solo para confirmar que terminó (~200 ms
   solo lectura** (`banco-u --sonda-jev`, mismo estado, 8 preguntas por variante) para la hipótesis de que el número
   del historial empuja a Jev a repetir el id: con número 6 de 8 aciertos, sin número 7 de 8. La hipótesis **no se
   sostiene** y la 442 no se toca. Lo que sí mide: **Jev se equivoca ~1 de cada 5 veces** eligiendo entre 50 botones.
-### La noche entera, en números (`%TEMP%\u-medicion\noche.log`, 10 rondas de 00:15 a 05:02)
+### La noche entera, en números (`%TEMP%\u-medicion\noche.log`, 13 rondas de 00:15 a 06:41)
 
 | | |
 |---|---|
-| pedidos | **59 de 60 cumplidos** — el que no, el Bloc de notas de las 02:21 (arreglado con la 458); desde entonces 24 de 24 |
-| vueltas del ciclo | 132, de las que **25 (19 %) pasaron de 500 ms** |
+| pedidos | **77 de 78 cumplidos** — el que no, el Bloc de notas de las 02:21 (arreglado con la 458-460); desde entonces 42 de 42, y la última ronda (06:41) sin un solo rescate de Luna |
+| vueltas del ciclo | 183, de las que **33 (18 %) pasaron de 500 ms** |
 | mediana de la vuelta con clic, por ronda | 273-463 ms (y dos rondas de madrugada con muy pocos clics: 749 y 1.078 ms, por Jev lento) |
 | lo que se pasa de 500 ms | **siempre las mismas dos causas**: el asentado al navegar (Explorador → Descargas, Configuración → Sonido: 300-380 ms mientras la app pinta) y los picos de Jev (600-1.741 ms) |
 | lo que nunca se pasó | dónde estoy (≤ 0,1 ms), pulsar (≤ 60 ms), ver en caliente (≤ 100 ms) |
 
-**Honestamente**: la meta de 500 ms por vuelta se cumple en el 81 % de las vueltas, no en todas. Lo que falta no es
+**Honestamente**: la meta de 500 ms por vuelta se cumple en el 82 % de las vueltas, no en todas. Lo que falta no es
 el harness —sus tres piezas nunca pasaron de 100 ms— sino esperar menos a que la app pinte (punto abierto 2) y el
 suelo de Jev (punto abierto 1).
 ## Cómo verificarlo por la mañana
