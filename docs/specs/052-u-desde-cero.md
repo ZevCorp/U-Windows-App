@@ -107,17 +107,20 @@ La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 
 ## Bitácora
 
+Horas sacadas de los commits y de los archivos del banco, no de memoria.
+
+
 - **22:42** — medición de `main` hecha (tabla de arriba). Pulsar 3–4,6 s; la espera se come 1,8 s.
-- **23:05** — promesas 430-441 escritas y ROJAS (12 pendientes). Commit `232ea21`.
-- **23:10** — núcleo `u/Nucleo` en verde 12/12. Sabotaje por diff en 7 promesas, las 7 rojas (el primer
+- **22:47** — promesas 430-441 escritas y ROJAS (12 pendientes). Commit `232ea21`.
+- **22:51** — núcleo `u/Nucleo` en verde 12/12. Sabotaje por diff en 7 promesas, las 7 rojas (el primer
   sabotaje de la 441 quitaba solo uno de los dos frenos y siguió verde: se rehízo).
-- **23:12** — **banco 1 sobre el PC real** (`u/Banco`, mismas 5 tareas que main): mediana con clic
+- **22:52** — **banco 1 sobre el PC real** (`u/Banco`, mismas 5 tareas que main): mediana con clic
   **373 ms**, máx 485; 1 de 14 vueltas fuera de presupuesto. Pero solo 1 de 5 tareas cumplida: Jev no
   sabía lo ya hecho (abría y cerraba «Archivo»), la huella no veía el texto de la Calculadora, y el
   Explorador leía la barra de tareas (mismo proceso, 60 accionables, 319 ms).
-- **23:20** — promesas 442-444 rojas → verdes; sabotaje por diff de las tres, rojas (la primera de la 442 no
+- **22:56** — promesas 442-444 rojas → verdes; sabotaje por diff de las tres, rojas (la primera de la 442 no
   compilaba y no juzgó: se rehízo con una que compila).
-- **23:22** — **banco 2 sobre el PC real**: **4 de 5 tareas CUMPLIDAS** (Bloc de notas, Explorador →
+- **22:55** — **banco 2 sobre el PC real**: **4 de 5 tareas CUMPLIDAS** (Bloc de notas, Explorador →
   Documentos, Calculadora 7×8, Sistema → Pantalla). Mediana con clic **432 ms**, máx 724; 4 de 14 fuera de
   presupuesto — dos por Jev (617 y 972 ms) y dos por un asentado que espera a una app que aún carga
   (406-462 ms). Bluetooth: llegó, pero Jev dudó (0,58) en vez de decir «cumplido».
@@ -133,3 +136,8 @@ La que cierra el asunto es la **437**: sin ella el presupuesto es una opinión.
 | asentar | incluido en pulsar: 1.814 ms | 28-462 ms (mediana 128) |
 | **vuelta con clic** | **3.579-5.176 ms** | **mediana 432 ms** |
 | tareas cumplidas | 0 de 5 (Sistema llegó, sin «cumplido») | **4 de 5** |
+- **22:59** — promesas 445-448 (ejecutor del plan, recorte para Luna, protocolo de GPT-Live) rojas → verdes;
+  sabotaje por diff de las cuatro, rojas. Contrato de u: 19/19.
+- **23:01** — **punta a punta sin voz** (`U-nuevo.exe --hacer`): «abre el bloc de notas y escribe: hola, soy Ü».
+  Luna planeó en 2.778 ms `abre: notepad → escribe: hola, soy Ü`; el ejecutor lo hizo en 412 ms; Luna resumió en
+  2.217 ms. Total 5,7 s, de los que el ciclo son 0,4: **el tiempo ahora es de Luna, no del harness**.
