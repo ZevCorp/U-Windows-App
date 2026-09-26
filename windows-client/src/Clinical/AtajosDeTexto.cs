@@ -97,6 +97,45 @@ public static class AtajosDeTexto
 
     // ── buscar ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Inserta un atajo en una sección COMO LO USA EL MÉDICO (spec 056): sin seleccionar nada, con el
+    /// cursor al final del bloque, y sustituyendo la sección si solo tenía relleno del generador.
+    /// </summary>
+    /// <remarks>
+    /// EL ATAJO ES EL TEXTO DEL MÉDICO, NO UN FORMULARIO (lo corrigió el dueño el 2026-09-26): casi
+    /// todos son exámenes normales largos que el médico recorta o corrige según lo que dijo el
+    /// paciente. La web selecciona el primer `___`/`[texto]` (<see cref="Insertar"/> y
+    /// <see cref="PrimerHuecoEn"/> siguen siendo su puerto, promesa 455); aquí eso dejaba seleccionado
+    /// un corchete de estilo y la siguiente tecla lo borraba. Los huecos siguen ahí para quien los
+    /// escriba: Tab salta al siguiente.
+    ///
+    /// SOBRE RELLENO SUSTITUYE, porque es justo la sección que el atajo viene a llenar. Pero el relleno
+    /// tiene que ser TODO lo que hay: <see cref="InstruccionDeVoz.EsRelleno"/> mira solo el principio,
+    /// y «No referido. Dolor en rodilla…» empieza como relleno y no lo es.
+    /// </remarks>
+    public static Insercion InsertarEnSeccion(string valor, int desde, int hasta, string texto)
+    {
+        valor ??= "";
+        texto ??= "";
+        int a = Math.Clamp(Math.Min(desde, hasta), 0, valor.Length);
+        int b = Math.Clamp(Math.Max(desde, hasta), 0, valor.Length);
+        string resto = (valor[..a] + valor[b..]).Trim();
+        if (SoloRelleno(resto)) return new Insercion(texto, texto.Length, texto.Length);
+
+        var r = Insertar(valor, desde, hasta, texto);
+        return new Insercion(r.Texto, r.SelFin, r.SelFin);
+    }
+
+    /// <summary>Vacío, o una sola frase corta de relleno («No referido.», «Sin datos»).</summary>
+    private static bool SoloRelleno(string texto)
+    {
+        if (texto.Length == 0) return true;
+        if (texto.Length > 80 || !InstruccionDeVoz.EsRelleno(texto)) return false;
+        // Una sola frase: tras el primer punto no queda nada escrito.
+        int punto = texto.IndexOfAny(new[] { '.', ';', '\n' });
+        return punto < 0 || texto[(punto + 1)..].Trim().Length == 0;
+    }
+
     /// <summary>Minúsculas y sin tildes: «Pediatría» y «pediatria» son la misma búsqueda.</summary>
     public static string Normalizar(string valor) =>
         ConceptosClinicos.SinTildes((valor ?? "").ToLower(Es)).Trim();

@@ -912,6 +912,9 @@ internal static class Contrato
         Prueba("463. Windows no firma: ningún cuerpo que manda al portal lleva un estado de firmada o exportada, ni una firma", WindowsNoFirma);
         Prueba("464. el paciente se busca en patients del médico por nombre o documento, sin que lo escrito pueda romper la consulta a la base, y asociarlo manda PATCH /encounters/:id/patient con su id", ElPacienteSeBuscaYSeAsocia);
         Prueba("465. la lista de consultas dice de quién es cada una: se piden el nombre y el documento del paciente, y la fila los enseña antes que el motivo", LaListaDiceDeQuienEs);
+        // Spec 056: el atajo es el texto del médico, no un formulario (2026-09-26, lo pidió el dueño).
+        Prueba("466. insertar un atajo deja el cursor al final de lo insertado y no selecciona nada, aunque el texto traiga corchetes o guiones: el atajo es texto del médico, no un formulario", ElAtajoNoEsUnFormulario);
+        Prueba("467. sobre una sección vacía o que el generador dejó en relleno, el atajo la sustituye; sobre contenido real, se suma como en la web", ElAtajoSustituyeElRelleno);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -5203,6 +5206,69 @@ internal static class Contrato
             Debe((string?)Leer(r, "Texto") == Cad(w, "next") && (int)Leer(r, "SelInicio")! == w.GetProperty("selStart").GetInt32()
                  && (int)Leer(r, "SelFin")! == w.GetProperty("selEnd").GetInt32(),
                 $"insertar «{Cad(e, "texto")}» en «{Cad(e, "valor")}» [{e.GetProperty("desde")},{e.GetProperty("hasta")}) no da lo de la web");
+        }
+    }
+
+    private static void ElAtajoNoEsUnFormulario()
+    {
+        var t = Clin("AtajosDeTexto");
+        var enSeccion = t?.GetMethod("InsertarEnSeccion");
+        var insertar = t?.GetMethod("Insertar");
+        if (enSeccion == null || insertar == null) { Pendiente("Clinical.AtajosDeTexto.InsertarEnSeccion", "466", "056"); return; }
+
+        // Textos como los que escriben los médicos: largos, con un corchete de estilo o un guion bajo
+        // que NO son huecos para rellenar. La web seleccionaría el primero; aquí no se selecciona nada.
+        const string normal = "Paciente en buen estado general, alerta, orientado.\nPupilas [isocóricas] y reactivas.\nAbdomen blando, depresible, ___ sin dolor.";
+        var casos = new (string Valor, int Desde, int Hasta, string Texto)[]
+        {
+            ("Refiere dolor abdominal. /exa", 25, 29, normal),
+            ("Refiere dolor abdominal./exa", 24, 28, normal),
+            ("Antes /n después", 6, 8, "Sin [hallazgos] relevantes"),
+            ("Tos seca. /", 10, 11, "Pulmones bien ventilados."),
+        };
+        foreach (var (valor, desde, hasta, texto) in casos)
+        {
+            var r = enSeccion.Invoke(null, new object?[] { valor, desde, hasta, texto })!;
+            var web = insertar.Invoke(null, new object?[] { valor, desde, hasta, texto })!;
+            string nuevo = (string)Leer(r, "Texto")!;
+            int ini = (int)Leer(r, "SelInicio")!, fin = (int)Leer(r, "SelFin")!;
+            int finDelBloque = (int)Leer(web, "SelFin")!;
+            Debe(nuevo == (string)Leer(web, "Texto")!, $"con contenido real el texto tiene que ser el de la web («{valor}»)");
+            Debe(ini == fin, $"insertar «{texto[..Math.Min(20, texto.Length)]}…» en «{valor}» dejó {fin - ini} carácter(es) seleccionados: el atajo no es un formulario");
+            Debe(fin == finDelBloque, $"el cursor tiene que quedar al final de lo insertado ({finDelBloque}), quedó en {fin}");
+        }
+    }
+
+    private static void ElAtajoSustituyeElRelleno()
+    {
+        var t = Clin("AtajosDeTexto");
+        var enSeccion = t?.GetMethod("InsertarEnSeccion");
+        var insertar = t?.GetMethod("Insertar");
+        if (enSeccion == null || insertar == null) { Pendiente("Clinical.AtajosDeTexto.InsertarEnSeccion", "467", "056"); return; }
+
+        const string normal = "Abdomen blando, depresible, no doloroso a la palpación.\nRuidos intestinales presentes.";
+        // El relleno del generador: la sección que el médico viene a llenar con su atajo.
+        foreach (string relleno in new[] { "", "No referido. ", "No referido en la consulta.\n", "Sin datos. ", "  ", "Pendiente " })
+        {
+            string valor = relleno + "/abd";
+            var r = enSeccion.Invoke(null, new object?[] { valor, relleno.Length, valor.Length, normal })!;
+            string nuevo = (string)Leer(r, "Texto")!;
+            Debe(nuevo == normal, $"sobre «{relleno.Replace("\n", "⏎")}» el atajo tenía que sustituir la sección entera, quedó «{nuevo.Replace("\n", "⏎")}»");
+            Debe((int)Leer(r, "SelFin")! == normal.Length && (int)Leer(r, "SelInicio")! == normal.Length,
+                "y el cursor al final del atajo");
+        }
+
+        // Con contenido real se SUMA, como en la web: nunca se borra lo que el médico o la IA escribieron.
+        // «No referido. Dolor en rodilla…» EMPIEZA como relleno y no lo es: sustituirla borraría lo que el
+        // médico dictó después.
+        foreach (string real in new[] { "Dolor en fosa ilíaca derecha. ", "No refiere fiebre pero sí dolor. ",
+                                        "No referido. Dolor en rodilla derecha desde ayer. " })
+        {
+            string valor = real + "/abd";
+            var r = enSeccion.Invoke(null, new object?[] { valor, real.Length, valor.Length, normal })!;
+            var web = insertar.Invoke(null, new object?[] { valor, real.Length, valor.Length, normal })!;
+            Debe((string)Leer(r, "Texto")! == (string)Leer(web, "Texto")!,
+                $"sobre «{real}» el atajo tenía que sumarse como en la web, no sustituir");
         }
     }
 

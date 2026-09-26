@@ -704,16 +704,43 @@ public sealed partial class ConsultaWindow
 
     /// <summary>
     /// Engancha los atajos del médico a un editor de sección: «/» al empezar palabra abre la lista,
-    /// flechas y Enter (o Tab) insertan, y Tab salta de hueco en hueco. Lo insertado es texto normal:
-    /// se edita como cualquier otro (lo pidió el dueño el 2026-09-26).
+    /// flechas y Enter (o Tab) insertan. Lo insertado es texto normal: se edita como cualquier otro.
     /// </summary>
+    /// <remarks>
+    /// EL ATAJO ES EL TEXTO DEL MÉDICO, NO UN FORMULARIO (spec 056, lo corrigió el dueño el
+    /// 2026-09-26): casi todos son exámenes normales largos que después se recortan o se corrigen
+    /// según lo que dijo el paciente. Por eso la lista enseña TRES renglones y una vista previa entera
+    /// del elegido —dos normales que empiezan igual no se distinguen por el título—, insertar no
+    /// selecciona nada, y sobre relleno del generador el atajo sustituye (promesas 466-467).
+    /// </remarks>
     private void EngancharAtajos(TextBox caja, string seccion)
     {
         _menuAtajos.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, Estudio.FuenteCuerpo);
-        var lista = new StackPanel { Width = 360 };
+        var lista = new StackPanel { Width = 400 };
+        // LA VISTA PREVIA del atajo elegido, entero y con la letra de la nota: es lo que el médico va
+        // a corregir después, así que lo ve antes de meterlo.
+        var previa = new TextBlock
+        {
+            FontFamily = Estudio.FuenteDocumento, FontSize = 13.5, LineHeight = 20, Foreground = Estudio.DocTinta,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var marcoPrevia = new Border
+        {
+            BorderBrush = Estudio.Borde, BorderThickness = new Thickness(0, 1, 0, 0),
+            Margin = new Thickness(4, 6, 4, 0), Padding = new Thickness(6, 10, 6, 4),
+            Child = new ScrollViewer
+            {
+                Content = previa, MaxHeight = 180, Focusable = false,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            },
+        };
+        var menu = new StackPanel();
+        menu.Children.Add(lista);
+        menu.Children.Add(marcoPrevia);
         var tarjetaDelMenu = Estudio.Tarjeta(Estudio.RadioMedio);
         tarjetaDelMenu.Padding = new Thickness(6);
-        tarjetaDelMenu.Child = lista;
+        tarjetaDelMenu.Child = menu;
         var elevado = Estudio.Elevar(tarjetaDelMenu, Estudio.Sombra3);
         int seleccion = 0;
         IReadOnlyList<Atajo> actuales = Array.Empty<Atajo>();
@@ -745,7 +772,8 @@ public sealed partial class ConsultaWindow
                 pila.Children.Add(new TextBlock
                 {
                     Text = a.Contenido.Replace('\n', ' '), Foreground = Estudio.TintaMedia, FontSize = 12,
-                    TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 2, 0, 0),
+                    LineHeight = 16, MaxHeight = 48, TextWrapping = TextWrapping.Wrap,
+                    TextTrimming = TextTrimming.WordEllipsis, Margin = new Thickness(0, 2, 0, 0),
                 });
                 var fila = new Border
                 {
@@ -755,6 +783,7 @@ public sealed partial class ConsultaWindow
                 fila.MouseLeftButtonDown += (_, e) => { e.Handled = true; Insertar(actuales[indice]); };
                 lista.Children.Add(fila);
             }
+            previa.Text = actuales.Count > 0 ? actuales[seleccion].Contenido : "";
         }
 
         void Evaluar()
@@ -778,11 +807,11 @@ public sealed partial class ConsultaWindow
         void Insertar(Atajo a)
         {
             if (barra == null) return;
-            var r = AtajosDeTexto.Insertar(caja.Text, barra.Inicio, caja.CaretIndex, a.Contenido);
+            // NADA SELECCIONADO y el cursor al final: seleccionar un corchete de estilo hacía que la
+            // siguiente tecla lo borrara. Sobre relleno del generador, sustituye (466-467).
+            var r = AtajosDeTexto.InsertarEnSeccion(caja.Text, barra.Inicio, caja.CaretIndex, a.Contenido);
             caja.Text = r.Texto;
-            var hueco = AtajosDeTexto.PrimerHuecoEn(r.Texto, r.SelInicio, r.SelFin);
-            if (hueco != null) caja.Select(hueco.Inicio, hueco.Fin - hueco.Inicio);
-            else caja.CaretIndex = r.SelFin;
+            caja.CaretIndex = r.SelFin;
             Cerrar();
             caja.Focus();
             LogBus.Log("atajos", "atajo insertado en la nota");
@@ -804,7 +833,7 @@ public sealed partial class ConsultaWindow
                     case Key.Escape: Cerrar(); e.Handled = true; return;
                 }
             }
-            // TAB SALTA AL SIGUIENTE HUECO si lo hay; si no, Tab sigue siendo Tab.
+            // TAB SALTA AL SIGUIENTE HUECO solo si el médico escribió alguno; si no, Tab sigue siendo Tab.
             if (e.Key == Key.Tab && Keyboard.Modifiers == ModifierKeys.None)
             {
                 var h = AtajosDeTexto.SiguienteHueco(caja.Text, caja.SelectionStart + caja.SelectionLength);
