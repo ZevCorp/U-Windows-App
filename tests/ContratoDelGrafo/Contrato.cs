@@ -873,7 +873,9 @@ internal static class Contrato
         // números ya los tenía main, así que pasan a 440-444. Los commits viejos las citan por el número viejo.
         // Los números no se reciclan ni se comparten entre ramas: dos promesas con el mismo número
         // harían que un commit de una rama hablara de la otra.
-        Prueba("440. la plantilla con la que se graba sale de una cadena de orden fijo —lo que el médico eligió, su sugerida, la de urgencias, la abierta— y nunca de una cualquiera del catálogo", LaPlantillaSaleDeUnaCadenaConOrden);
+        // La 440 («la plantilla sale de una cadena de orden fijo —lo que el médico eligió, su sugerida,
+        // la de urgencias, la abierta—») SE RETIRÓ el 2026-09-26: la sustituye la 458, porque el dueño
+        // pidió que U y la web elijan igual —la predeterminada del médico—. El número no se recicla.
         Prueba("441. la sugerida del médico se guarda a su nombre y por su especialidad, y al volver a abrir la app manda sobre la de urgencias", LaSugeridaSeGuardaPorEspecialidad);
         Prueba("442. corregir una sección manda la nota ENTERA: todas las claves del snapshot, también las que quedaron vacías", CorregirMandaLaNotaEntera);
         Prueba("443. una nota firmada no se edita desde Windows: se ve, se sigue pudiendo mandar a SAP, y el editor no aparece", LaNotaFirmadaNoSeEdita);
@@ -889,6 +891,27 @@ internal static class Contrato
         Prueba("447. Estudio pinta con los valores de Marca: cada brocha que la nota usa es exactamente su color de Marca", ElEstudioPintaConLaMarca);
         Prueba("448. un rótulo de sección se escribe como en la web —en mayúsculas y con espaciado entre letras— y quitar el espaciado devuelve el texto en mayúsculas sin perder ni una letra ni un espacio", ElRotuloLlevaEspaciado);
         Prueba("449. los iconos de la nota son los de la web: el catálogo trae cada icono que la nota usa, con el trazo del SVG de Lucide convertido a instrucciones que WPF lee, y ninguno vacío", LosIconosSonLosDeLaWeb);
+
+        // ── LA NOTA DE WINDOWS HACE LO QUE HACE LA DE LA WEB (spec 055, 2026-09-26) ──
+        //
+        // Las que dicen «como la web» se juzgan contra lo que la WEB contestó de verdad: su
+        // TypeScript ejecutado sobre 152 casos y congelado en bronce/miracle-notes-web.json.
+        Prueba("450. los avisos al terminar son los de la web: ante la misma nota, plantilla y transcripción, los mismos hallazgos —clave, severidad, título y detalle— en el mismo orden, con los mismos conteos, el mismo puntaje, el mismo reparto entre visibles y plegados y la misma etiqueta", LosAvisosSonLosDeLaWeb);
+        Prueba("451. los signos vitales y el motivo se leen de la nota como en la web: las mismas claves, los mismos valores y la misma evidencia", LosVitalesSonLosDeLaWeb);
+        Prueba("452. lo que el médico dice por voz a una sección se entiende como en la web —literal, dictado o ajuste, con el mismo texto— y aplicar un literal deja la sección igual que la web", LaVozSeEntiendeComoEnLaWeb);
+        Prueba("453. un literal dicho por voz se aplica SIN llamar a la red; un dictado va a note-adjustment con instruction_kind dictation y la sección, un ajuste con rewrite y la frase envuelta como la web; y ninguno de los tres guarda la nota solo", LaVozAjustaSinGuardarSola);
+        Prueba("454. pedir un ajuste escrito manda la instrucción sin sección y con rewrite; la propuesta que vuelve se aplica sobre la nota que se ve, y si el backend no cambió ninguna sección la nota queda intacta y se dice por qué", ElAjusteEscritoEsUnaPropuesta);
+        Prueba("455. el «/», los huecos y la inserción de un atajo funcionan como en la web: el mismo disparo bajo el cursor, los mismos huecos, el mismo siguiente hueco y la misma inserción con su selección", LosAtajosFuncionanComoEnLaWeb);
+        Prueba("456. los atajos se buscan y se ordenan como en la web: la misma normalización del texto y el mismo orden para cada búsqueda y cada sección", LosAtajosSeOrdenanComoEnLaWeb);
+        Prueba("457. los atajos son los del médico: se leen de user_snippets con su token y la clave pública, sin mandar su id, y un atajo que no se puede leer no tumba la nota", LosAtajosSonLosDelMedico);
+        Prueba("458. la plantilla con la que se graba es la que elegiría la web —su predeterminada, la última o ninguna según el modo del médico, con la misma cadena después— y solo si la web no elige ninguna y el médico no pidió elegirla cada vez, se graba con la abierta", LaPlantillaEsLaQueElegiriaLaWeb);
+        Prueba("459. fijar la predeterminada desde Windows la hace mandar: además del pin, deja template_start_mode = fixed en las preferencias del médico, en la misma tabla que la web", FijarLaPredeterminadaLaHaceMandar);
+        Prueba("460. copiar la nota da el mismo texto que «Copiar nota» de la web", CopiarLaNotaEsComoEnLaWeb);
+        Prueba("461. corregir una sección o el resumen no borra nada de la nota: el cierre y todo campo que Windows no entiende viajan en el PUT tal cual, y solo cambia lo corregido", CorregirNoBorraNada);
+        Prueba("462. una consulta abierta desde la lista enseña lo que enseña el portal: si su nota se corrigió en la web, esa versión manda sobre la de Graph, sección por sección y en el resumen", LaConsultaAbiertaEnseniaLoDelPortal);
+        Prueba("463. Windows no firma: ningún cuerpo que manda al portal lleva un estado de firmada o exportada, ni una firma", WindowsNoFirma);
+        Prueba("464. el paciente se busca en patients del médico por nombre o documento, sin que lo escrito pueda romper la consulta a la base, y asociarlo manda PATCH /encounters/:id/patient con su id", ElPacienteSeBuscaYSeAsocia);
+        Prueba("465. la lista de consultas dice de quién es cada una: se piden el nombre y el documento del paciente, y la fila los enseña antes que el motivo", LaListaDiceDeQuienEs);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -4860,6 +4883,7 @@ internal static class Contrato
                      ?? iconos?.GetProperty("Trazos", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
         if (trazos is not IReadOnlyDictionary<string, string> catalogo) { Pendiente("Ui.Iconos.Trazos", "449", "054"); return; }
 
+
         var gramatica = new System.Text.RegularExpressions.Regex(@"^M[\sMmLlHhVvCcSsQqTtAaZz0-9.eE+-]*$");
         foreach (var nombre in IconosDeLaNota)
         {
@@ -4870,63 +4894,609 @@ internal static class Contrato
         }
     }
 
-    private static void LaPlantillaSaleDeUnaCadenaConOrden()
+    // ── La nota de Windows hace lo que hace la de la web (spec 055) ──────────
+
+    /// <summary>
+    /// Los vectores de la web: lo que Miracle Notes web contestó, congelado por
+    /// bronce/generar-desde-la-web.mts ejecutando su TypeScript real. Nulo si no viaja en el
+    /// contrato — y eso es un fallo del arnés, que se dice como tal.
+    /// </summary>
+    private static readonly Lazy<JsonElement?> _vectores = new(() =>
     {
-        var t = Capacidad("U.WindowsClient.Clinical.ReglaDeLaPlantilla");
+        using var flujo = typeof(Contrato).Assembly.GetManifestResourceStream("miracle-notes-web.json");
+        if (flujo == null) return null;
+        using var doc = JsonDocument.Parse(flujo);
+        return doc.RootElement.Clone();
+    });
+
+    private static JsonElement? Vectores(string grupo)
+    {
+        var v = _vectores.Value;
+        if (v == null)
+        {
+            Debe(false, "EL ARNÉS no trae los vectores de la web (miracle-notes-web.json): no se "
+                      + "puede juzgar nada de la spec 055. No es una promesa rota: es el juez sin su prueba");
+            return null;
+        }
+        return v.Value.GetProperty(grupo);
+    }
+
+    /// <summary>Espera una Task&lt;T&gt; pedida por reflexión y devuelve su resultado. Sin dynamic: con
+    /// dynamic la llamada se resolvía por reflexión en tiempo de ejecución y fallaba (commit de la 046).</summary>
+    private static object? Esperar(object? tarea)
+    {
+        if (tarea is not Task t) return null;
+        t.GetAwaiter().GetResult();
+        return t.GetType().GetProperty("Result")?.GetValue(t);
+    }
+
+    private static object? Leer(object? o, string nombre) =>
+        o?.GetType().GetProperty(nombre)?.GetValue(o);
+
+    private static string? Cad(JsonElement e, string campo) =>
+        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(campo, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString() : null;
+
+    private static Type? Clin(string nombre) => Capacidad("U.WindowsClient.Clinical." + nombre);
+
+    private static void LosAvisosSonLosDeLaWeb()
+    {
+        var t = Clin("RevisionDeLaNota");
+        var revisar = t?.GetMethod("Revisar");
+        var puntaje = t?.GetMethod("Puntaje");
+        var repartir = t?.GetMethod("Repartir");
+        var etiqueta = t?.GetMethod("Etiqueta");
+        if (revisar == null || puntaje == null || repartir == null || etiqueta == null)
+        { Pendiente("Clinical.RevisionDeLaNota.Revisar/Puntaje/Repartir/Etiqueta", "450", "055"); return; }
+        var casos = Vectores("revisiones");
+        if (casos == null) return;
+
+        int juzgados = 0;
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            string nombre = Cad(caso, "nombre") ?? "?";
+            var e = caso.GetProperty("entrada");
+            var s = caso.GetProperty("salida");
+            var r = revisar.Invoke(null, new object?[] { e.GetProperty("note"), e.GetProperty("template"), Cad(e, "transcript") });
+
+            var hallazgos = ((System.Collections.IEnumerable)Leer(r, "Hallazgos")!).Cast<object>().ToList();
+            var esperados = s.GetProperty("hallazgos").EnumerateArray().ToList();
+            string Uno(object h) => $"{Leer(h, "Clave")}|{Leer(h, "Severidad")}|{Leer(h, "Titulo")}|{Leer(h, "Detalle")}";
+            string Web(JsonElement h) => $"{Cad(h, "key")}|{Cad(h, "severidad")}|{Cad(h, "titulo")}|{Cad(h, "detalle")}";
+            var suyos = hallazgos.Select(Uno).ToList();
+            var deLaWeb = esperados.Select(Web).ToList();
+            if (!suyos.SequenceEqual(deLaWeb))
+            {
+                int i = Enumerable.Range(0, Math.Max(suyos.Count, deLaWeb.Count))
+                    .First(k => k >= suyos.Count || k >= deLaWeb.Count || suyos[k] != deLaWeb[k]);
+                Debe(false, $"«{nombre}»: el hallazgo {i + 1} no es el de la web —Windows «{(i < suyos.Count ? suyos[i] : "nada")}», "
+                          + $"la web «{(i < deLaWeb.Count ? deLaWeb[i] : "nada")}»");
+                continue;
+            }
+            foreach (var (campo, prop) in new[] { ("criticos", "Criticos"), ("advertencias", "Advertencias"), ("sugerencias", "Sugerencias") })
+                Debe((int)Leer(r, prop)! == s.GetProperty(campo).GetInt32(), $"«{nombre}»: {campo} no cuadra con la web");
+            Debe((int)puntaje.Invoke(null, new[] { r })! == s.GetProperty("puntaje").GetInt32(),
+                $"«{nombre}»: el puntaje no es el de la web");
+            var reparto = repartir.Invoke(null, new object?[] { r, 3 })!;
+            string Claves(object? lista) => string.Join(",", ((System.Collections.IEnumerable)lista!).Cast<object>().Select(h => Leer(h, "Clave")));
+            string ClavesWeb(string campo) => string.Join(",", s.GetProperty(campo).EnumerateArray().Select(x => x.GetString()));
+            Debe(Claves(Leer(reparto, "Principales")) == ClavesWeb("principales")
+                 && Claves(Leer(reparto, "Plegados")) == ClavesWeb("plegados"),
+                $"«{nombre}»: lo que se ve y lo que se pliega no es lo de la web");
+            Debe((string)etiqueta.Invoke(null, new[] { r })! == Cad(s, "etiqueta"),
+                $"«{nombre}»: la etiqueta «{etiqueta.Invoke(null, new[] { r })}» no es «{Cad(s, "etiqueta")}»");
+            juzgados++;
+        }
+        Debe(juzgados > 20, $"se juzgaron {juzgados} notas: un vector que no se recorre no prueba nada");
+    }
+
+    private static void LosVitalesSonLosDeLaWeb()
+    {
+        var t = Clin("ConceptosClinicos");
+        var extraer = t?.GetMethod("Extraer");
+        if (extraer == null) { Pendiente("Clinical.ConceptosClinicos.Extraer", "451", "055"); return; }
+        var casos = Vectores("vitales");
+        if (casos == null) return;
+
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            string entrada = caso.GetProperty("entrada").GetString() ?? "";
+            var secciones = entrada.StartsWith("(secciones)")
+                ? new[]
+                {
+                    new U.WindowsClient.Clinical.SeccionDeNota("motivo", "Motivo de consulta", "  Dolor de cabeza intenso  "),
+                    new U.WindowsClient.Clinical.SeccionDeNota("examen", "Examen físico", "TA 140/90"),
+                }
+                : new[] { new U.WindowsClient.Clinical.SeccionDeNota("examen", "Examen físico", entrada) };
+            var mapa = (System.Collections.IDictionary)extraer.Invoke(null, new object?[] { secciones })!;
+            var web = caso.GetProperty("salida");
+            var suyos = mapa.Keys.Cast<string>().OrderBy(k => k, StringComparer.Ordinal)
+                .Select(k => $"{k}={Leer(mapa[k], "Valor")}~{Leer(mapa[k], "Evidencia")}");
+            var deLaWeb = web.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal)
+                .Select(p => $"{p.Name}={Cad(p.Value, "value")}~{Cad(p.Value, "evidence")}");
+            Debe(suyos.SequenceEqual(deLaWeb),
+                $"«{entrada}»: Windows leyó [{string.Join("; ", suyos)}] y la web [{string.Join("; ", deLaWeb)}]");
+        }
+    }
+
+    private static void LaVozSeEntiendeComoEnLaWeb()
+    {
+        var t = Clin("InstruccionDeVoz");
+        var interpretar = t?.GetMethod("Interpretar");
+        var aplicar = t?.GetMethod("AplicarLiteral");
+        if (interpretar == null || aplicar == null) { Pendiente("Clinical.InstruccionDeVoz.Interpretar/AplicarLiteral", "452", "055"); return; }
+        var voces = Vectores("voces");
+        var literales = Vectores("literales");
+        if (voces == null || literales == null) return;
+
+        foreach (var caso in voces.Value.EnumerateArray())
+        {
+            string dicho = caso.GetProperty("entrada").GetString() ?? "";
+            var r = interpretar.Invoke(null, new object?[] { dicho });
+            var web = caso.GetProperty("salida");
+            string suyo = r == null ? "null" : $"{Leer(r, "Modo")}:{Leer(r, "Texto")}";
+            string deLaWeb = web.ValueKind == JsonValueKind.Null ? "null"
+                : $"{Cad(web, "modo")}:{Cad(web, "texto") ?? Cad(web, "instruccion")}";
+            Debe(suyo == deLaWeb, $"«{dicho}»: Windows entendió «{suyo}» y la web «{deLaWeb}»");
+        }
+        foreach (var caso in literales.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            string suyo = (string)aplicar.Invoke(null, new object?[] { Cad(e, "actual"), Cad(e, "dictado") })!;
+            Debe(suyo == caso.GetProperty("salida").GetString(),
+                $"literal sobre «{Cad(e, "actual")}»: Windows «{suyo}», la web «{caso.GetProperty("salida").GetString()}»");
+        }
+    }
+
+    /// <summary>Un médico dentro, contra un backend de mentira que contesta lo que le digan.</summary>
+    private static (object Sesion, object Clinica) MedicoDentro(BackendDeMentira backend)
+    {
+        var tSesion = Capacidad("U.WindowsClient.Cuenta.SesionMiracle")!;
+        var sesion = Activator.CreateInstance(tSesion,
+            "https://supabase.test", "publishable", backend, (Func<DateTimeOffset>)(() => DateTimeOffset.UtcNow))!;
+        ((Task<bool>)tSesion.GetMethod("EntrarAsync")!
+            .Invoke(sesion, new object?[] { "medico@miracle.app", "clave", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        var clinica = Activator.CreateInstance(Clin("ClinicaClient")!, "https://graph.test", sesion, backend)!;
+        return (sesion, clinica);
+    }
+
+    private static readonly string PropuestaDeAjuste =
+        "{\"proposed_note_json\":{\"summary\":\"resumen\",\"sections\":[" +
+        "{\"key\":\"motivo_consulta\",\"label\":\"Motivo de consulta\",\"content\":\"cefalea de tres días\"}," +
+        "{\"key\":\"hallazgos\",\"label\":\"Hallazgos y datos objetivos\",\"content\":\"\"}," +
+        "{\"key\":\"plan\",\"label\":\"Plan y recomendaciones\",\"content\":\"control en 48 horas; niega fiebre\"}]," +
+        "\"warnings\":[],\"missing_required_sections\":[]}," +
+        "\"changed_sections\":[\"plan\"],\"explanation\":\"Anotado en el plan.\",\"requires_physician_review\":true}";
+
+    private static void LaVozAjustaSinGuardarSola()
+    {
+        var t = Clin("AjusteDeLaNota");
+        var porVoz = t?.GetMethod("PorVoz");
+        var ajustar = Clin("ClinicaClient")?.GetMethod("AjustarNotaAsync");
+        if (porVoz == null || ajustar == null) { Pendiente("Clinical.AjusteDeLaNota.PorVoz · ClinicaClient.AjustarNotaAsync", "453", "055"); return; }
+
+        // 1 — el literal se escribe aquí mismo.
+        var literal = porVoz.Invoke(null, new object?[] { "quiero que diga: control en ocho días", "plan", "Plan", "Paciente estable." })!;
+        Debe((string?)Leer(literal, "TextoLocal") == "Paciente estable. control en ocho días",
+            $"el literal se aplica en el sitio, como la web (dio «{Leer(literal, "TextoLocal")}»)");
+
+        // 2 — el dictado va al backend con su sección y como dictation.
+        var dictado = porVoz.Invoke(null, new object?[] { "agrega que el paciente niega fiebre", "plan", "Plan", "control" })!;
+        Debe(Leer(dictado, "TextoLocal") == null && (string?)Leer(dictado, "Tipo") == "dictation"
+             && (string?)Leer(dictado, "Seccion") == "plan" && (string?)Leer(dictado, "Instruccion") == "el paciente niega fiebre",
+            "un dictado va al modelo como «dictation», con la sección y SOLO el dato: así lo integra sin inventar");
+
+        // 3 — el ajuste va envuelto como lo envuelve la web.
+        var ajuste = porVoz.Invoke(null, new object?[] { "hazla más corta", "plan", "Plan", "control" })!;
+        Debe((string?)Leer(ajuste, "Tipo") == "rewrite"
+             && (string?)Leer(ajuste, "Instruccion") == "En la sección \"Plan\", aplica esta instrucción dictada por el médico: \"hazla más corta\". Modifica únicamente lo necesario para cumplirla y conserva el resto de la nota.",
+            $"un ajuste va como «rewrite» con la misma frase que manda la web (dio «{Leer(ajuste, "Instruccion")}»)");
+
+        // 4 — el dictado sobre el resumen (sin clave) cae a rewrite, como en la web.
+        var sobreResumen = porVoz.Invoke(null, new object?[] { "agrega que el paciente niega fiebre", "", "Resumen", "" })!;
+        Debe((string?)Leer(sobreResumen, "Tipo") == "rewrite" && Leer(sobreResumen, "Seccion") == null,
+            "sin sección (el resumen) el dictado viaja como instrucción: la web solo usa «dictation» con sección");
+
+        // 5 — la red: una llamada, al sitio correcto, con el cuerpo correcto, y NINGÚN PUT.
+        string cuerpo = "";
+        var backend = new BackendDeMentira(req =>
+        {
+            string url = req.RequestUri?.ToString() ?? "";
+            if (url.Contains("note-adjustment")) { cuerpo = req.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? ""; return (HttpStatusCode.OK, PropuestaDeAjuste); }
+            return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "x", 3600));
+        });
+        var (_, clinica) = MedicoDentro(backend);
+        backend.Peticiones.Clear();
+        ((Task)ajustar.Invoke(clinica, new object?[] { "enc-1", "el paciente niega fiebre", "plan", "dictation", CancellationToken.None })!)
+            .GetAwaiter().GetResult();
+        Debe(backend.Peticiones.Count == 1 && backend.Peticiones[0] == "POST /api/clinical/assistant/note-adjustment",
+            $"ajustar es UNA petición a note-adjustment (fueron: {string.Join(" · ", backend.Peticiones)})");
+        Debe(!backend.Peticiones.Any(x => x.StartsWith("PUT")), "y ajustar NO guarda: la propuesta la acepta el médico");
+        using (var doc = JsonDocument.Parse(cuerpo.Length > 0 ? cuerpo : "{}"))
+        {
+            var r = doc.RootElement;
+            Debe(Cad(r, "encounter_id") == "enc-1" && Cad(r, "instruction") == "el paciente niega fiebre"
+                 && Cad(r, "section_key") == "plan" && Cad(r, "instruction_kind") == "dictation",
+                $"el cuerpo es el de la web: encounter_id, instruction, section_key e instruction_kind (fue {cuerpo})");
+        }
+    }
+
+    private static void ElAjusteEscritoEsUnaPropuesta()
+    {
+        var t = Clin("AjusteDeLaNota");
+        var cuerpoDe = t?.GetMethod("Cuerpo");
+        var aplicar = t?.GetMethod("Aplicar");
+        if (cuerpoDe == null || aplicar == null) { Pendiente("Clinical.AjusteDeLaNota.Cuerpo/Aplicar", "454", "055"); return; }
+
+        string cuerpo = (string)cuerpoDe.Invoke(null, new object?[] { "enc-1", "más breve el plan", null, "rewrite" })!;
+        using (var doc = JsonDocument.Parse(cuerpo))
+        {
+            Debe(!doc.RootElement.TryGetProperty("section_key", out _),
+                "escrita arriba de la nota, la instrucción es para la nota entera: sin section_key");
+            Debe(Cad(doc.RootElement, "instruction_kind") == "rewrite", "y como «rewrite»");
+        }
+
+        var actual = NotaConUnaVacia();
+        using var resp = JsonDocument.Parse(PropuestaDeAjuste);
+        var propuesta = aplicar.Invoke(null, new object?[] { actual, resp.RootElement })!;
+        var nota = (U.WindowsClient.Clinical.NotaClinica)Leer(propuesta, "Nota")!;
+        Debe(nota.Secciones.First(s => s.Clave == "plan").Contenido == "control en 48 horas; niega fiebre",
+            "la sección que el backend cambió viene con su texto nuevo");
+        Debe(nota.Secciones.First(s => s.Clave == "motivo_consulta").Contenido == "cefalea de tres días",
+            "y las demás siguen como estaban");
+
+        using var nada = JsonDocument.Parse(PropuestaDeAjuste.Replace("[\"plan\"]", "[]").Replace("Anotado en el plan.", "No se puede inventar ese dato."));
+        var sinCambios = aplicar.Invoke(null, new object?[] { actual, nada.RootElement })!;
+        var intacta = (U.WindowsClient.Clinical.NotaClinica)Leer(sinCambios, "Nota")!;
+        Debe(intacta.Secciones.First(s => s.Clave == "plan").Contenido == "control en 48 horas",
+            "si el backend no cambió ninguna sección, la nota queda intacta aunque la propuesta traiga otro texto");
+        string explicacion = (string)Leer(sinCambios, "Explicacion")!;
+        Debe(explicacion.Contains("No se puede inventar ese dato.") && explicacion.Contains("quiero que diga"),
+            $"y se dice por qué, con la salida que da la web: díctalo empezando por «quiero que diga» (dijo «{explicacion}»)");
+    }
+
+    private static void LosAtajosFuncionanComoEnLaWeb()
+    {
+        var t = Clin("AtajosDeTexto");
+        var barra = t?.GetMethod("BarraEn");
+        var huecos = t?.GetMethod("Huecos");
+        var siguiente = t?.GetMethod("SiguienteHueco");
+        var primero = t?.GetMethod("PrimerHuecoEn");
+        var insertar = t?.GetMethod("Insertar");
+        if (barra == null || huecos == null || siguiente == null || primero == null || insertar == null)
+        { Pendiente("Clinical.AtajosDeTexto (BarraEn, Huecos, SiguienteHueco, PrimerHuecoEn, Insertar)", "455", "055"); return; }
+        var barras = Vectores("barras"); var vHuecos = Vectores("huecos"); var inserciones = Vectores("inserciones");
+        if (barras == null || vHuecos == null || inserciones == null) return;
+
+        foreach (var caso in barras.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            string valor = Cad(e, "valor")!; int caret = e.GetProperty("caret").GetInt32();
+            var r = barra.Invoke(null, new object?[] { valor, caret });
+            var w = caso.GetProperty("salida");
+            string suyo = r == null ? "null" : $"{Leer(r, "Consulta")}@{Leer(r, "Inicio")}";
+            string web = w.ValueKind == JsonValueKind.Null ? "null" : $"{Cad(w, "query")}@{w.GetProperty("start").GetInt32()}";
+            Debe(suyo == web, $"«/» en «{valor.Replace("\n", "⏎")}» con el cursor en {caret}: Windows {suyo}, la web {web}");
+        }
+
+        string H(object? h) => h == null ? "null" : $"{Leer(h, "Inicio")}-{Leer(h, "Fin")}";
+        string HW(JsonElement h) => h.ValueKind == JsonValueKind.Null ? "null" : $"{h.GetProperty("start").GetInt32()}-{h.GetProperty("end").GetInt32()}";
+        foreach (var caso in vHuecos.Value.EnumerateArray())
+        {
+            string texto = caso.GetProperty("entrada").GetString()!;
+            var w = caso.GetProperty("salida");
+            var todos = ((System.Collections.IEnumerable)huecos.Invoke(null, new object?[] { texto })!).Cast<object>().Select(H);
+            Debe(string.Join(",", todos) == string.Join(",", w.GetProperty("todos").EnumerateArray().Select(HW)),
+                $"los huecos de «{texto.Replace("\n", "⏎")}» no son los de la web");
+            Debe(H(siguiente.Invoke(null, new object?[] { texto, 10 })) == HW(w.GetProperty("siguienteDesde10")),
+                $"el siguiente hueco desde 10 en «{texto.Replace("\n", "⏎")}» no es el de la web");
+            Debe(H(primero.Invoke(null, new object?[] { texto, 0, 25 })) == HW(w.GetProperty("primeroEn0a25")),
+                $"el primer hueco entre 0 y 25 en «{texto.Replace("\n", "⏎")}» no es el de la web");
+        }
+
+        foreach (var caso in inserciones.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            var r = insertar.Invoke(null, new object?[] { Cad(e, "valor"), e.GetProperty("desde").GetInt32(), e.GetProperty("hasta").GetInt32(), Cad(e, "texto") })!;
+            var w = caso.GetProperty("salida");
+            Debe((string?)Leer(r, "Texto") == Cad(w, "next") && (int)Leer(r, "SelInicio")! == w.GetProperty("selStart").GetInt32()
+                 && (int)Leer(r, "SelFin")! == w.GetProperty("selEnd").GetInt32(),
+                $"insertar «{Cad(e, "texto")}» en «{Cad(e, "valor")}» [{e.GetProperty("desde")},{e.GetProperty("hasta")}) no da lo de la web");
+        }
+    }
+
+    private static void LosAtajosSeOrdenanComoEnLaWeb()
+    {
+        var t = Clin("AtajosDeTexto");
+        var filtrar = t?.GetMethod("Filtrar");
+        var normalizar = t?.GetMethod("Normalizar");
+        var tAtajo = Clin("Atajo");
+        if (filtrar == null || normalizar == null || tAtajo == null) { Pendiente("Clinical.AtajosDeTexto.Filtrar/Normalizar · Clinical.Atajo", "456", "055"); return; }
+        var catalogo = Vectores("catalogoDeAtajos"); var filtros = Vectores("filtros"); var normalizados = Vectores("normalizados");
+        if (catalogo == null || filtros == null || normalizados == null) return;
+
+        var lista = Array.CreateInstance(tAtajo, catalogo.Value.GetArrayLength());
+        int i = 0;
+        foreach (var a in catalogo.Value.EnumerateArray())
+            lista.SetValue(Activator.CreateInstance(tAtajo, Cad(a, "id"), Cad(a, "title"), Cad(a, "content"), Cad(a, "category"), Cad(a, "updatedAt")), i++);
+
+        foreach (var caso in filtros.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            var r = ((System.Collections.IEnumerable)filtrar.Invoke(null, new object?[] { lista, Cad(e, "query"), Cad(e, "sectionTitle") })!)
+                .Cast<object>().Select(x => (string)Leer(x, "Id")!);
+            var web = caso.GetProperty("salida").EnumerateArray().Select(x => x.GetString()!);
+            Debe(r.SequenceEqual(web),
+                $"buscar «{Cad(e, "query")}» en «{Cad(e, "sectionTitle")}»: Windows [{string.Join(",", r)}], la web [{string.Join(",", web)}]");
+        }
+        foreach (var caso in normalizados.Value.EnumerateArray())
+        {
+            string entrada = caso.GetProperty("entrada").GetString()!;
+            string suyo = (string)normalizar.Invoke(null, new object?[] { entrada })!;
+            Debe(suyo == caso.GetProperty("salida").GetString(), $"«{entrada}» se normaliza «{suyo}» y la web «{caso.GetProperty("salida").GetString()}»");
+        }
+    }
+
+    private static void LosAtajosSonLosDelMedico()
+    {
+        var leer = Clin("AtajosDelMedico")?.GetMethod("LeerAsync");
+        if (leer == null) { Pendiente("Clinical.AtajosDelMedico.LeerAsync", "457", "055"); return; }
+
+        bool falla = false;
+        var backend = new BackendDeMentira(req =>
+        {
+            string url = req.RequestUri?.ToString() ?? "";
+            if (url.Contains("/rest/v1/user_snippets"))
+                return falla ? (HttpStatusCode.InternalServerError, "{\"message\":\"caída\"}")
+                             : (HttpStatusCode.OK, "[{\"id\":\"s1\",\"title\":\"Control\",\"content\":\"Control en [días] días\",\"category\":\"Plan\",\"updated_at\":\"2026-09-01T00:00:00Z\"}]");
+            return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "x", 3600));
+        });
+        var (sesion, _) = MedicoDentro(backend);
+        backend.Peticiones.Clear();
+
+        var atajos = ((System.Collections.IEnumerable)Esperar(leer.Invoke(null, new object?[] { sesion, CancellationToken.None }))!)
+            .Cast<object>().ToList();
+        Debe(atajos.Count == 1 && (string?)Leer(atajos[0], "Titulo") == "Control" && (string?)Leer(atajos[0], "Categoria") == "Plan",
+            "los atajos del médico llegan con su título, su contenido y su sección");
+        string pedido = backend.Peticiones.FirstOrDefault() ?? "";
+        Debe(pedido.StartsWith("GET /rest/v1/user_snippets?select="), $"se leen de user_snippets, como la web (fue «{pedido}»)");
+        Debe(!pedido.Contains("user_id"), "sin mandar el id del médico: la RLS ya los filtra por su token");
+        Debe(backend.UltimasCabeceras.TryGetValue("apikey", out var clave) && clave == "publishable"
+             && backend.UltimasCabeceras.TryGetValue("Authorization", out var auth) && auth.StartsWith("Bearer "),
+            "con la clave pública y el token del médico");
+
+        falla = true;
+        var ninguno = ((System.Collections.IEnumerable)Esperar(leer.Invoke(null, new object?[] { sesion, CancellationToken.None }))!)
+            .Cast<object>().ToList();
+        Debe(ninguno.Count == 0, "y si no se pueden leer, la nota sigue sin atajos: un 500 no tumba nada");
+    }
+
+    private static object Plantilla(string id, string especialidad, bool porDefecto, string ambito, string estado)
+    {
+        var p = new U.WindowsClient.Clinical.PlantillaClinica(id, id, especialidad, porDefecto) { Ambito = ambito };
+        var prop = p.GetType().GetProperty("Estado");
+        prop?.SetValue(p, estado);
+        return p;
+    }
+
+    private static void LaPlantillaEsLaQueElegiriaLaWeb()
+    {
+        var t = Clin("PlantillaPredeterminada");
         var elegir = t?.GetMethod("Elegir");
-        var tPlantilla = Capacidad("U.WindowsClient.Clinical.PlantillaClinica");
-        if (t == null || elegir == null || tPlantilla == null)
+        var paraGrabar = t?.GetMethod("ParaGrabar");
+        var tPref = Clin("Predeterminada");
+        if (elegir == null || paraGrabar == null || tPref == null
+            || typeof(U.WindowsClient.Clinical.PlantillaClinica).GetProperty("Estado") == null)
+        { Pendiente("Clinical.PlantillaPredeterminada.Elegir/ParaGrabar · Predeterminada · PlantillaClinica.Estado", "458", "055"); return; }
+        var listas = Vectores("listasDePlantillas"); var casos = Vectores("plantillas");
+        if (listas == null || casos == null) return;
+
+        System.Collections.IList Catalogo(string nombre)
         {
-            Pendiente("Clinical.ReglaDeLaPlantilla.Elegir", "440", "053");
-            return;
+            var l = new List<U.WindowsClient.Clinical.PlantillaClinica>();
+            foreach (var x in listas.Value.GetProperty(nombre).EnumerateArray())
+                l.Add((U.WindowsClient.Clinical.PlantillaClinica)Plantilla(Cad(x, "id")!, Cad(x, "specialty")!,
+                    x.GetProperty("is_default").GetBoolean(), Cad(x, "scope")!, Cad(x, "status")!));
+            return l;
+        }
+        System.Collections.IList Prefs(JsonElement arr)
+        {
+            var l = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tPref))!;
+            foreach (var x in arr.EnumerateArray())
+                l.Add(Activator.CreateInstance(tPref, Cad(x, "specialtyCode"), Cad(x, "templateId"), Cad(x, "updatedAt")));
+            return l;
+        }
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            string suyo = (string)elegir.Invoke(null, new object?[] {
+                Catalogo(Cad(e, "lista")!), Prefs(e.GetProperty("preferences")), Cad(e, "lastUsedId"), Cad(e, "specialtyCode"), Cad(e, "mode") })!;
+            Debe(suyo == caso.GetProperty("salida").GetString(),
+                $"lista «{Cad(e, "lista")}», modo «{Cad(e, "mode")}», especialidad «{Cad(e, "specialtyCode")}»: Windows «{suyo}», la web «{caso.GetProperty("salida").GetString()}»");
         }
 
-        string? Id(object? p) => p == null ? null : (string?)tPlantilla.GetProperty("Id")!.GetValue(p);
-        string? Elige(System.Collections.IList catalogo, string? elegida, string? sugerida) =>
-            Id(elegir.Invoke(null, new object?[] { catalogo, elegida, sugerida }));
+        // Lo que añade Windows, que no puede quedarse sin grabar: lo elegido en esta consulta manda;
+        // «elegirla cada vez» pregunta; y sin nada que la web elija, se graba con la abierta.
+        var vacias = Prefs(JsonDocument.Parse("[]").RootElement);
+        var base_ = Catalogo("base");
+        var elegida = paraGrabar.Invoke(null, new object?[] { base_, vacias, null, "medicina_general", "fixed", "otra-general" })!;
+        Debe((Leer(elegida, "Plantilla") as U.WindowsClient.Clinical.PlantillaClinica)?.Id == "otra-general",
+            "lo que el médico tocó para ESTA consulta manda sobre todo");
+        var manual = paraGrabar.Invoke(null, new object?[] { base_, vacias, null, "medicina_general", "manual", null })!;
+        Debe(Leer(manual, "Plantilla") == null && (bool)Leer(manual, "HayQuePreguntar")!,
+            "con «elegirla cada vez» no se adivina: se pregunta");
+        var nada = paraGrabar.Invoke(null, new object?[] { new List<U.WindowsClient.Clinical.PlantillaClinica>(), vacias, null, null, "fixed", null })!;
+        Debe(Leer(nada, "Plantilla") == null && !(bool)Leer(nada, "HayQuePreguntar")!,
+            "y sin catálogo no se pregunta nada: quien llama graba con la abierta, que nunca deja sin arrancar");
+    }
 
-        var completo = CatalogoDePrueba(tPlantilla, conUrgencias: true, conAbierta: true);
+    private static void FijarLaPredeterminadaLaHaceMandar()
+    {
+        var cuerpoDe = Clin("PreferenciasDelMedico")?.GetMethod("CuerpoDelModo");
+        var fijar = Clin("PreferenciasDelMedico")?.GetMethod("FijarPredeterminadaAsync");
+        if (cuerpoDe == null || fijar == null) { Pendiente("Clinical.PreferenciasDelMedico.CuerpoDelModo/FijarPredeterminadaAsync", "459", "055"); return; }
 
-        Debe(Elige(completo, null, null) == "urg-1",
-            "sin elegir nada y sin sugerida, manda la de URGENCIAS: es la de la casa. Y no la "
-            + "primera del catálogo, que además está marcada por defecto para probar justo eso");
-        Debe(Elige(completo, null, "mia-9") == "mia-9",
-            "su sugerida gana a la de urgencias: es una decisión suya de otro día, y sigue siendo suya");
-        Debe(Elige(completo, "inst-1", "mia-9") == "inst-1",
-            "y lo que eligió para ESTA consulta gana a todo: es lo único explícito de la cadena");
+        string cuerpo = (string)cuerpoDe.Invoke(null, new object?[] { "fixed" })!;
+        Debe(cuerpo.Contains("\"template_start_mode\":\"fixed\"") && !cuerpo.Contains("user_id"),
+            $"el modo pasa a «predeterminada» en la misma columna que la web, sin mandar el id (fue {cuerpo})");
 
-        var sinUrgencias = CatalogoDePrueba(tPlantilla, conUrgencias: false, conAbierta: true);
-        Debe(Elige(sinUrgencias, null, null) == "mia-9",
-            "sin urgencias en el catálogo baja a la abierta, que es la que garantiza que grabar "
-            + "siempre pueda arrancar");
+        var backend = new BackendDeMentira(req =>
+            (req.RequestUri?.ToString() ?? "").Contains("/rest/v1/")
+                ? (HttpStatusCode.Created, "")
+                : (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "x", 3600)));
+        var (sesion, _) = MedicoDentro(backend);
+        backend.Peticiones.Clear();
+        ((Task)fijar.Invoke(null, new object?[] { sesion, "Medicina General", "t-1", CancellationToken.None })!).GetAwaiter().GetResult();
+        Debe(backend.Peticiones.Any(x => x.StartsWith("POST /rest/v1/user_template_preferences")),
+            "fijar escribe el pin en user_template_preferences, como la estrella de la web");
+        Debe(backend.Peticiones.Any(x => x.StartsWith("POST /rest/v1/user_preferences") && x.Contains("on_conflict=user_id")),
+            $"y deja el modo en «fixed» en user_preferences: si no, la estrella no mandaría (fue: {string.Join(" · ", backend.Peticiones)})");
+    }
 
-        // LA MITAD QUE DE VERDAD PROTEGE: sin ningún eslabón, se contesta NULL y quien llama crea
-        // la abierta. Caer en «la primera» sería elegir por el médico sin decírselo.
-        var soloAjena = CatalogoDePrueba(tPlantilla, conUrgencias: false, conAbierta: false);
-        Debe(Elige(soloAjena, null, null) == null,
-            "y sin ninguno de los cuatro NO se coge una cualquiera: se contesta que no hay, y el "
-            + "que llama crea la abierta (promesa 94)");
-
-        Debe(Elige(completo, null, "borrada-hace-un-mes") == "urg-1",
-            "una sugerida que ya no está en el catálogo no rompe la cadena ni deja al médico sin "
-            + "plantilla: se baja al siguiente eslabón");
-
-        // VACÍO NO ES AUSENTE (patrón nº9): un id en blanco llegado de la red o del disco no puede
-        // casar con nada.
-        Debe(Elige(completo, "", "") == "urg-1",
-            "un id vacío no cuenta como elección: es la forma nº9 de fallar, y aquí significaría "
-            + "grabar con la primera plantilla cuyo id viniera también vacío");
-
-        var esUrgencias = t.GetMethod("EsDeUrgencias");
-        if (esUrgencias != null)
+    private static void CopiarLaNotaEsComoEnLaWeb()
+    {
+        var plano = Clin("TextoDeLaNota")?.GetMethod("Plano");
+        if (plano == null) { Pendiente("Clinical.TextoDeLaNota.Plano", "460", "055"); return; }
+        var casos = Vectores("textosPlanos");
+        if (casos == null) return;
+        int n = 0;
+        foreach (var caso in casos.Value.EnumerateArray())
         {
-            bool Urg(string e) => (bool)esUrgencias.Invoke(null, new object?[] { e })!;
-            Debe(Urg("urgencias") && Urg("medicina_de_urgencias") && Urg("Urgencias"),
-                "urgencias se reconoce en sus variantes: el backend normaliza a snake_case y el "
-                + "catálogo trae varias formas. Comparar contra una sola es la forma nº16 de fallar");
-            Debe(!Urg("pediatria") && !Urg(""),
-                "y lo que no es urgencias no lo es: sin esto, la comparación diría que sí siempre");
+            n++;
+            string suyo = (string)plano.Invoke(null, new object?[] { caso.GetProperty("entrada") })!;
+            string web = caso.GetProperty("salida").GetString()!;
+            Debe(suyo == web, $"la nota {n} se copia distinto — Windows:\n«{suyo}»\nla web:\n«{web}»");
         }
+    }
+
+    private const string NotaConTodo =
+        "{\"summary\":\"resumen\",\"extra_que_windows_no_conoce\":{\"a\":1}," +
+        "\"sections\":[{\"key\":\"motivo\",\"label\":\"Motivo\",\"content\":\"cefalea\",\"confidence\":0.4,\"evidence\":[\"dijo cefalea\"]}," +
+        "{\"key\":\"plan\",\"label\":\"Plan\",\"content\":\"control\",\"confidence\":0.9}]," +
+        "\"discharge\":{\"plan\":{\"medications\":[{\"name\":\"Acetaminofén\",\"dose\":\"500 mg\",\"route\":\"VO\",\"frequency\":\"cada 8 h\",\"duration\":\"3 días\",\"instructions\":\"\"}]," +
+        "\"non_pharmacological\":[],\"follow_up\":[{\"text\":\"Control en 8 días\"}]},\"recommendations\":[{\"text\":\"Hidratación\"}],\"alarm_signs\":[{\"text\":\"Fiebre\"}]}," +
+        "\"warnings\":[\"w\"],\"missing_required_sections\":[]}";
+
+    private static void CorregirNoBorraNada()
+    {
+        var cuerpoDe = Clin("ClinicaClient")?.GetMethod("CuerpoDeNotaEditada");
+        var crudo = typeof(U.WindowsClient.Clinical.NotaClinica).GetProperty("Crudo");
+        if (cuerpoDe == null || crudo == null) { Pendiente("NotaClinica.Crudo (la nota tal como llegó)", "461", "055"); return; }
+
+        using var doc = JsonDocument.Parse(NotaConTodo);
+        var nota = U.WindowsClient.Clinical.NotaClinica.Leer(doc.RootElement);
+        foreach (var (nombre, corregida) in new[] { ("una sección", nota.ConSeccion("plan", "control en 48 horas")), ("el resumen", nota.ConResumen("resumen nuevo")) })
+        {
+            string cuerpo = (string)cuerpoDe.Invoke(null, new object?[] { corregida })!;
+            using var enviado = JsonDocument.Parse(cuerpo);
+            var nj = enviado.RootElement.GetProperty("note_json");
+            Debe(nj.TryGetProperty("discharge", out var d) && d.GetRawText() == doc.RootElement.GetProperty("discharge").GetRawText(),
+                $"al corregir {nombre}, el cierre (plan, medicamentos, recomendaciones, alarma) viaja idéntico: si no, se borra de la historia clínica");
+            Debe(nj.TryGetProperty("extra_que_windows_no_conoce", out _),
+                $"al corregir {nombre}, lo que Windows no entiende también viaja: no es suyo borrarlo");
+            var motivo = nj.GetProperty("sections").EnumerateArray().First(s => Cad(s, "key") == "motivo");
+            Debe(motivo.TryGetProperty("confidence", out var c) && c.GetDouble() == 0.4 && motivo.TryGetProperty("evidence", out _),
+                $"al corregir {nombre}, la confianza y la evidencia de cada sección siguen ahí");
+            var plan = nj.GetProperty("sections").EnumerateArray().First(s => Cad(s, "key") == "plan");
+            Debe(Cad(plan, "content") == (nombre == "una sección" ? "control en 48 horas" : "control"),
+                $"al corregir {nombre}, cambia SOLO lo corregido");
+            Debe(Cad(nj, "summary") == (nombre == "el resumen" ? "resumen nuevo" : "resumen"),
+                $"al corregir {nombre}, el resumen es el que tiene que ser");
+        }
+    }
+
+    private static void LaConsultaAbiertaEnseniaLoDelPortal()
+    {
+        var fusionar = Clin("NotaDelPortal")?.GetMethod("Fusionar");
+        if (fusionar == null) { Pendiente("Clinical.NotaDelPortal.Fusionar", "462", "055"); return; }
+
+        using var graph = JsonDocument.Parse(NotaConTodo);
+        var deGraph = U.WindowsClient.Clinical.NotaClinica.Leer(graph.RootElement);
+        using var fila = JsonDocument.Parse(
+            "{\"estado\":\"borrador\",\"resumen\":\"resumen corregido en la web\",\"note\":[" +
+            "{\"id\":\"motivo\",\"titulo\":\"Motivo\",\"kind\":\"texto\",\"texto\":\"cefalea\"}," +
+            "{\"id\":\"plan\",\"titulo\":\"Plan\",\"kind\":\"lista\",\"items\":[\"control en 48 horas\",\"hidratación\"]}]}");
+        var nota = (U.WindowsClient.Clinical.NotaClinica)fusionar.Invoke(null, new object?[] { deGraph, fila.RootElement })!;
+        Debe(nota.Secciones.First(s => s.Clave == "plan").Contenido == "control en 48 horas\nhidratación",
+            "la sección corregida en el detalle de la web manda sobre la de Graph (una lista se lee línea a línea)");
+        Debe(nota.Secciones.First(s => s.Clave == "motivo").Contenido == "cefalea", "lo que no se tocó sigue igual");
+        Debe(nota.Resumen == "resumen corregido en la web", "y el resumen también");
+        using var sinNota = JsonDocument.Parse("{\"estado\":\"borrador\",\"resumen\":\"\",\"note\":null}");
+        var igual = (U.WindowsClient.Clinical.NotaClinica)fusionar.Invoke(null, new object?[] { deGraph, sinNota.RootElement })!;
+        Debe(igual.Resumen == "resumen" && igual.Secciones.First(s => s.Clave == "plan").Contenido == "control",
+            "una fila sin nota no borra nada: vacío no es ausente (patrón nº9)");
+    }
+
+    private static void WindowsNoFirma()
+    {
+        var t = Clin("EspejoDeConsulta");
+        var fila = t?.GetMethod("Fila");
+        var correccion = t?.GetMethod("FilaDeCorreccion");
+        if (fila == null || correccion == null) { Pendiente("Clinical.EspejoDeConsulta.Fila/FilaDeCorreccion", "463", "055"); return; }
+        using var doc = JsonDocument.Parse(NotaConTodo);
+        var nota = U.WindowsClient.Clinical.NotaClinica.Leer(doc.RootElement);
+        var args = fila.GetParameters().Select(p => p.ParameterType == typeof(string) ? (object)"x"
+            : p.ParameterType == typeof(U.WindowsClient.Clinical.NotaClinica) ? nota
+            : p.ParameterType == typeof(DateTimeOffset) ? DateTimeOffset.UnixEpoch
+            : p.HasDefaultValue ? p.DefaultValue! : null!).ToArray();
+        foreach (var (nombre, json) in new[] { ("el alta", (string)fila.Invoke(null, args)!), ("la corrección", (string)correccion.Invoke(null, new object?[] { "enc-1", nota })!) })
+        {
+            using var f = JsonDocument.Parse(json);
+            string estado = Cad(f.RootElement, "estado") ?? "";
+            Debe(estado != "aprobada" && estado != "exportada", $"{nombre} no deja la consulta firmada ni exportada (estado «{estado}»)");
+            Debe(!f.RootElement.TryGetProperty("firma", out var firma) || firma.ValueKind == JsonValueKind.Null,
+                $"{nombre} no lleva firma: Windows no firma, la responsabilidad es la de la sesión del médico");
+        }
+    }
+
+    private static void ElPacienteSeBuscaYSeAsocia()
+    {
+        var ruta = Clin("PacientesDelMedico")?.GetMethod("RutaDeBusqueda");
+        var asociar = Clin("ClinicaClient")?.GetMethod("AsociarPacienteAsync");
+        if (ruta == null || asociar == null) { Pendiente("Clinical.PacientesDelMedico.RutaDeBusqueda · ClinicaClient.AsociarPacienteAsync", "464", "055"); return; }
+
+        string? r = (string?)ruta.Invoke(null, new object?[] { "Pérez, Juan (hijo) *\"" });
+        Debe(r != null && r.StartsWith("/rest/v1/patients?select="), $"se busca en patients (fue «{r}»)");
+        if (r != null)
+        {
+            string or = r[(r.IndexOf("or=(", StringComparison.Ordinal) + 4)..];
+            or = or[..or.IndexOf(')')];
+            Debe(or.Split(',').Length == 2 && or.Contains("nombre.ilike.") && or.Contains("documento.ilike."),
+                $"por nombre O documento, y lo escrito no añade condiciones: las comas y paréntesis del médico no llegan crudos a la consulta (fue «{or}»)");
+        }
+        Debe(ruta.Invoke(null, new object?[] { "  ,() " }) == null, "sin nada que buscar no se consulta la base");
+
+        string cuerpo = "";
+        var backend = new BackendDeMentira(req =>
+        {
+            string url = req.RequestUri?.ToString() ?? "";
+            if (url.Contains("/patient")) { cuerpo = req.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? ""; return (HttpStatusCode.OK, "{\"encounter\":{\"id\":\"enc-1\"}}"); }
+            return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "x", 3600));
+        });
+        var (_, clinica) = MedicoDentro(backend);
+        backend.Peticiones.Clear();
+        ((Task)asociar.Invoke(clinica, new object?[] { "enc-1", "pac-1", CancellationToken.None })!).GetAwaiter().GetResult();
+        Debe(backend.Peticiones.SequenceEqual(new[] { "PATCH /api/clinical/encounters/enc-1/patient" }),
+            $"asociar es un PATCH al encounter, como la web (fue: {string.Join(" · ", backend.Peticiones)})");
+        Debe(cuerpo.Replace(" ", "") == "{\"patient_id\":\"pac-1\"}", $"con el id del paciente (fue {cuerpo})");
+    }
+
+    private static void LaListaDiceDeQuienEs()
+    {
+        var t = Clin("EspejoDeConsulta");
+        var ruta = t?.GetField("RutaDeLaLista", BindingFlags.Public | BindingFlags.Static)?.GetValue(null) as string;
+        var vista = t?.GetMethod("Vista");
+        if (ruta == null || vista == null) { Pendiente("Clinical.EspejoDeConsulta.RutaDeLaLista/Vista", "465", "055"); return; }
+        Debe(ruta.Contains("paciente_nombre") && ruta.Contains("paciente_documento"),
+            $"la lista pide de quién es cada consulta (pide «{ruta}»)");
+        using var fila = JsonDocument.Parse("{\"id\":\"c1\",\"fecha\":\"2026-09-01T10:00:00Z\",\"motivo\":\"cefalea\",\"estado\":\"borrador\",\"resumen\":\"\",\"plantilla\":\"General\",\"paciente_nombre\":\"Ana Gómez\",\"paciente_documento\":\"123\"}");
+        var v = vista.Invoke(null, new object?[] { fila.RootElement })!;
+        Debe((string?)Leer(v, "Paciente") == "Ana Gómez" && (string?)Leer(v, "Documento") == "123",
+            "y la fila los lee: el médico busca a su paciente, no un motivo");
+        using var anidada = JsonDocument.Parse("{\"id\":\"c2\",\"estado\":\"borrador\",\"patients\":{\"nombre\":\"Luis Paz\"}}");
+        Debe((string?)Leer(vista.Invoke(null, new object?[] { anidada.RootElement }), "Paciente") == "Luis Paz",
+            "si la consulta trae el paciente asociado y no el nombre copiado, se lee de ahí");
     }
 
     private static void LaSugeridaSeGuardaPorEspecialidad()

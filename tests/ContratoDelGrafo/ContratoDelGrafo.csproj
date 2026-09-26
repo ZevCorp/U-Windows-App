@@ -31,4 +31,11 @@
     <!-- El collar: la promesa 146 juzga de dónde entra el audio para TODA la app. -->
     <Reference Include="Omi"><HintPath>$(UBin)\Omi.dll</HintPath></Reference>
   </ItemGroup>
+  <ItemGroup>
+    <!-- LOS VECTORES DE LA WEB (spec 055): lo que Miracle Notes web contesta, congelado por
+         bronce/generar-desde-la-web.mts. Embebidos y no leídos de disco: el contrato se corre
+         desde carpetas distintas (el CI, la de cada dev) y una ruta relativa que no se encuentra
+         convertiría 8 promesas en «no pude ejecutarla» (aprendizaje nº17). -->
+    <EmbeddedResource Include="bronce\miracle-notes-web.json" LogicalName="miracle-notes-web.json" />
+  </ItemGroup>
 </Project>

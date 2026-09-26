@@ -1,0 +1,3980 @@
+{
+ "generado": "2026-09-26",
+ "web": "joseph1356k/Pagina-web-clientes-final@74d9e24",
+ "revisiones": [
+  {
+   "nombre": "sin nota",
+   "entrada": {
+    "note": null,
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": ""
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "nota completa",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "obligatoria vacía",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "falta-motivo",
+      "severidad": "critico",
+      "titulo": "Falta Motivo de consulta",
+      "detalle": "«Consulta general» marca esta sección como obligatoria y quedó sin información. Complétala antes de cerrar la nota."
+     }
+    ],
+    "criticos": 1,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 70,
+    "principales": [
+     "falta-motivo"
+    ],
+    "plegados": [],
+    "etiqueta": "1 crítico"
+   }
+  },
+  {
+   "nombre": "obligatoria que ni vino",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "falta-enfermedad",
+      "severidad": "critico",
+      "titulo": "Falta Enfermedad actual",
+      "detalle": "«Consulta general» marca esta sección como obligatoria y quedó sin información. Complétala antes de cerrar la nota."
+     },
+     {
+      "key": "alergias-no-documentadas",
+      "severidad": "advertencia",
+      "titulo": "Se prescribió sin documentar alergias",
+      "detalle": "No aparece ninguna mención a alergias en la consulta. Déjalo escrito aunque sea para negarlas."
+     }
+    ],
+    "criticos": 1,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 58,
+    "principales": [
+     "falta-enfermedad",
+     "alergias-no-documentadas"
+    ],
+    "plegados": [],
+    "etiqueta": "1 crítico · 1 advertencia"
+   }
+  },
+  {
+   "nombre": "relleno cuenta como vacío y la negación no",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Sin información documentada.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "No refiere alergias",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "1 sección sin información",
+      "detalle": "«Consulta general» las incluye y quedaron vacías: Antecedentes. Si no aplican, déjalo escrito."
+     },
+     {
+      "key": "secciones-breves",
+      "severidad": "sugerencia",
+      "titulo": "1 sección muy breve",
+      "detalle": "Frente a lo que se habló, quedó muy poco en: Análisis. Amplía el detalle que respalde el diagnóstico."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 1,
+    "puntaje": 83,
+    "principales": [
+     "secciones-vacias",
+     "secciones-breves"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia · 1 sugerencia"
+   }
+  },
+  {
+   "nombre": "opcionales vacías y sin resumen",
+   "entrada": {
+    "note": {
+     "summary": "  ",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "N/A",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "N/A",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "sin-resumen",
+      "severidad": "advertencia",
+      "titulo": "Sin resumen clínico",
+      "detalle": "El resumen es lo primero que lee quien continúa el caso. Escríbelo o pídeselo al asistente."
+     },
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "2 secciones sin información",
+      "detalle": "«Consulta general» las incluye y quedaron vacías: Antecedentes, Examen físico. Si no aplican, déjalo escrito."
+     },
+     {
+      "key": "sin-signos-vitales",
+      "severidad": "sugerencia",
+      "titulo": "No quedaron signos vitales en la nota",
+      "detalle": "Si se tomaron, díctalos (TA, FC, FR, temperatura, saturación, peso o talla): también son los que alimentan el agente de escritorio."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 2,
+    "sugerencias": 1,
+    "puntaje": 71,
+    "principales": [
+     "sin-resumen",
+     "secciones-vacias",
+     "sin-signos-vitales"
+    ],
+    "plegados": [],
+    "etiqueta": "2 advertencias · 1 sugerencia"
+   }
+  },
+  {
+   "nombre": "muchas opcionales vacías",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "a",
+       "label": "Sección A",
+       "content": "pendiente"
+      },
+      {
+       "key": "b",
+       "label": "Sección B",
+       "content": "pendiente"
+      },
+      {
+       "key": "c",
+       "label": "Sección C",
+       "content": "pendiente"
+      },
+      {
+       "key": "d",
+       "label": "Sección D",
+       "content": "pendiente"
+      },
+      {
+       "key": "e",
+       "label": "Sección E",
+       "content": "pendiente"
+      },
+      {
+       "key": "f",
+       "label": "Sección F",
+       "content": "pendiente"
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "6 secciones sin información",
+      "detalle": "«Consulta general» las incluye y quedaron vacías: Sección A, Sección B, Sección C, Sección D y 2 más. Si no aplican, déjalo escrito."
+     },
+     {
+      "key": "sin-signos-vitales",
+      "severidad": "sugerencia",
+      "titulo": "No quedaron signos vitales en la nota",
+      "detalle": "Si se tomaron, díctalos (TA, FC, FR, temperatura, saturación, peso o talla): también son los que alimentan el agente de escritorio."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 1,
+    "puntaje": 83,
+    "principales": [
+     "secciones-vacias",
+     "sin-signos-vitales"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia · 1 sugerencia"
+   }
+  },
+  {
+   "nombre": "confianza baja",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.3
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "confianza-baja",
+      "severidad": "advertencia",
+      "titulo": "1 sección con baja confianza",
+      "detalle": "La IA no quedó segura de lo que entendió en: Examen físico. Contrástalas con la transcripción."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "confianza-baja"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "breve con consulta larga",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor atípico leve hoy",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "secciones-breves",
+      "severidad": "sugerencia",
+      "titulo": "1 sección muy breve",
+      "detalle": "Frente a lo que se habló, quedó muy poco en: Análisis. Amplía el detalle que respalde el diagnóstico."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 1,
+    "puntaje": 95,
+    "principales": [
+     "secciones-breves"
+    ],
+    "plegados": [],
+    "etiqueta": "1 sugerencia"
+   }
+  },
+  {
+   "nombre": "breve con consulta corta",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor atípico leve hoy",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "corta"
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "un dato suelto no es breve",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "26-2513",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "sin plan",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [],
+       "non_pharmacological": [],
+       "follow_up": []
+      },
+      "recommendations": [],
+      "alarm_signs": []
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "cierre-incompleto",
+      "severidad": "advertencia",
+      "titulo": "Falta el cierre de la consulta",
+      "detalle": "No quedó registrado: plan terapéutico, signos de alarma, recomendaciones al paciente. Es lo que el paciente se lleva y lo que respalda la atención si el cuadro empeora."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "cierre-incompleto"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "plan sin control ni alarma",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": []
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": []
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "cierre-incompleto",
+      "severidad": "sugerencia",
+      "titulo": "Falta el cierre de la consulta",
+      "detalle": "No quedó registrado: control o seguimiento, signos de alarma. Es lo que el paciente se lleva y lo que respalda la atención si el cuadro empeora."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 1,
+    "puntaje": 95,
+    "principales": [
+     "cierre-incompleto"
+    ],
+    "plegados": [],
+    "etiqueta": "1 sugerencia"
+   }
+  },
+  {
+   "nombre": "sin cierre del todo (nota vieja)",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": []
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "cierre-incompleto",
+      "severidad": "advertencia",
+      "titulo": "Falta el cierre de la consulta",
+      "detalle": "No quedó registrado: plan terapéutico, signos de alarma, recomendaciones al paciente. Es lo que el paciente se lleva y lo que respalda la atención si el cuadro empeora."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "cierre-incompleto"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "medicamento sin dosis y sin nombre",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Ibuprofeno",
+         "dose": "",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "",
+         "instructions": ""
+        },
+        {
+         "name": "",
+         "dose": "1 tableta",
+         "route": "",
+         "frequency": "",
+         "duration": "",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "medicacion-incompleta",
+      "severidad": "advertencia",
+      "titulo": "2 medicamentos sin dosis o frecuencia",
+      "detalle": "Completa dosis y frecuencia de: Ibuprofeno, medicamento sin nombre. Sin eso la indicación no se puede cumplir."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "medicacion-incompleta"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "sin signos vitales con consulta larga",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "Paciente alerta, orientado, sin dificultad respiratoria.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "sin-signos-vitales",
+      "severidad": "sugerencia",
+      "titulo": "No quedaron signos vitales en la nota",
+      "detalle": "Si se tomaron, díctalos (TA, FC, FR, temperatura, saturación, peso o talla): también son los que alimentan el agente de escritorio."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 1,
+    "puntaje": 95,
+    "principales": [
+     "sin-signos-vitales"
+    ],
+    "plegados": [],
+    "etiqueta": "1 sugerencia"
+   }
+  },
+  {
+   "nombre": "prescribe sin mencionar alergias",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea asociada.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "alergias-no-documentadas",
+      "severidad": "advertencia",
+      "titulo": "Se prescribió sin documentar alergias",
+      "detalle": "No aparece ninguna mención a alergias en la consulta. Déjalo escrito aunque sea para negarlas."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "alergias-no-documentadas"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "la alergia se dijo en la consulta",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea asociada.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días,  Es alérgico a la penicilina."
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "informe de patología",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "descripcion",
+       "label": "Descripción macroscópica",
+       "content": "Fragmento de tejido de 2 x 1 cm, pardo, blando."
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": []
+    },
+    "template": {
+     "template_id": "t-pato",
+     "name": "Informe de patología",
+     "specialty": "patologia",
+     "sections": [
+      {
+       "key": "descripcion",
+       "label": "Descripción macroscópica",
+       "required": true
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [],
+    "criticos": 0,
+    "advertencias": 0,
+    "sugerencias": 0,
+    "puntaje": 100,
+    "principales": [],
+    "plegados": [],
+    "etiqueta": "Todo en orden"
+   }
+  },
+  {
+   "nombre": "avisos del backend y obligatoria que dijo el backend",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [
+      "Revisa la dosis",
+      "  ",
+      "No se oyó la edad"
+     ],
+     "missing_required_sections": [
+      "antecedentes"
+     ],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "falta-antecedentes",
+      "severidad": "critico",
+      "titulo": "Falta Antecedentes",
+      "detalle": "«Consulta general» marca esta sección como obligatoria y quedó sin información. Complétala antes de cerrar la nota."
+     },
+     {
+      "key": "generacion-0",
+      "severidad": "sugerencia",
+      "titulo": "Aviso de la generación",
+      "detalle": "Revisa la dosis"
+     },
+     {
+      "key": "generacion-1",
+      "severidad": "sugerencia",
+      "titulo": "Aviso de la generación",
+      "detalle": "No se oyó la edad"
+     }
+    ],
+    "criticos": 1,
+    "advertencias": 0,
+    "sugerencias": 2,
+    "puntaje": 60,
+    "principales": [
+     "falta-antecedentes",
+     "generacion-0",
+     "generacion-1"
+    ],
+    "plegados": [],
+    "etiqueta": "1 crítico · 2 sugerencias"
+   }
+  },
+  {
+   "nombre": "sin nombre de plantilla",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "falta-motivo",
+      "severidad": "critico",
+      "titulo": "Falta Motivo de consulta",
+      "detalle": "La plantilla marca esta sección como obligatoria y quedó sin información. Complétala antes de cerrar la nota."
+     },
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "1 sección sin información",
+      "detalle": "La plantilla las incluye y quedaron vacías: Examen físico. Si no aplican, déjalo escrito."
+     },
+     {
+      "key": "sin-signos-vitales",
+      "severidad": "sugerencia",
+      "titulo": "No quedaron signos vitales en la nota",
+      "detalle": "Si se tomaron, díctalos (TA, FC, FR, temperatura, saturación, peso o talla): también son los que alimentan el agente de escritorio."
+     }
+    ],
+    "criticos": 1,
+    "advertencias": 1,
+    "sugerencias": 1,
+    "puntaje": 53,
+    "principales": [
+     "falta-motivo",
+     "secciones-vacias",
+     "sin-signos-vitales"
+    ],
+    "plegados": [],
+    "etiqueta": "1 crítico · 1 advertencia · 1 sugerencia"
+   }
+  },
+  {
+   "nombre": "sin plantilla",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": null,
+    "transcript": ""
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "1 sección sin información",
+      "detalle": "La plantilla las incluye y quedaron vacías: Examen físico. Si no aplican, déjalo escrito."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "secciones-vacias"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  },
+  {
+   "nombre": "sección sin etiqueta usa su clave",
+   "entrada": {
+    "note": {
+     "summary": "Paciente con dolor torácico atípico, estable.",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "content": "Dolor en el pecho desde hace tres días",
+       "confidence": 0.9
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+       "confidence": 0.85
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "content": "Hipertensión arterial en tratamiento con losartán.",
+       "confidence": 0.8
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+       "confidence": 0.9
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "content": "Dolor torácico atípico de bajo riesgo.",
+       "confidence": 0.75
+      },
+      {
+       "key": "notas_extra",
+       "label": "",
+       "content": ""
+      }
+     ],
+     "warnings": [],
+     "missing_required_sections": [],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "dose": "500 mg",
+         "route": "VO",
+         "frequency": "cada 8 horas",
+         "duration": "3 días",
+         "instructions": ""
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Dolor que no cede"
+       }
+      ]
+     }
+    },
+    "template": {
+     "template_id": "t-general",
+     "name": "Consulta general",
+     "specialty": "medicina_general",
+     "sections": [
+      {
+       "key": "motivo",
+       "label": "Motivo de consulta",
+       "required": true
+      },
+      {
+       "key": "enfermedad",
+       "label": "Enfermedad actual",
+       "required": true
+      },
+      {
+       "key": "antecedentes",
+       "label": "Antecedentes",
+       "required": false
+      },
+      {
+       "key": "examen",
+       "label": "Examen físico",
+       "required": false
+      },
+      {
+       "key": "analisis",
+       "label": "Análisis",
+       "required": false
+      }
+     ]
+    },
+    "transcript": "El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, El paciente refiere dolor torácico opresivo desde hace tres días, "
+   },
+   "salida": {
+    "hallazgos": [
+     {
+      "key": "secciones-vacias",
+      "severidad": "advertencia",
+      "titulo": "1 sección sin información",
+      "detalle": "«Consulta general» las incluye y quedaron vacías: notas_extra. Si no aplican, déjalo escrito."
+     }
+    ],
+    "criticos": 0,
+    "advertencias": 1,
+    "sugerencias": 0,
+    "puntaje": 88,
+    "principales": [
+     "secciones-vacias"
+    ],
+    "plegados": [],
+    "etiqueta": "1 advertencia"
+   }
+  }
+ ],
+ "vitales": [
+  {
+   "entrada": "Talla 1.70 m, peso 68 kg.",
+   "salida": {
+    "vital.talla": {
+     "value": "1.70",
+     "evidence": "Talla 1.70 m, peso 68 kg."
+    },
+    "vital.peso": {
+     "value": "68.0",
+     "evidence": "Talla 1.70 m, peso 68 kg."
+    }
+   }
+  },
+  {
+   "entrada": "Talla de 170 cm. Peso: 70,5 kg.",
+   "salida": {
+    "vital.talla": {
+     "value": "1.70",
+     "evidence": "Talla de 170 cm. Peso: 70,5"
+    },
+    "vital.peso": {
+     "value": "70.5",
+     "evidence": "Talla de 170 cm. Peso: 70,5 kg."
+    }
+   }
+  },
+  {
+   "entrada": "Estatura 1,65. Peso 57. Temperatura 36",
+   "salida": {
+    "vital.talla": {
+     "value": "1.65",
+     "evidence": "Estatura 1,65. Peso 57. Tempe"
+    },
+    "vital.peso": {
+     "value": "57.0",
+     "evidence": "Estatura 1,65. Peso 57. Temperatura 36"
+    },
+    "vital.temperatura": {
+     "value": "36.0",
+     "evidence": "Estatura 1,65. Peso 57. Temperatura 36"
+    }
+   }
+  },
+  {
+   "entrada": "FC: 88 x min, FR 18, temp. 37,5",
+   "salida": {
+    "vital.frecuencia.cardiaca": {
+     "value": "88",
+     "evidence": "FC: 88 x min, FR 18, t"
+    },
+    "vital.frecuencia.respiratoria": {
+     "value": "18",
+     "evidence": "FC: 88 x min, FR 18, temp. 37,5"
+    }
+   }
+  },
+  {
+   "entrada": "Frecuencia cardíaca 90 lpm y frecuencia respiratoria 20.",
+   "salida": {
+    "vital.frecuencia.cardiaca": {
+     "value": "90",
+     "evidence": "Frecuencia cardíaca 90 lpm y frecuenci"
+    },
+    "vital.frecuencia.respiratoria": {
+     "value": "20",
+     "evidence": "encia cardíaca 90 lpm y frecuencia respiratoria 20."
+    }
+   }
+  },
+  {
+   "entrada": "Pulso 72. SpO2 95%",
+   "salida": {
+    "vital.frecuencia.cardiaca": {
+     "value": "72",
+     "evidence": "Pulso 72. SpO2 95%"
+    },
+    "vital.saturacion": {
+     "value": "95",
+     "evidence": "Pulso 72. SpO2 95%"
+    }
+   }
+  },
+  {
+   "entrada": "Saturación de oxígeno 97 por ciento",
+   "salida": {
+    "vital.saturacion": {
+     "value": "97",
+     "evidence": "Saturación de oxígeno 97 por ciento"
+    }
+   }
+  },
+  {
+   "entrada": "Temperatura 896",
+   "salida": {}
+  },
+  {
+   "entrada": "TA 120/80 mmHg",
+   "salida": {
+    "vital.presion.sistolica": {
+     "value": "120",
+     "evidence": "TA 120/80 mmHg"
+    },
+    "vital.presion.diastolica": {
+     "value": "80",
+     "evidence": "TA 120/80 mmHg"
+    }
+   }
+  },
+  {
+   "entrada": "Tensión arterial 130 sobre 85",
+   "salida": {
+    "vital.presion.sistolica": {
+     "value": "130",
+     "evidence": "Tensión arterial 130 sobre 85"
+    },
+    "vital.presion.diastolica": {
+     "value": "85",
+     "evidence": "Tensión arterial 130 sobre 85"
+    }
+   }
+  },
+  {
+   "entrada": "presión arterial 80/120",
+   "salida": {}
+  },
+  {
+   "entrada": "Paciente de 68 años, fc 300",
+   "salida": {
+    "paciente.edad": {
+     "value": "68",
+     "evidence": "Paciente de 68 años, fc 300"
+    }
+   }
+  },
+  {
+   "entrada": "sat O2 91",
+   "salida": {
+    "vital.saturacion": {
+     "value": "91",
+     "evidence": "sat O2 91"
+    }
+   }
+  },
+  {
+   "entrada": "Peso 57. Temperatura 36.",
+   "salida": {
+    "vital.peso": {
+     "value": "57.0",
+     "evidence": "Peso 57. Temperatura 36"
+    },
+    "vital.temperatura": {
+     "value": "36.0",
+     "evidence": "Peso 57. Temperatura 36."
+    }
+   }
+  },
+  {
+   "entrada": "Sin datos de signos vitales.",
+   "salida": {}
+  },
+  {
+   "entrada": "",
+   "salida": {}
+  },
+  {
+   "entrada": "(secciones) motivo por su nombre",
+   "salida": {
+    "consulta.motivo": {
+     "value": "Dolor de cabeza intenso",
+     "evidence": "Dolor de cabeza intenso"
+    },
+    "vital.presion.sistolica": {
+     "value": "140",
+     "evidence": "Dolor de cabeza intenso TA 140/90"
+    },
+    "vital.presion.diastolica": {
+     "value": "90",
+     "evidence": "Dolor de cabeza intenso TA 140/90"
+    }
+   }
+  }
+ ],
+ "voces": [
+  {
+   "entrada": "quiero que diga: control en ocho días",
+   "salida": {
+    "modo": "literal",
+    "texto": "control en ocho días"
+   }
+  },
+  {
+   "entrada": "Quiero que diga así, paciente estable",
+   "salida": {
+    "modo": "literal",
+    "texto": "paciente estable"
+   }
+  },
+  {
+   "entrada": "que quede lo siguiente: reposo por tres días",
+   "salida": {
+    "modo": "literal",
+    "texto": "reposo por tres días"
+   }
+  },
+  {
+   "entrada": "textualmente paciente estable sin cambios",
+   "salida": {
+    "modo": "literal",
+    "texto": "paciente estable sin cambios"
+   }
+  },
+  {
+   "entrada": "escribe literal: dieta blanda",
+   "salida": {
+    "modo": "literal",
+    "texto": "dieta blanda"
+   }
+  },
+  {
+   "entrada": "Tal cual, sin fiebre",
+   "salida": {
+    "modo": "literal",
+    "texto": "sin fiebre"
+   }
+  },
+  {
+   "entrada": "escribe esto: control en un mes",
+   "salida": {
+    "modo": "literal",
+    "texto": "control en un mes"
+   }
+  },
+  {
+   "entrada": "Anota lo siguiente, reposo relativo",
+   "salida": {
+    "modo": "literal",
+    "texto": "reposo relativo"
+   }
+  },
+  {
+   "entrada": "agrega que el paciente niega fiebre",
+   "salida": {
+    "modo": "dictado",
+    "texto": "el paciente niega fiebre"
+   }
+  },
+  {
+   "entrada": "Añade que trae exámenes de laboratorio",
+   "salida": {
+    "modo": "dictado",
+    "texto": "trae exámenes de laboratorio"
+   }
+  },
+  {
+   "entrada": "agrega que diga: control en ocho días",
+   "salida": {
+    "modo": "literal",
+    "texto": "control en ocho días"
+   }
+  },
+  {
+   "entrada": "incluye que la madre refiere tos",
+   "salida": {
+    "modo": "dictado",
+    "texto": "la madre refiere tos"
+   }
+  },
+  {
+   "entrada": "hazla más corta",
+   "salida": {
+    "modo": "ajuste",
+    "instruccion": "hazla más corta"
+   }
+  },
+  {
+   "entrada": "ordena esto por fechas",
+   "salida": {
+    "modo": "ajuste",
+    "instruccion": "ordena esto por fechas"
+   }
+  },
+  {
+   "entrada": "quiero que diga",
+   "salida": {
+    "modo": "ajuste",
+    "instruccion": "quiero que diga"
+   }
+  },
+  {
+   "entrada": "",
+   "salida": null
+  },
+  {
+   "entrada": "   ",
+   "salida": null
+  },
+  {
+   "entrada": "pon que diga lo siguiente: hidratación abundante",
+   "salida": {
+    "modo": "literal",
+    "texto": "hidratación abundante"
+   }
+  }
+ ],
+ "literales": [
+  {
+   "entrada": {
+    "actual": "",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "No referido en la consulta.",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "No se menciona.",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "Sin información documentada",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "Paciente estable.",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Paciente estable. Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "Paciente estable",
+    "dictado": "Control en ocho días"
+   },
+   "salida": "Paciente estable. Control en ocho días"
+  },
+  {
+   "entrada": {
+    "actual": "Paciente estable:",
+    "dictado": "Control"
+   },
+   "salida": "Paciente estable: Control"
+  },
+  {
+   "entrada": {
+    "actual": "Paciente estable   ",
+    "dictado": "Control"
+   },
+   "salida": "Paciente estable. Control"
+  },
+  {
+   "entrada": {
+    "actual": "Paciente estable",
+    "dictado": "   "
+   },
+   "salida": "Paciente estable"
+  },
+  {
+   "entrada": {
+    "actual": "Pendiente de resultados",
+    "dictado": "Control"
+   },
+   "salida": "Control"
+  }
+ ],
+ "barras": [
+  {
+   "entrada": {
+    "valor": "/",
+    "caret": 1
+   },
+   "salida": {
+    "query": "",
+    "start": 0
+   }
+  },
+  {
+   "entrada": {
+    "valor": "/pla",
+    "caret": 4
+   },
+   "salida": {
+    "query": "pla",
+    "start": 0
+   }
+  },
+  {
+   "entrada": {
+    "valor": "hola /pla",
+    "caret": 9
+   },
+   "salida": {
+    "query": "pla",
+    "start": 5
+   }
+  },
+  {
+   "entrada": {
+    "valor": "hola /pla",
+    "caret": 7
+   },
+   "salida": {
+    "query": "p",
+    "start": 5
+   }
+  },
+  {
+   "entrada": {
+    "valor": "120/80",
+    "caret": 6
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "s/p",
+    "caret": 3
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "a /b c",
+    "caret": 6
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "a /b c",
+    "caret": 4
+   },
+   "salida": {
+    "query": "b",
+    "start": 2
+   }
+  },
+  {
+   "entrada": {
+    "valor": "línea\n/dx",
+    "caret": 9
+   },
+   "salida": {
+    "query": "dx",
+    "start": 6
+   }
+  },
+  {
+   "entrada": {
+    "valor": "/",
+    "caret": 0
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "x",
+    "caret": 5
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "caret": 41
+   },
+   "salida": {
+    "query": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "start": 0
+   }
+  },
+  {
+   "entrada": {
+    "valor": "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "caret": 42
+   },
+   "salida": null
+  },
+  {
+   "entrada": {
+    "valor": "uno  /dos",
+    "caret": 9
+   },
+   "salida": {
+    "query": "dos",
+    "start": 5
+   }
+  }
+ ],
+ "huecos": [
+  {
+   "entrada": "Amoxicilina [dosis] cada [frecuencia] por ___ días",
+   "salida": {
+    "todos": [
+     {
+      "start": 12,
+      "end": 19
+     },
+     {
+      "start": 25,
+      "end": 37
+     },
+     {
+      "start": 42,
+      "end": 45
+     }
+    ],
+    "siguienteDesde10": {
+     "start": 12,
+     "end": 19
+    },
+    "primeroEn0a25": {
+     "start": 12,
+     "end": 19
+    }
+   }
+  },
+  {
+   "entrada": "Sin huecos aquí.",
+   "salida": {
+    "todos": [],
+    "siguienteDesde10": null,
+    "primeroEn0a25": null
+   }
+  },
+  {
+   "entrada": "__ dos no bastan, ____ cuatro sí",
+   "salida": {
+    "todos": [
+     {
+      "start": 18,
+      "end": 22
+     }
+    ],
+    "siguienteDesde10": {
+     "start": 18,
+     "end": 22
+    },
+    "primeroEn0a25": {
+     "start": 18,
+     "end": 22
+    }
+   }
+  },
+  {
+   "entrada": "[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx] demasiado largo, [ok]",
+   "salida": {
+    "todos": [
+     {
+      "start": 61,
+      "end": 65
+     }
+    ],
+    "siguienteDesde10": {
+     "start": 61,
+     "end": 65
+    },
+    "primeroEn0a25": null
+   }
+  },
+  {
+   "entrada": "[a\nb] no cruza líneas",
+   "salida": {
+    "todos": [],
+    "siguienteDesde10": null,
+    "primeroEn0a25": null
+   }
+  }
+ ],
+ "inserciones": [
+  {
+   "entrada": {
+    "valor": "",
+    "desde": 0,
+    "hasta": 0,
+    "texto": "Control en 8 días"
+   },
+   "salida": {
+    "next": "Control en 8 días",
+    "selStart": 0,
+    "selEnd": 17
+   }
+  },
+  {
+   "entrada": {
+    "valor": "Paciente estable",
+    "desde": 16,
+    "hasta": 16,
+    "texto": "Control"
+   },
+   "salida": {
+    "next": "Paciente estable\nControl",
+    "selStart": 17,
+    "selEnd": 24
+   }
+  },
+  {
+   "entrada": {
+    "valor": "Paciente estable ",
+    "desde": 17,
+    "hasta": 17,
+    "texto": "Control"
+   },
+   "salida": {
+    "next": "Paciente estable Control",
+    "selStart": 17,
+    "selEnd": 24
+   }
+  },
+  {
+   "entrada": {
+    "valor": "Paciente estable\n",
+    "desde": 17,
+    "hasta": 17,
+    "texto": "Control"
+   },
+   "salida": {
+    "next": "Paciente estable\nControl",
+    "selStart": 17,
+    "selEnd": 24
+   }
+  },
+  {
+   "entrada": {
+    "valor": "Paciente /con",
+    "desde": 9,
+    "hasta": 13,
+    "texto": "Control en ___ días"
+   },
+   "salida": {
+    "next": "Paciente Control en ___ días",
+    "selStart": 9,
+    "selEnd": 28
+   }
+  },
+  {
+   "entrada": {
+    "valor": "abc",
+    "desde": 10,
+    "hasta": 2,
+    "texto": "X"
+   },
+   "salida": {
+    "next": "abc\nX",
+    "selStart": 4,
+    "selEnd": 5
+   }
+  },
+  {
+   "entrada": {
+    "valor": "abc",
+    "desde": -3,
+    "hasta": 1,
+    "texto": "X"
+   },
+   "salida": {
+    "next": "Xbc",
+    "selStart": 0,
+    "selEnd": 1
+   }
+  }
+ ],
+ "catalogoDeAtajos": [
+  {
+   "id": "1",
+   "title": "Control en 8 días",
+   "content": "Control en 8 días con resultados",
+   "category": "Plan",
+   "updatedAt": "2026-09-01T10:00:00Z"
+  },
+  {
+   "id": "2",
+   "title": "Examen físico normal",
+   "content": "Paciente alerta, orientado",
+   "category": "Examen físico",
+   "updatedAt": "2026-09-02T10:00:00Z"
+  },
+  {
+   "id": "3",
+   "title": "Plan de hidratación",
+   "content": "Suero oral a libre demanda",
+   "category": "Plan y dosis por peso",
+   "updatedAt": "2026-09-03T10:00:00Z"
+  },
+  {
+   "id": "4",
+   "title": "Dieta blanda",
+   "content": "Dieta blanda por 3 días, control",
+   "category": "Recomendaciones",
+   "updatedAt": "2026-09-03T10:00:00Z"
+  },
+  {
+   "id": "5",
+   "title": "Ñandú prueba",
+   "content": "texto",
+   "category": "",
+   "updatedAt": "2026-09-01T10:00:00Z"
+  },
+  {
+   "id": "6",
+   "title": "Análisis de riesgo",
+   "content": "Riesgo cardiovascular bajo",
+   "category": "Análisis e impresión diagnóstica",
+   "updatedAt": "2026-09-04T10:00:00Z"
+  },
+  {
+   "id": "7",
+   "title": "Pediatría control niño sano",
+   "content": "Crecimiento adecuado",
+   "category": "Plan",
+   "updatedAt": "2026-09-04T10:00:00Z"
+  }
+ ],
+ "filtros": [
+  {
+   "entrada": {
+    "query": "",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "6",
+    "7",
+    "4",
+    "3",
+    "2",
+    "1",
+    "5"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "",
+    "sectionTitle": "Plan y educación al cuidador"
+   },
+   "salida": [
+    "7",
+    "3",
+    "1",
+    "6",
+    "4",
+    "2",
+    "5"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "control",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "1",
+    "7",
+    "4"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "Control",
+    "sectionTitle": "Recomendaciones"
+   },
+   "salida": [
+    "1",
+    "7",
+    "4"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "hidrat",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "3"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "examen",
+    "sectionTitle": "Examen físico"
+   },
+   "salida": [
+    "2"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "pediatria",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "7"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "pedriatria",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "7"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "orientado",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "2"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "diagnostica",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "6"
+   ]
+  },
+  {
+   "entrada": {
+    "query": "nada que ver",
+    "sectionTitle": ""
+   },
+   "salida": []
+  },
+  {
+   "entrada": {
+    "query": "ñandu",
+    "sectionTitle": ""
+   },
+   "salida": [
+    "5"
+   ]
+  }
+ ],
+ "normalizados": [
+  {
+   "entrada": "Pediatría",
+   "salida": "pediatria"
+  },
+  {
+   "entrada": "  ÑANDÚ  ",
+   "salida": "nandu"
+  },
+  {
+   "entrada": "Análisis e Impresión",
+   "salida": "analisis e impresion"
+  },
+  {
+   "entrada": "ç à ü",
+   "salida": "c a u"
+  }
+ ],
+ "listasDePlantillas": {
+  "base": [
+   {
+    "id": "default-general",
+    "name": "P",
+    "specialty": "medicina_general",
+    "scope": "institutional",
+    "is_default": true,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   },
+   {
+    "id": "otra-general",
+    "name": "P",
+    "specialty": "medicina_general",
+    "scope": "institutional",
+    "is_default": false,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   },
+   {
+    "id": "personal-1",
+    "name": "P",
+    "specialty": "medicina_general",
+    "scope": "personal",
+    "is_default": false,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   }
+  ],
+  "especialidades": [
+   {
+    "id": "urg-default",
+    "name": "P",
+    "specialty": "medicina_de_urgencias",
+    "scope": "institutional",
+    "is_default": true,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   },
+   {
+    "id": "gen-default",
+    "name": "P",
+    "specialty": "medicina_general",
+    "scope": "institutional",
+    "is_default": true,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   },
+   {
+    "id": "archivada",
+    "name": "P",
+    "specialty": "medicina_general",
+    "scope": "institutional",
+    "is_default": false,
+    "status": "archived",
+    "note_mode": "auto",
+    "sections": []
+   },
+   {
+    "id": "cardio",
+    "name": "P",
+    "specialty": "Cardiología",
+    "scope": "institutional",
+    "is_default": false,
+    "status": "active",
+    "note_mode": "auto",
+    "sections": []
+   }
+  ]
+ },
+ "plantillas": [
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "otra-general",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": "personal-1",
+    "specialtyCode": null,
+    "mode": "fixed"
+   },
+   "salida": "otra-general"
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "otra-general",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": "personal-1",
+    "specialtyCode": null,
+    "mode": "last"
+   },
+   "salida": "personal-1"
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "otra-general",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": "personal-1",
+    "specialtyCode": null,
+    "mode": "manual"
+   },
+   "salida": ""
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "otra-general",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": null,
+    "specialtyCode": "medicina_general",
+    "mode": "last"
+   },
+   "salida": "default-general"
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [],
+    "lastUsedId": null,
+    "specialtyCode": null,
+    "mode": "fixed"
+   },
+   "salida": "default-general"
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "borrada",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": null,
+    "specialtyCode": null,
+    "mode": "fixed"
+   },
+   "salida": "default-general"
+  },
+  {
+   "entrada": {
+    "lista": "base",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "otra-general",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     },
+     {
+      "specialtyCode": "cardiologia",
+      "templateId": "personal-1",
+      "updatedAt": "2026-09-05T00:00:00Z"
+     }
+    ],
+    "lastUsedId": null,
+    "specialtyCode": null,
+    "mode": "fixed"
+   },
+   "salida": "personal-1"
+  },
+  {
+   "entrada": {
+    "lista": "especialidades",
+    "preferences": [],
+    "lastUsedId": null,
+    "specialtyCode": "Medicina de Urgencias",
+    "mode": "fixed"
+   },
+   "salida": "urg-default"
+  },
+  {
+   "entrada": {
+    "lista": "especialidades",
+    "preferences": [],
+    "lastUsedId": null,
+    "specialtyCode": "cardiologia",
+    "mode": "fixed"
+   },
+   "salida": "cardio"
+  },
+  {
+   "entrada": {
+    "lista": "especialidades",
+    "preferences": [
+     {
+      "specialtyCode": "medicina_general",
+      "templateId": "archivada",
+      "updatedAt": "2026-09-01T00:00:00Z"
+     }
+    ],
+    "lastUsedId": "archivada",
+    "specialtyCode": "medicina_general",
+    "mode": "fixed"
+   },
+   "salida": "gen-default"
+  },
+  {
+   "entrada": {
+    "lista": "especialidades",
+    "preferences": [],
+    "lastUsedId": null,
+    "specialtyCode": "pediatria",
+    "mode": "fixed"
+   },
+   "salida": "urg-default"
+  },
+  {
+   "entrada": {
+    "lista": "especialidades",
+    "preferences": [],
+    "lastUsedId": null,
+    "specialtyCode": null,
+    "mode": "fixed"
+   },
+   "salida": "urg-default"
+  }
+ ],
+ "textosPlanos": [
+  {
+   "entrada": {
+    "summary": "Paciente con dolor torácico atípico, estable.",
+    "sections": [
+     {
+      "key": "motivo",
+      "label": "Motivo de consulta",
+      "content": "Dolor en el pecho desde hace tres días",
+      "confidence": 0.9
+     },
+     {
+      "key": "enfermedad",
+      "label": "Enfermedad actual",
+      "content": "Dolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.",
+      "confidence": 0.85
+     },
+     {
+      "key": "antecedentes",
+      "label": "Antecedentes",
+      "content": "Hipertensión arterial en tratamiento con losartán.",
+      "confidence": 0.8
+     },
+     {
+      "key": "examen",
+      "label": "Examen físico",
+      "content": "TA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.",
+      "confidence": 0.9
+     },
+     {
+      "key": "analisis",
+      "label": "Análisis",
+      "content": "Dolor torácico atípico de bajo riesgo.",
+      "confidence": 0.75
+     }
+    ],
+    "warnings": [],
+    "missing_required_sections": [],
+    "discharge": {
+     "plan": {
+      "medications": [
+       {
+        "name": "Acetaminofén",
+        "dose": "500 mg",
+        "route": "VO",
+        "frequency": "cada 8 horas",
+        "duration": "3 días",
+        "instructions": ""
+       }
+      ],
+      "non_pharmacological": [
+       {
+        "text": "Reposo relativo"
+       }
+      ],
+      "follow_up": [
+       {
+        "text": "Control en 8 días"
+       }
+      ]
+     },
+     "recommendations": [
+      {
+       "text": "Hidratación abundante"
+      }
+     ],
+     "alarm_signs": [
+      {
+       "text": "Dolor que no cede"
+      }
+     ]
+    }
+   },
+   "salida": "Resumen\nPaciente con dolor torácico atípico, estable.\n\nMotivo de consulta\nDolor en el pecho desde hace tres días\n\nEnfermedad actual\nDolor opresivo, no irradiado, sin disnea. Niega alergias conocidas.\n\nAntecedentes\nHipertensión arterial en tratamiento con losartán.\n\nExamen físico\nTA 130/85, FC 78, FR 16, temperatura 36,8, saturación 97%.\n\nAnálisis\nDolor torácico atípico de bajo riesgo.\n\nPlan terapéutico\nAcetaminofén · 500 mg · VO · cada 8 horas · 3 días\nReposo relativo\nControl en 8 días\n\nRecomendaciones\nHidratación abundante\n\nSignos de alarma\nDolor que no cede"
+  },
+  {
+   "entrada": {
+    "summary": "",
+    "sections": [
+     {
+      "key": "a",
+      "label": "Examen",
+      "content": "  "
+     }
+    ],
+    "warnings": [],
+    "missing_required_sections": []
+   },
+   "salida": "Resumen\nSin información documentada.\n\nExamen\nSin información documentada.\n\nPlan terapéutico\nSin información documentada.\n\nRecomendaciones\nSin información documentada.\n\nSignos de alarma\nSin información documentada."
+  },
+  {
+   "entrada": {
+    "summary": "Paciente con dolor torácico atípico, estable.",
+    "sections": [
+     {
+      "key": "d",
+      "label": "Descripción",
+      "content": "Párrafo uno.\n\nPárrafo dos."
+     }
+    ],
+    "warnings": [],
+    "missing_required_sections": [],
+    "discharge": {
+     "plan": {
+      "medications": [
+       {
+        "name": "Losartán",
+        "dose": "50 mg",
+        "route": "",
+        "frequency": "",
+        "duration": "",
+        "instructions": "en ayunas"
+       }
+      ],
+      "non_pharmacological": [],
+      "follow_up": []
+     },
+     "recommendations": [],
+     "alarm_signs": [
+      {
+       "text": "Fiebre"
+      },
+      {
+       "text": "Vómito"
+      }
+     ]
+    }
+   },
+   "salida": "Resumen\nPaciente con dolor torácico atípico, estable.\n\nDescripción\nPárrafo uno.\n\nPárrafo dos.\n\nPlan terapéutico\nLosartán · 50 mg · en ayunas\n\nRecomendaciones\nSin información documentada.\n\nSignos de alarma\nFiebre\nVómito"
+  }
+ ]
+}
