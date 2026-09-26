@@ -447,6 +447,27 @@ public sealed class SesionMiracle
         }
     }
 
+    /// <summary>
+    /// La especialidad del médico, como código (`medicina_general`). Vacío si no la tiene puesta.
+    /// </summary>
+    /// <remarks>
+    /// La pide «Tu sugerida» (<see cref="U.WindowsClient.Clinical.SugeridaDelMedico"/>, promesa
+    /// 190): el pin de plantilla vive en `user_template_preferences`, cuya clave primaria es
+    /// `(user_id, specialty_code)`. Sin especialidad, el pin se guardaría con la clave vacía y sería
+    /// invisible desde el portal, que lo guarda con la de la plantilla.
+    ///
+    /// NO SE CACHEA aquí: se lee al abrir la ventana de consulta y se guarda allí. Un dato del
+    /// perfil que esta clase memorizara quedaría viejo en cuanto el médico lo cambiara en el portal,
+    /// y nadie sabría por qué su sugerida dejó de aparecer.
+    /// </remarks>
+    public async Task<string> EspecialidadAsync(CancellationToken ct = default)
+    {
+        string token = await TokenVigenteAsync(ct);
+        if (token.Length == 0) return "";
+        var perfil = await LeerPerfilActualAsync(token, ct);
+        return perfil.SpecialtyCode;
+    }
+
     /// <summary>Los seis campos del perfil profesional que NO son el nombre, tal como están hoy.</summary>
     private async Task<PerfilProfesional> LeerPerfilActualAsync(string token, CancellationToken ct)
     {

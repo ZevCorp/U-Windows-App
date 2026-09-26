@@ -166,6 +166,43 @@ public sealed partial class ConsultaWindow : Window
     public static Size TamanoInicial => new(988, 656);
 
     public static Size TamanoMinimo => new(400, 540);
+    // ── la plantilla se elige (spec 053) ─────────────────────────────────────
+
+    /// <summary>El caret del botón partido: abre el selector sin arrancar nada.</summary>
+    private readonly Button _caretPlantilla;
+    private readonly Popup _menuPlantilla;
+
+    /// <summary>Con qué se va a grabar, debajo del botón. Lo que el portal enseña en el panel.</summary>
+    private readonly TextBlock _rotuloPlantilla;
+
+    /// <summary>Lo que hay para elegir. Se pide una vez al arrancar.</summary>
+    private IReadOnlyList<PlantillaClinica> _catalogo = Array.Empty<PlantillaClinica>();
+
+    /// <summary>«Tu sugerida»: el pin de este médico, leído de la misma tabla que el portal.</summary>
+    private string _sugeridaId = "";
+
+    /// <summary>Lo que tocó en el selector para ESTA consulta. Manda sobre todo lo demás.</summary>
+    private string _elegidaId = "";
+
+    /// <summary>Su especialidad, para saber en qué fila vive su pin. Vacía si no la tiene puesta.</summary>
+    private string _especialidad = "";
+
+    // ── una consulta anterior, abierta desde la lista (spec 053) ─────────────
+
+    /// <summary>El encounter que se está mirando, o vacío si lo que se ve es la nota en curso.</summary>
+    private string _abiertaId = "";
+    private string _abiertaEstado = "";
+    private NotaClinica? _abiertaNota;
+
+    /// <summary>
+    /// La nota que se está VIENDO: la de la consulta en curso, o la de una abierta desde la lista.
+    /// </summary>
+    /// <remarks>
+    /// Es lo que lee el ✓ para saber qué mandar a SAP. Antes se leía <c>_consulta.Nota</c> directo,
+    /// que era correcto cuando la única nota posible era la de ahora; con consultas anteriores
+    /// abiertas, mandaría la nota de un paciente estando mirando la de otro.
+    /// </remarks>
+    private NotaClinica? _notaEnPantalla;
 
     public ConsultaWindow(SesionMiracle sesion, GraphConfig graphConfig)
     {
@@ -176,10 +213,14 @@ public sealed partial class ConsultaWindow : Window
         _consulta = new Consulta(sesion, _clinica,
             abrirMicrofono: _dictado.ArrancarAsync,
             pararYRecogerLoDicho: () => _dictado.PararAsync(),
-            espejar: async (encounterId, nota, verbatim) =>
+            // CORREGIR NO ES DAR DE ALTA, y por eso la fila no es la misma (promesa 444): el alta
+            // lleva estado y firma, la corrección solo lo que cambió.
+            espejar: async (encounterId, nota, verbatim, yaExiste) =>
             {
-                string fila = EspejoDeConsulta.Fila(encounterId, nota, verbatim,
-                    _plantillaNombre, PlantillaAbierta.Especialidad, DateTimeOffset.UtcNow);
+                string fila = yaExiste
+                    ? EspejoDeConsulta.FilaDeCorreccion(encounterId, nota)
+                    : EspejoDeConsulta.Fila(encounterId, nota, verbatim,
+                        _plantillaNombre, PlantillaAbierta.Especialidad, DateTimeOffset.UtcNow);
                 return await EspejoDeConsulta.EscribirAsync(_sesion, _http, fila);
             });
 
@@ -370,7 +411,10 @@ public sealed partial class ConsultaWindow : Window
         _tabConsultas = Pestana("Consultas");
         _tabNota = Pestana("Nota");
         _tabConsultas.Click += async (_, __) => { Mostrar(nota: false); await CargarConsultasAsync(); };
-        _tabNota.Click += (_, __) => Mostrar(nota: true);
+        // VOLVER A LA PESTAÑA NOTA CIERRA LA CONSULTA ABIERTA. Sin esto, mirar una consulta vieja
+        // y volver dejaría su texto en pantalla como si fuera la de ahora — y el ✓ mandaría a SAP
+        // la que no es.
+        _tabNota.Click += (_, __) => { CerrarLaAbierta(); Mostrar(nota: true); };
         segmentos.Children.Add(_tabConsultas);
         segmentos.Children.Add(_tabNota);
         carril.Child = segmentos;
@@ -496,8 +540,70 @@ public sealed partial class ConsultaWindow : Window
         };
         _grabar.ConRelieve(Estudio.Sombra2);
         _grabar.Click += async (_, __) => await AlternarAsync();
-        Grid.SetRow(_grabar, 4);
-        raiz.Children.Add(_grabar);
+        _grabar.HorizontalAlignment = HorizontalAlignment.Center;
+
+        // ── la plantilla: la LÍNEA que la dice ES el botón que la cambia ────
+        //
+        // EMPEZÓ SIENDO UN BOTÓN PARTIDO como el del portal (`ActionDock.tsx`) y se cambió el
+        // 2026-09-07, dicho por el dueño mirándolo: «se ve horrible ese botón para abrir las
+        // plantillas que ni se entiende». Y tenía razón por debajo del gusto: una pastilla vacía
+        // pegada al botón de grabar no dice de qué es. La línea, en cambio, YA dice el nombre de la
+        // plantilla — así que hacerla pulsable no añade ningún objeto a la pantalla y lo que se
+        // toca es exactamente lo que se quiere cambiar.
+        _rotuloPlantilla = new TextBlock
+        {
+            Foreground = Estudio.TintaMedia,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = 320,
+        };
+        var chevronPlantilla = new TextBlock
+        {
+            Text = "",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 8,
+            Foreground = Estudio.TintaTenue,
+            Margin = new Thickness(7, 1, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var dentroDeLaPlantilla = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        dentroDeLaPlantilla.Children.Add(_rotuloPlantilla);
+        dentroDeLaPlantilla.Children.Add(chevronPlantilla);
+
+        _caretPlantilla = new Button
+        {
+            Content = dentroDeLaPlantilla,
+            Padding = new Thickness(14, 7, 12, 7),
+            Margin = new Thickness(0, 12, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(16),
+        };
+        _caretPlantilla.MouseEnter += (_, __) => _caretPlantilla.Background = Estudio.SuperficieSuave;
+        _caretPlantilla.MouseLeave += (_, __) => _caretPlantilla.Background = Brushes.Transparent;
+        _caretPlantilla.Click += (_, __) => { PintarMenuDePlantilla(); _menuPlantilla.IsOpen = !_menuPlantilla.IsOpen; };
+
+        _menuPlantilla = new Popup
+        {
+            PlacementTarget = _caretPlantilla,
+            Placement = PlacementMode.Top,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            PopupAnimation = PopupAnimation.Fade,
+        };
+
+        var abajo = new StackPanel();
+        abajo.Children.Add(_grabar);
+        abajo.Children.Add(_caretPlantilla);
+        Grid.SetRow(abajo, 4);
+        raiz.Children.Add(abajo);
 
         tarjeta.Child = raiz;
         // La sombra la echa una PLACA detrás, nunca el borde que lleva el contenido: dentro de un
@@ -1215,17 +1321,240 @@ public sealed partial class ConsultaWindow : Window
     /// Deja lista la plantilla abierta: la busca en el catálogo y, si no existe, la crea. Se llama
     /// al arrancar y otra vez al pulsar grabar si la primera no cuajó.
     /// </summary>
+
+    /// <summary>Que plantilla manda ahora mismo, debajo del boton.</summary>
+    private void PintarPlantilla() =>
+        _rotuloPlantilla.Text = _plantillaNombre.Length > 0
+            ? (_sugeridaId.Length > 0 && _plantillaId == _sugeridaId ? "★ " : "") + _plantillaNombre
+            : "";
+
+    /// <summary>
+    /// EL SELECTOR DE PLANTILLA, detras del caret. Se repinta al abrirlo para marcar cual manda.
+    /// </summary>
+    /// <remarks>
+    /// CON BUSCADOR, y no es un adorno: el catalogo real tiene 204 plantillas (medido en el log el
+    /// 2026-09-07). Una lista de 204 sin buscar no es un selector, es un obstaculo -que es justo lo
+    /// que hizo que en septiembre se decidiera no preguntar nunca (promesa 94)-. El buscador es lo
+    /// que permite ofrecer la eleccion sin devolver el obstaculo.
+    ///
+    /// LAS SUYAS PRIMERO, mismo criterio que `splitTemplatesBySpecialty` del portal: lo que el
+    /// medico creo va arriba porque es lo que reconoce.
+    ///
+    /// LA ESTRELLA FIJA «TU SUGERIDA» y escribe en `user_template_preferences`, la MISMA tabla que
+    /// lee el navegador: fijarla aqui se ve alli, y al reves. Es la promesa 441.
+    /// </remarks>
+    private void PintarMenuDePlantilla(string filtro = "")
+    {
+        var pila = new StackPanel { Width = 352 };
+
+        var buscador = new TextBox
+        {
+            Text = filtro,
+            FontSize = 13,
+            Padding = new Thickness(10, 7, 10, 7),
+            Margin = new Thickness(0, 0, 0, 10),
+            Background = Estudio.SuperficieSuave,
+            Foreground = Estudio.Tinta,
+            BorderThickness = new Thickness(0),
+        };
+        buscador.TextChanged += (_, __) => PintarMenuDePlantilla(buscador.Text);
+        pila.Children.Add(buscador);
+
+        var lista = new StackPanel();
+        var scroll = new ScrollViewer
+        {
+            Content = lista,
+            MaxHeight = 300,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        scroll.PonerLaBarraDeScroll();
+
+        string q = Navigation.Nombres.Aplanar(filtro ?? "").Trim();
+        bool Casa(PlantillaClinica p) => q.Length == 0
+            || Navigation.Nombres.Aplanar(p.Nombre + " " + p.Especialidad).Contains(q, StringComparison.Ordinal);
+
+        var mias = _catalogo.Where(x => x.EsMia && Casa(x)).ToList();
+        var delHospital = _catalogo.Where(x => !x.EsMia && Casa(x)).ToList();
+
+        if (mias.Count > 0)
+        {
+            var r = Estudio.Rotulo("Mias");
+            r.Margin = new Thickness(4, 2, 0, 6);
+            lista.Children.Add(r);
+            foreach (var x in mias) lista.Children.Add(FilaDePlantilla(x));
+        }
+        if (delHospital.Count > 0)
+        {
+            var r = Estudio.Rotulo("Del hospital");
+            r.Margin = new Thickness(4, mias.Count > 0 ? 12 : 2, 0, 6);
+            lista.Children.Add(r);
+            // SE CORTA LA LISTA LARGA y se DICE cuantas quedaron fuera: con 204 plantillas, pintarlas
+            // todas cuesta y no sirve. Callar el corte seria peor que cortarlo -quien busca la suya
+            // creeria que no esta.
+            foreach (var x in delHospital.Take(40)) lista.Children.Add(FilaDePlantilla(x));
+            if (delHospital.Count > 40)
+                lista.Children.Add(new TextBlock
+                {
+                    Text = $"y {delHospital.Count - 40} mas: escribe arriba para encontrarla",
+                    Foreground = Estudio.TintaTenue, FontSize = 11.5,
+                    Margin = new Thickness(6, 8, 6, 2), TextWrapping = TextWrapping.Wrap,
+                });
+        }
+        if (mias.Count == 0 && delHospital.Count == 0)
+            lista.Children.Add(new TextBlock
+            {
+                Text = _catalogo.Count == 0
+                    ? "Todavia no se pudo leer el catalogo de plantillas."
+                    : "Ninguna plantilla se llama asi.",
+                Foreground = Estudio.TintaMedia, FontSize = 12.5,
+                Margin = new Thickness(6, 6, 6, 6), TextWrapping = TextWrapping.Wrap,
+            });
+
+        pila.Children.Add(scroll);
+
+        var tarjeta = Estudio.Tarjeta(20);
+        tarjeta.Padding = new Thickness(14, 14, 14, 14);
+        tarjeta.Child = pila;
+        var elevado = Estudio.Elevar(tarjeta, Estudio.Sombra3);
+        elevado.Margin = new Thickness(0, 0, 0, 8);
+        _menuPlantilla.Child = elevado;
+
+        // El foco al buscador SOLO al abrir de cero: al repintar por cada tecla, robarlo otra vez
+        // dejaria el cursor al principio en mitad de la palabra.
+        if ((filtro ?? "").Length == 0)
+            Dispatcher.BeginInvoke(new Action(() => buscador.Focus()),
+                System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private UIElement FilaDePlantilla(PlantillaClinica p)
+    {
+        bool manda = p.Id == _plantillaId;
+        bool esLaSugerida = _sugeridaId.Length > 0 && p.Id == _sugeridaId;
+
+        var texto = new StackPanel();
+        texto.Children.Add(new TextBlock
+        {
+            Text = p.Nombre,
+            Foreground = Estudio.Tinta,
+            FontSize = 13,
+            FontWeight = manda ? FontWeights.SemiBold : FontWeights.Normal,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        string bajo = p.Especialidad.Replace('_', ' ');
+        if (esLaSugerida) bajo += "  ·  tu sugerida";
+        else if (p.EsLaPorDefecto) bajo += "  ·  la del hospital";
+        texto.Children.Add(new TextBlock
+        {
+            Text = bajo,
+            Foreground = Estudio.TintaTenue,
+            FontSize = 10.5,
+            Margin = new Thickness(0, 2, 0, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        var estrella = new Button
+        {
+            Content = new TextBlock
+            {
+                // Llena si es la suya, hueca si no: el estado se lee sin leer.
+                Text = esLaSugerida ? "" : "",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 12,
+                Foreground = esLaSugerida ? Estudio.Espera : Estudio.TintaTenue,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+            Width = 30,
+            Height = 30,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(15),
+        };
+        estrella.Click += async (_, e) =>
+        {
+            // FIJARLA Y ELEGIRLA SON DOS COSAS: sin esto, el clic subiria a la fila y ademas la
+            // seleccionaria, que no es lo que pidio quien toco la estrella.
+            e.Handled = true;
+            if (await SugeridaDelMedico.GuardarAsync(_sesion, _http, p.Especialidad, p.Id))
+            {
+                _sugeridaId = p.Id;
+                PintarPlantilla();
+                PintarMenuDePlantilla();
+                Estado($"«{p.Nombre}» es tu sugerida a partir de ahora.");
+            }
+            else Estado("No se pudo fijar tu sugerida. Se sigue pudiendo elegir a mano.");
+        };
+
+        var dentro = new DockPanel();
+        DockPanel.SetDock(estrella, Dock.Right);
+        dentro.Children.Add(estrella);
+        dentro.Children.Add(texto);
+
+        var fila = new Button
+        {
+            Content = dentro,
+            Padding = new Thickness(10, 8, 6, 8),
+            Margin = new Thickness(0, 0, 0, 2),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = manda ? Estudio.AcentoSuave : Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(12, estirado: true),
+        };
+        if (!manda)
+        {
+            fila.MouseEnter += (_, __) => fila.Background = Estudio.SuperficieSuave;
+            fila.MouseLeave += (_, __) => fila.Background = Brushes.Transparent;
+        }
+        fila.Click += (_, __) =>
+        {
+            // LO ELEGIDO SE QUEDA ELEGIDO para las siguientes consultas de esta sesion: quien cambio
+            // de plantilla casi nunca quiere volver a la anterior en la consulta siguiente.
+            _elegidaId = p.Id;
+            _plantillaId = p.Id;
+            _plantillaNombre = p.Nombre;
+            PintarPlantilla();
+            _menuPlantilla.IsOpen = false;
+            Estado($"Se grabara con «{p.Nombre}».");
+            LogBus.Log("plantilla", $"el medico eligio «{p.Nombre}»");
+        };
+        return fila;
+    }
+
     private async Task ResolverPlantillaAsync()
     {
         try
         {
-            var catalogo = await _clinica.PlantillasAsync();
-            var abierta = PlantillaAbierta.Elegir(catalogo);
-            abierta ??= await _clinica.CrearPlantillaAsync(
-                PlantillaAbierta.Nombre, PlantillaAbierta.Especialidad, PlantillaAbierta.Secciones());
+            // La especialidad decide en que fila vive su pin, asi que se pide antes que el pin. Un
+            // medico sin especialidad puesta no es un error: se queda sin pin y la cadena sigue.
+            if (_especialidad.Length == 0) _especialidad = await _sesion.EspecialidadAsync();
 
-            _plantillaId = abierta.Id;
-            _plantillaNombre = abierta.Nombre;
+            _catalogo = await _clinica.PlantillasAsync();
+            _sugeridaId = await SugeridaDelMedico.LeerAsync(_sesion, _http, _especialidad);
+
+            var elegida = ReglaDeLaPlantilla.Elegir(_catalogo, _elegidaId, _sugeridaId);
+
+            // NINGUN ESLABON RESOLVIO: se CREA la abierta, que es lo que la promesa 94 exige desde
+            // el 2026-09-01. Caer en una cualquiera del catalogo -hoy son 204- seria elegir por el
+            // medico sin decirselo, y su nota saldria con la forma de otra cosa.
+            if (elegida == null)
+            {
+                elegida = await _clinica.CrearPlantillaAsync(
+                    PlantillaAbierta.Nombre, PlantillaAbierta.Especialidad, PlantillaAbierta.Secciones());
+                _catalogo = new List<PlantillaClinica>(_catalogo) { elegida };
+            }
+
+            _plantillaId = elegida.Id;
+            _plantillaNombre = elegida.Nombre;
+            PintarPlantilla();
+            LogBus.Log("plantilla", $"se grabara con «{_plantillaNombre}» · {_catalogo.Count} disponible(s) · "
+                                  + (_elegidaId.Length > 0 ? "la elegiste tu"
+                                     : _sugeridaId.Length > 0 && _sugeridaId == _plantillaId ? "es tu sugerida"
+                                     : ReglaDeLaPlantilla.EsDeUrgencias(elegida.Especialidad) ? "es la de urgencias"
+                                     : "es la abierta"));
             Estado("Listo.");
         }
         catch (ErrorClinico e) { Estado(e.Message); }
@@ -1933,6 +2262,13 @@ public sealed partial class ConsultaWindow : Window
                 if (_plantillaId.Length == 0) return;   // ResolverPlantilla ya dijo por qué
             }
 
+            // EMPEZAR A GRABAR CIERRA LA QUE SE ESTABA MIRANDO. Si no, la consulta vieja seguiría
+            // en pantalla mientras se graba otra, y el ✓ mandaría a SAP la que no es.
+            _abiertaId = "";
+            _abiertaEstado = "";
+            _abiertaNota = null;
+            _notaEnPantalla = null;
+
             Mostrar(nota: true);
             _nota.Children.Clear();
             _vivo.Text = "";
@@ -1998,21 +2334,96 @@ public sealed partial class ConsultaWindow : Window
             ? "Nota lista. Ya se ve en el portal."
             : "Nota guardada, pero no se pudo espejar al portal. Está en el log.");
 
-        if (nota.Resumen.Length > 0) _nota.Children.Add(TarjetaDeTexto("Resumen", nota.Resumen));
+        // La nota recién generada SE PUEDE CORREGIR (spec 053). Hasta el 2026-09-07 esto era texto
+        // muerto: la IA organizaba y el médico solo podía mirar lo que iba a quedar en la historia
+        // clínica de su paciente.
+        async Task<bool> Guardado(bool ok)
+        {
+            Estado(ok
+                ? (_consulta.VisibleEnElPortal
+                    ? "Corregido. El portal ya ve el cambio."
+                    : "Corregido y guardado, pero el portal no se pudo actualizar. Está en el log.")
+                : _consulta.Motivo);
+            return ok;
+        }
+
+        PintarSecciones(nota, editable: true,
+            guardar: async (clave, texto) =>
+            {
+                Estado("Guardando la corrección…");
+                return await Guardado(await _consulta.CorregirSeccionAsync(clave, texto));
+            },
+            guardarResumen: async texto =>
+            {
+                Estado("Guardando la corrección…");
+                return await Guardado(await _consulta.CorregirResumenAsync(texto));
+            });
+    }
+
+    /// <summary>
+    /// LAS SECCIONES DE UNA NOTA, vengan de la consulta en curso o de una abierta desde la lista.
+    /// </summary>
+    /// <remarks>
+    /// UN SOLO SITIO QUE LAS PINTA, y es a propósito: dos pantallas que enseñan la misma nota con
+    /// dos códigos distintos acaban enseñándola distinta, y la que se ve mal es siempre la que
+    /// nadie mira. Lo que cambia entre las dos es QUIÉN guarda, y eso entra por parámetro.
+    ///
+    /// LAS VACÍAS SE PINTAN SI SE PUEDE ESCRIBIR, y no antes. Mientras la nota era de solo lectura,
+    /// una casilla vacía no era información y llenaba la pantalla de nada; en cuanto se puede
+    /// corregir, esa casilla es el sitio donde el médico añade lo que la IA no oyó — esconderla
+    /// sería esconder justo el hueco que viene a llenar.
+    /// </remarks>
+    private void PintarSecciones(NotaClinica nota, bool editable,
+        Func<string, string, Task<bool>> guardar, Func<string, Task<bool>> guardarResumen,
+        string cinta = "")
+    {
+        _nota.Children.Clear();
         _estadoDeSeccion.Clear();
+        _notaEnPantalla = nota;
+
+        if (cinta.Length > 0) _nota.Children.Add(Cinta(cinta));
+
+        // EL RESUMEN TAMBIÉN SE CORRIGE. Es el bloque más grande y el primero que se lee —y el que
+        // el portal enseña en la lista de consultas—, así que dejarlo muerto mientras las secciones
+        // se editaban era la mitad del trabajo y encima la mitad que más se toca. No lleva ✓: no es
+        // una sección del snapshot, y el emparejador de SAP trabaja con secciones.
+        if (nota.Resumen.Length > 0 || editable)
+            _nota.Children.Add(TarjetaDeSeccion(
+                new SeccionDeNota("", "Resumen", nota.Resumen), editable,
+                guardar: (_, texto) => guardarResumen(texto), conEnvioASap: false));
+
         var conTexto = new List<SeccionDeNota>();
         foreach (var s in nota.Secciones)
         {
-            // Una casilla vacía no es información: la plantilla abierta deja en blanco lo que no se
-            // dijo, y pintar «—» sería llenar la pantalla de nada.
-            if (s.Contenido.Trim().Length == 0) continue;
-            conTexto.Add(s);
-            _nota.Children.Add(TarjetaConEnvio(s));
+            bool vacia = s.Contenido.Trim().Length == 0;
+            if (vacia && !editable) continue;
+            if (!vacia) conTexto.Add(s);
+            _nota.Children.Add(TarjetaDeSeccion(s, editable, guardar));
         }
+
         if (conTexto.Count > 1) _nota.Children.Add(BotonTodoASap(conTexto));
         if (nota.Avisos.Count > 0)
             _nota.Children.Add(TarjetaDeTexto("Avisos", string.Join("\n", nota.Avisos)));
         _superficie.ScrollToHome();
+    }
+
+    /// <summary>Un renglón que explica por qué esta nota no se puede tocar.</summary>
+    private static UIElement Cinta(string texto)
+    {
+        var t = Estudio.Tarjeta(14);
+        t.Background = Estudio.EsperaSuave;
+        t.BorderBrush = Estudio.EsperaSuave;
+        t.Padding = new Thickness(14, 10, 14, 11);
+        t.Margin = new Thickness(2, 0, 2, 10);
+        t.Child = new TextBlock
+        {
+            Text = texto,
+            Foreground = Estudio.Espera,
+            FontSize = 12,
+            LineHeight = 17,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        return t;
     }
 
     // ── el ✓: la sección aprobada se va a SAP (spec 008) ─────────────────────
@@ -2025,32 +2436,27 @@ public sealed partial class ConsultaWindow : Window
     /// Una sección con su ✓. Pulsarlo es aprobarla: solo ella viaja (promesa 112). El resultado se
     /// pinta debajo del texto, en la misma tarjeta, para que se vea qué pasó con ESA sección.
     /// </summary>
-    private UIElement TarjetaConEnvio(SeccionDeNota s)
+    /// <summary>
+    /// Una sección con su ✓ y, si se puede, su editor. Promesas 112 (el ✓) y 191 (corregir).
+    /// </summary>
+    /// <remarks>
+    /// EL TEXTO ES EL BOTÓN. No hay un lápiz aparte: se toca lo que se quiere arreglar, que es el
+    /// gesto que ya usa el portal (`NoteSectionView`) y el que no hay que aprender.
+    ///
+    /// SE ATIENDE EL BOTÓN ABAJO Y NO EL DE ARRIBA, y esto no es un detalle de estilo: esta ventana
+    /// no tiene barra de título, así que arrastra con `MouseLeftButtonDown` sobre cualquier hueco.
+    /// Sin marcar el evento como atendido aquí, `DragMove` se queda con el clic y el editor no se
+    /// abre nunca — el sitio se vería pulsable y no lo sería.
+    ///
+    /// GUARDAR ES DE VERDAD: no cierra el editor hasta que quien guarda contesta que sí. Cerrarlo
+    /// antes enseñaría el texto nuevo sobre una nota que no lo tiene, que es el aprendizaje nº10 en
+    /// una pantalla — parecer que funcionó.
+    /// </remarks>
+    private UIElement TarjetaDeSeccion(SeccionDeNota s, bool editable,
+        Func<string, string, Task<bool>> guardar, bool conEnvioASap = true)
     {
-        var cabecera = new DockPanel();
-        var check = new Button
-        {
-            Width = 30,
-            Height = 30,
-            Background = Estudio.AcentoSuave,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(15),
-            Content = new TextBlock
-            {
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                Text = "",
-                FontSize = 13,
-                Foreground = Estudio.Acento,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
-        DockPanel.SetDock(check, Dock.Right);
-        cabecera.Children.Add(check);
-        var rotulo = Estudio.Rotulo(s.Titulo);
-        rotulo.VerticalAlignment = VerticalAlignment.Center;
-        cabecera.Children.Add(rotulo);
+        string contenido = s.Contenido;
+        var cuerpo = new Grid();
 
         var estado = new TextBlock
         {
@@ -2063,14 +2469,215 @@ public sealed partial class ConsultaWindow : Window
         };
         _estadoDeSeccion[s.Clave] = estado;
 
-        check.Click += async (_, __) => await EnviarASapAsync(new[] { s.Clave });
+        void Editar()
+        {
+            LogBus.Log("consulta-ui", $"editor abierto en «{s.Titulo}»");
+            cuerpo.Children.Clear();
+
+            var caja = new TextBox
+            {
+                Text = contenido,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                MinHeight = 76,
+                MaxHeight = 280,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                FontSize = 13.5,
+                Padding = new Thickness(10, 8, 10, 8),
+                Background = Estudio.Superficie,
+                Foreground = Estudio.Tinta,
+                BorderBrush = Estudio.Acento,
+                BorderThickness = new Thickness(1),
+                CaretBrush = Estudio.Acento,
+            };
+
+            var guardarBtn = new Button
+            {
+                Content = "Guardar",
+                Height = 32,
+                MinWidth = 92,
+                Background = Estudio.Acento,
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Cursor = Cursors.Hand,
+                Template = Estudio.Pastilla(16),
+            };
+            var cancelar = new Button
+            {
+                Content = "Cancelar",
+                Height = 32,
+                MinWidth = 88,
+                Margin = new Thickness(8, 0, 0, 0),
+                Background = Brushes.Transparent,
+                Foreground = Estudio.TintaMedia,
+                BorderBrush = Estudio.Borde,
+                BorderThickness = new Thickness(1),
+                FontSize = 12.5,
+                Cursor = Cursors.Hand,
+                Template = Estudio.Pastilla(16),
+            };
+            cancelar.Click += (_, __) => Leer();
+            guardarBtn.Click += async (_, __) =>
+            {
+                string nuevo = caja.Text ?? "";
+                if (nuevo == contenido) { Leer(); return; }
+                guardarBtn.IsEnabled = false;
+                cancelar.IsEnabled = false;
+                guardarBtn.Content = "Guardando…";
+                bool ok = await guardar(s.Clave, nuevo);
+                if (ok) { contenido = nuevo; Leer(); }
+                else
+                {
+                    // NO SE CIERRA EL EDITOR SI NO SE GUARDÓ: lo escrito se queda donde está para
+                    // poder reintentar. Cerrarlo perdería el trabajo y encima parecería guardado.
+                    guardarBtn.IsEnabled = true;
+                    cancelar.IsEnabled = true;
+                    guardarBtn.Content = "Guardar";
+                }
+            };
+
+            var botones = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 9, 0, 0),
+            };
+            botones.Children.Add(guardarBtn);
+            botones.Children.Add(cancelar);
+
+            var pilaEdicion = new StackPanel();
+            pilaEdicion.Children.Add(caja);
+            pilaEdicion.Children.Add(botones);
+            cuerpo.Children.Add(pilaEdicion);
+
+            caja.Focus();
+            caja.CaretIndex = caja.Text.Length;
+        }
+
+        void Leer()
+        {
+            cuerpo.Children.Clear();
+
+            bool vacia = contenido.Trim().Length == 0;
+            UIElement texto = vacia
+                ? new TextBlock
+                {
+                    Text = editable ? "Sin contenido. Toca para escribir." : "Sin contenido.",
+                    Foreground = Estudio.TintaTenue,
+                    FontSize = 13,
+                    FontStyle = FontStyles.Italic,
+                    TextWrapping = TextWrapping.Wrap,
+                }
+                : Estudio.Parrafo(contenido);
+
+            if (!editable) { cuerpo.Children.Add(texto); return; }
+
+            var zona = new Border
+            {
+                Child = texto,
+                Background = Brushes.Transparent,
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 6, 8, 6),
+                // Márgenes negativos: la zona pulsable respira más que el texto sin mover el texto
+                // ni un píxel respecto a cómo se veía antes.
+                Margin = new Thickness(-8, -3, -8, -3),
+                Cursor = Cursors.IBeam,
+            };
+            zona.MouseEnter += (_, __) => zona.Background = Estudio.SuperficieSuave;
+            zona.MouseLeave += (_, __) => zona.Background = Brushes.Transparent;
+            zona.MouseLeftButtonDown += (_, e) => { e.Handled = true; Editar(); };
+            cuerpo.Children.Add(zona);
+        }
+
+        // ── la cabecera: el rótulo y el ✓ ────────────────────────────────────
+        var check = new Button
+        {
+            Width = 30,
+            Height = 30,
+            // MÁS CALLADO QUE ANTES (2026-09-07, lo pidió el dueño: «se ve como unos fondos malucos
+            // que sobrecargan la parte visual»). Era una pastilla azul llena en CADA sección, así
+            // que la nota se leía como una cuadrícula de botones en vez de como un documento. Ahora
+            // el ✓ se enciende al acercarse, que es cuando importa.
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(15),
+        };
+        var glifoCheck = new TextBlock
+        {
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            Text = "",
+            FontSize = 13,
+            Foreground = Estudio.TintaTenue,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        check.Content = glifoCheck;
+        check.MouseEnter += (_, __) =>
+        {
+            check.Background = Estudio.AcentoSuave;
+            glifoCheck.Foreground = Estudio.Acento;
+        };
+        check.MouseLeave += (_, __) =>
+        {
+            check.Background = Brushes.Transparent;
+            glifoCheck.Foreground = Estudio.TintaTenue;
+        };
+        check.Click += async (_, e) => { e.Handled = true; await EnviarASapAsync(new[] { s.Clave }); };
+
+        // ── EL LÁPIZ ────────────────────────────────────────────────────────
+        //
+        // POR QUÉ EXISTE, con fecha: el 2026-09-07 el dueño abrió la nota y escribió «¿qué putas no
+        // deja editar el texto?». El texto SÍ se podía tocar — pero nada en la pantalla lo decía, y
+        // la promesa 164 prohíbe los carteles al pasar el ratón, así que no había ni un solo indicio
+        // de que aquello fuera pulsable. Una función que existe y no se ve es una función que no
+        // existe: se enteró el que la escribió, y nadie más.
+        var lapiz = new Button
+        {
+            Content = new TextBlock
+            {
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                Text = "",
+                FontSize = 12.5,
+                Foreground = Estudio.TintaTenue,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+            Width = 30,
+            Height = 30,
+            Margin = new Thickness(0, 0, 2, 0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = Cursors.Hand,
+            Template = Estudio.Pastilla(15),
+            Visibility = editable ? Visibility.Visible : Visibility.Collapsed,
+        };
+        lapiz.MouseEnter += (_, __) => lapiz.Background = Estudio.SuperficieSuave;
+        lapiz.MouseLeave += (_, __) => lapiz.Background = Brushes.Transparent;
+        lapiz.Click += (_, e) => { e.Handled = true; Editar(); };
+
+        var acciones = new StackPanel { Orientation = Orientation.Horizontal };
+        acciones.Children.Add(lapiz);
+        if (conEnvioASap) acciones.Children.Add(check);
+
+        var cabecera = new DockPanel();
+        DockPanel.SetDock(acciones, Dock.Right);
+        cabecera.Children.Add(acciones);
+        var rotulo = Estudio.Rotulo(s.Titulo);
+        rotulo.VerticalAlignment = VerticalAlignment.Center;
+        rotulo.Margin = new Thickness(0, 0, 0, 0);
+        cabecera.Children.Add(rotulo);
+
+        Leer();
 
         var pila = new StackPanel();
         pila.Children.Add(cabecera);
-        pila.Children.Add(Estudio.Parrafo(s.Contenido));
+        pila.Children.Add(cuerpo);
         pila.Children.Add(estado);
+
         var t = Estudio.Tarjeta(18);
-        t.Padding = new Thickness(16, 12, 16, 15);
+        t.Padding = new Thickness(16, 13, 16, 15);
         t.Margin = new Thickness(2, 0, 2, 10);
         t.Child = pila;
         return Estudio.Elevar(t);
@@ -2104,14 +2711,17 @@ public sealed partial class ConsultaWindow : Window
     private async Task EnviarASapAsync(IReadOnlyList<string> claves)
     {
         if (_enviando) { Estado("Ya hay un envío en marcha."); return; }
-        if (_consulta.Nota == null) { Estado("No hay nota que enviar."); return; }
+        // LA QUE SE VE, y no siempre la de la consulta en curso: desde el 2026-09-07 se puede tener
+        // abierta una consulta anterior, y mandar a SAP la nota de otra sería escribir en la
+        // historia clínica de un paciente lo que se dijo de otro.
+        if (_notaEnPantalla == null) { Estado("No hay nota que enviar."); return; }
         if (!PuenteASap.Disponible)
         {
             Estado("La carita no está lista para escribir en SAP: espera a que arranque y vuelve a pulsar ✓.");
             return;
         }
 
-        var encargo = Encargo.De(_consulta.Nota, claves);
+        var encargo = Encargo.De(_notaEnPantalla, claves);
         if (encargo.EstaVacio) { Estado("Esa sección está vacía: no hay nada que enviar."); return; }
 
         _enviando = true;
@@ -2348,7 +2958,7 @@ public sealed partial class ConsultaWindow : Window
         return Estudio.Elevar(t);
     }
 
-    private static UIElement FilaDeConsulta(ConsultaVista c)
+    private UIElement FilaDeConsulta(ConsultaVista c)
     {
         var pila = new StackPanel();
 
@@ -2390,6 +3000,167 @@ public sealed partial class ConsultaWindow : Window
         t.Padding = new Thickness(16, 13, 16, 14);
         t.Margin = new Thickness(2, 0, 2, 10);
         t.Child = pila;
+
+        // LA LISTA SE ABRE. Hasta el 2026-09-07 esto era un escaparate: la consulta se veía y no se
+        // podía tocar, así que corregir una nota de hace diez minutos obligaba a irse al navegador.
+        t.Cursor = Cursors.Hand;
+        t.MouseEnter += (_, __) => t.Background = Estudio.SuperficieSuave;
+        t.MouseLeave += (_, __) => t.Background = Estudio.Superficie;
+        // Atendido aquí porque la ventana arrastra con este mismo evento: sin marcarlo, DragMove se
+        // queda con el clic y la tarjeta parecería pulsable sin serlo.
+        t.MouseLeftButtonDown += async (_, e) => { e.Handled = true; await AbrirConsultaAsync(c); };
+
         return Estudio.Elevar(t);
+    }
+
+    // ── una consulta anterior, abierta desde la lista (spec 053) ─────────────
+
+    /// <summary>
+    /// Abre una consulta de la lista: trae su nota del backend y la deja lista para corregir.
+    /// </summary>
+    /// <remarks>
+    /// LA NOTA SE PIDE AL BACKEND CLÍNICO Y NO AL ESPEJO, y esa decisión es lo que hace que
+    /// corregir sea posible. El espejo (`consultations.note`) guarda las secciones como
+    /// <c>id/titulo/kind/texto</c> para que el portal las pinte; el backend devuelve el
+    /// <c>note_json</c> con las CLAVES del snapshot, que es lo único que `PUT /note` acepta
+    /// (promesa 442). Reconstruir la nota desde el espejo daría un texto idéntico en pantalla y un
+    /// 400 al guardar — o, peor, una nota a la que le faltan las secciones que el espejo no pintó.
+    ///
+    /// EL ESTADO SÍ SALE DE LA LISTA: `borrador`, `revisada`, `aprobada` o `exportada` son del
+    /// portal, y el backend clínico no sabe nada de ellos. Es lo que decide si se puede corregir
+    /// (promesa 443).
+    /// </remarks>
+    private async Task AbrirConsultaAsync(ConsultaVista c)
+    {
+        Mostrar(nota: true);
+        _nota.Children.Clear();
+        _vivo.Text = "";
+        _vacioNota.Visibility = Visibility.Collapsed;
+        Estado("Abriendo la consulta…");
+
+        try
+        {
+            var enc = await _clinica.LeerEncounterAsync(c.Id);
+            if (enc.Nota == null || enc.Nota.Secciones.Count == 0)
+            {
+                // SE DICE QUÉ PASÓ, no «no se pudo»: una consulta sin nota es una que se grabó y no
+                // llegó a organizarse, y eso se arregla en otro sitio.
+                Estado("Esta consulta todavía no tiene una nota organizada.");
+                LogBus.Log("consulta-ui", $"la consulta {c.Id} no traía nota");
+                return;
+            }
+
+            _abiertaId = c.Id;
+            _abiertaEstado = c.Estado;
+            _abiertaNota = enc.Nota;
+
+            bool sePuede = ReglaDeLaEdicion.SePuedeEditar(c.Estado);
+            PintarSecciones(enc.Nota, sePuede,
+                guardar: GuardarCorreccionDeLaAbiertaAsync,
+                guardarResumen: GuardarResumenDeLaAbiertaAsync,
+                cinta: sePuede ? "" : ReglaDeLaEdicion.PorQueNo(c.Estado));
+
+            Estado(sePuede
+                ? "Toca cualquier sección para corregirla. El ✓ la manda a SAP."
+                : "Solo lectura. El ✓ sigue mandando a SAP.");
+            LogBus.Log("consulta-ui", $"consulta abierta · estado «{c.Estado}» · "
+                                    + $"{enc.Nota.Secciones.Count} sección(es) · "
+                                    + (sePuede ? "editable" : "solo lectura"));
+        }
+        catch (ErrorClinico e) { Estado(e.Message); }
+        catch (Exception e)
+        {
+            Estado("No se pudo abrir la consulta. Comprueba la red y vuelve a tocarla.");
+            LogBus.Log("consulta-ui", $"abrir consulta: {e.GetType().Name}: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Guarda la corrección de una consulta anterior: primero el backend, después el espejo.
+    /// </summary>
+    /// <remarks>
+    /// EL ORDEN ES EL MISMO QUE EN <see cref="Consulta.CorregirSeccionAsync"/> y por la misma razón:
+    /// si el espejo fuera primero, un `PUT` fallido dejaría el portal enseñando un texto que la
+    /// historia clínica no tiene.
+    ///
+    /// NO PASA POR <see cref="Consulta"/> a propósito: esa clase es la máquina de estados de la
+    /// consulta EN CURSO, y meterle dentro un encounter viejo la dejaría creyendo que tiene una
+    /// nota que no es la suya — con el botón de grabar leyendo ese estado.
+    /// </remarks>
+    private async Task<bool> GuardarCorreccionDeLaAbiertaAsync(string clave, string texto)
+    {
+        if (_abiertaNota == null || _abiertaId.Length == 0) return false;
+
+        Estado("Guardando la corrección…");
+        try
+        {
+            var guardada = await _clinica.GuardarNotaEditadaAsync(
+                _abiertaId, _abiertaNota.ConSeccion(clave, texto));
+            _abiertaNota = guardada;
+            _notaEnPantalla = guardada;
+
+            bool enElPortal = await EspejoDeConsulta.EscribirAsync(_sesion, _http,
+                EspejoDeConsulta.FilaDeCorreccion(_abiertaId, guardada));
+
+            Estado(enElPortal
+                ? "Corregido. El portal ya ve el cambio."
+                : "Corregido y guardado, pero el portal no se pudo actualizar. Está en el log.");
+            LogBus.Log("consulta-ui", $"sección «{clave}» corregida en la consulta abierta");
+            return true;
+        }
+        catch (ErrorClinico e) { Estado(e.Message); return false; }
+        catch (Exception e)
+        {
+            Estado($"No se pudo guardar la corrección: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>El resumen de una consulta abierta de la lista. Mismo camino que una sección.</summary>
+    private async Task<bool> GuardarResumenDeLaAbiertaAsync(string texto)
+    {
+        if (_abiertaNota == null || _abiertaId.Length == 0) return false;
+
+        Estado("Guardando la corrección…");
+        try
+        {
+            var guardada = await _clinica.GuardarNotaEditadaAsync(
+                _abiertaId, _abiertaNota.ConResumen(texto));
+            _abiertaNota = guardada;
+            _notaEnPantalla = guardada;
+
+            bool enElPortal = await EspejoDeConsulta.EscribirAsync(_sesion, _http,
+                EspejoDeConsulta.FilaDeCorreccion(_abiertaId, guardada));
+            Estado(enElPortal
+                ? "Corregido. El portal ya ve el cambio."
+                : "Corregido y guardado, pero el portal no se pudo actualizar. Está en el log.");
+            return true;
+        }
+        catch (ErrorClinico e) { Estado(e.Message); return false; }
+        catch (Exception e)
+        {
+            Estado($"No se pudo guardar la corrección: {e.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Deja de mirar la consulta anterior y vuelve a la de ahora.</summary>
+    private void CerrarLaAbierta()
+    {
+        if (_abiertaId.Length == 0) return;
+        _abiertaId = "";
+        _abiertaEstado = "";
+        _abiertaNota = null;
+
+        // Se repinta lo que corresponda: la nota en curso si la hay, y si no la pantalla de empezar.
+        _nota.Children.Clear();
+        _notaEnPantalla = null;
+        if (_consulta.Nota != null) PintarNota();
+        else
+        {
+            _vivo.Text = "";
+            _vacioNota.Visibility = Visibility.Visible;
+            Estado(_plantillaId.Length > 0 ? "Listo." : "");
+        }
     }
 }

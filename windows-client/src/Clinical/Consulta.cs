@@ -1,4 +1,4 @@
-using U.WindowsClient.Cuenta;
+﻿using U.WindowsClient.Cuenta;
 using U.WindowsClient.Diagnostics;
 
 namespace U.WindowsClient.Clinical;
@@ -65,12 +65,17 @@ public sealed class Consulta
     /// Se inyecta como funcion para que esta clase no sepa de Supabase — y para que el contrato
     /// pueda juzgar la maquina de estados sin red.
     /// </summary>
-    private readonly Func<string, NotaClinica, string, Task<bool>>? _espejar;
+    /// <remarks>
+    /// EL CUARTO ARGUMENTO ES «la fila ya existe», y decide si el espejo manda `estado` y `firma`
+    /// (promesa 444, spec 053). Corregir una nota vuelve a escribir el espejo, y mandarlos otra vez
+    /// devolveria la consulta a borrador y le quitaria la firma.
+    /// </remarks>
+    private readonly Func<string, NotaClinica, string, bool, Task<bool>>? _espejar;
 
     public Consulta(SesionMiracle sesion, ClinicaClient clinica,
         Func<CancellationToken, Task<bool>> abrirMicrofono,
         Func<Task<string>> pararYRecogerLoDicho,
-        Func<string, NotaClinica, string, Task<bool>>? espejar = null)
+        Func<string, NotaClinica, string, bool, Task<bool>>? espejar = null)
     {
         _sesion = sesion;
         _clinica = clinica;
@@ -260,6 +265,101 @@ public sealed class Consulta
         }
     }
 
+    /// <summary>
+    /// Corrige el texto de UNA sección de la nota ya generada, y lo guarda donde vive la nota.
+    /// </summary>
+    /// <remarks>
+    /// Promesa 442 (spec 053). El médico lee lo que la IA organizó y arregla lo que haga falta antes
+    /// de que eso llegue a la historia clínica.
+    ///
+    /// SE MANDA LA NOTA ENTERA aunque solo cambie una sección, porque el contrato del backend exige
+    /// las claves EXACTAS del snapshot y este objeto es el único sitio donde están todas — la
+    /// pantalla pinta solo las que tienen texto. Ver <see cref="ClinicaClient.CuerpoDeNotaEditada"/>.
+    ///
+    /// EL ORDEN IMPORTA Y NO ES CASUAL: primero el backend, después el espejo. Si se hiciera al
+    /// revés, un `PUT` fallido dejaría el portal enseñando un texto que la historia clínica no
+    /// tiene. Así, un espejo fallido solo deja el portal desactualizado —y lo DICE, en
+    /// <see cref="VisibleEnElPortal"/>— con la nota ya a salvo.
+    ///
+    /// LA NOTA EN MEMORIA SOLO SE CAMBIA SI EL BACKEND ACEPTÓ, y se reemplaza por la que él
+    /// devuelve, no por la que se mandó: es él quien restaura `label` y el orden desde el snapshot.
+    /// </remarks>
+    public async Task<bool> CorregirSeccionAsync(string clave, string texto,
+        CancellationToken ct = default)
+    {
+        if (Nota == null || EncounterId.Length == 0)
+        {
+            Motivo = "no hay ninguna nota que corregir";
+            return false;
+        }
+
+        var corregida = Nota.ConSeccion(clave, texto ?? "");
+
+        try
+        {
+            Nota = await _clinica.GuardarNotaEditadaAsync(EncounterId, corregida, ct);
+            // La fila del portal YA existe —se escribió al generar la nota— así que esto es una
+            // corrección: el espejo no puede volver a mandar `estado` ni `firma` (promesa 444).
+            await EspejarAsync(yaExiste: true);
+            Motivo = "";
+            CodigoDeFallo = "";
+            LogBus.Log("consulta", $"sección «{clave}» corregida por el médico");
+            return true;
+        }
+        catch (ErrorClinico e)
+        {
+            // NO se pasa a Fallida: la consulta está entera y su nota también. Lo que falló es un
+            // guardado, y decirlo como una avería de la consulta mandaría a mirar el sitio
+            // equivocado (aprendizaje nº2).
+            Motivo = e.Message;
+            CodigoDeFallo = e.Codigo;
+            LogBus.Log("consulta", $"no se pudo guardar la corrección · {e.Codigo}");
+            return false;
+        }
+        catch (Exception e)
+        {
+            Motivo = $"no se pudo guardar la corrección: {e.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Corrige el RESUMEN de la nota. Mismo camino que una sección: backend y después espejo.
+    /// </summary>
+    /// <remarks>
+    /// El resumen es lo primero que se lee de una nota —y lo que el portal enseña en la lista— así
+    /// que dejarlo de solo lectura mientras las secciones se corrigen era la mitad del trabajo.
+    /// </remarks>
+    public async Task<bool> CorregirResumenAsync(string texto, CancellationToken ct = default)
+    {
+        if (Nota == null || EncounterId.Length == 0)
+        {
+            Motivo = "no hay ninguna nota que corregir";
+            return false;
+        }
+
+        try
+        {
+            Nota = await _clinica.GuardarNotaEditadaAsync(EncounterId, Nota.ConResumen(texto ?? ""), ct);
+            await EspejarAsync(yaExiste: true);
+            Motivo = "";
+            CodigoDeFallo = "";
+            LogBus.Log("consulta", "resumen corregido por el médico");
+            return true;
+        }
+        catch (ErrorClinico e)
+        {
+            Motivo = e.Message;
+            CodigoDeFallo = e.Codigo;
+            return false;
+        }
+        catch (Exception e)
+        {
+            Motivo = $"no se pudo guardar la corrección: {e.Message}";
+            return false;
+        }
+    }
+
     /// <summary>Archiva esta consulta para poder empezar otra. La de la base no se toca.</summary>
     public void Cerrar()
     {
@@ -277,11 +377,11 @@ public sealed class Consulta
     /// el backend y perderla por no poder pintarla en una lista seria absurdo. Lo que si pasa es
     /// que se DICE —queda en VisibleEnElPortal y en el log— en vez de suponer que se vio.
     /// </summary>
-    private async Task EspejarAsync()
+    private async Task EspejarAsync(bool yaExiste = false)
     {
         VisibleEnElPortal = false;
         if (_espejar == null || Nota == null) return;
-        try { VisibleEnElPortal = await _espejar(EncounterId, Nota, Verbatim); }
+        try { VisibleEnElPortal = await _espejar(EncounterId, Nota, Verbatim, yaExiste); }
         catch (Exception e)
         {
             LogBus.Log("consulta", $"la consulta no se pudo espejar al portal: {e.Message}");

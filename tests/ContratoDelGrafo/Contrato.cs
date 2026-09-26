@@ -867,11 +867,61 @@ internal static class Contrato
         Prueba("421. leer la historia la TRANSCRIBE literal, por páginas y párrafos: cada documento viaja precedido de «Documento n — id: Dn», la foto como imagen con detalle alto y el PDF como archivo con su nombre, todo con store:false; las fotos van de 3 en 3 y cada PDF solo; lo que vuelve se convierte en párrafos con id estable «Dn-pP-k»; y un documento del que no volvió nada queda sin leer, diciendo por qué", LaHistoriaSeTranscribeLiteral);
         Prueba("422. «¿por qué vino a cardiología?» se pregunta con los párrafos de TODA la historia —de cardiología o no— y sin ninguna imagen ni archivo; la respuesta es UNA frase de como mucho 220 caracteres, y los párrafos que la sostienen se copian en código de la transcripción por su id: un id que no existe se descarta, y sin ninguna cita válida el titular es «Los documentos no dicen por qué vino a cardiología», aunque el modelo haya escrito una frase", ElMotivoSeCitaCopiandoDelDocumento);
         Prueba("423. soltar más documentos no vuelve a leer los ya leídos y rehace el motivo con todos; si la lectura falla a mitad, lo leído se conserva, el error nombra el documento que faltó, y reintentar lee solo lo que faltó", SoltarMasNoVuelveALeerLoLeido);
+        // ── LA PLANTILLA SE ELIGE Y LA NOTA SE CORRIGE (spec 053, antes 015 en su rama; 2026-09-07) ──
+        //
+        // Nacieron como 189-193 en jose/la-nota-se-elige-y-se-corrige; al integrarse (2026-09-26) esos
+        // números ya los tenía main, así que pasan a 440-444. Los commits viejos las citan por el número viejo.
+        // Los números no se reciclan ni se comparten entre ramas: dos promesas con el mismo número
+        // harían que un commit de una rama hablara de la otra.
+        Prueba("440. la plantilla con la que se graba sale de una cadena de orden fijo —lo que el médico eligió, su sugerida, la de urgencias, la abierta— y nunca de una cualquiera del catálogo", LaPlantillaSaleDeUnaCadenaConOrden);
+        Prueba("441. la sugerida del médico se guarda a su nombre y por su especialidad, y al volver a abrir la app manda sobre la de urgencias", LaSugeridaSeGuardaPorEspecialidad);
+        Prueba("442. corregir una sección manda la nota ENTERA: todas las claves del snapshot, también las que quedaron vacías", CorregirMandaLaNotaEntera);
+        Prueba("443. una nota firmada no se edita desde Windows: se ve, se sigue pudiendo mandar a SAP, y el editor no aparece", LaNotaFirmadaNoSeEdita);
+        Prueba("444. al re-escribir una consulta que ya existe, el espejo no manda estado ni firma: lo que el portal avanzó sobrevive a una edición hecha en Windows", CorregirNoDegradaLaConsulta);
+
         Console.WriteLine();
+        // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
+        // bloque —en una máquina sin WPF, las promesas puras de una spec—, y por eso aquí no se
+        // puede decir «INTACTO»: el portero y el CI buscan esa palabra, y un verde de 5 promesas
+        // leído como verde de 400 es el aprendizaje nº17 al revés. Sin la variable, nada cambia.
+        if (_solo != null)
+        {
+            Console.WriteLine(_fallos == 0
+                ? $"JUICIO PARCIAL: {_juzgadas} promesa(s) de «{_soloTexto}» cumplidas. No es un veredicto del contrato."
+                : $"JUICIO PARCIAL: {_fallos} de {_juzgadas} promesa(s) de «{_soloTexto}» incumplidas. No es un veredicto del contrato.");
+            return _fallos == 0 ? 98 : _fallos; // 98 y no 0: un parcial nunca sale como verde de nadie
+        }
         Console.WriteLine(_fallos == 0
             ? "CONTRATO INTACTO: el grafo se comporta como el día que se congeló."
             : $"CONTRATO ROTO: {_fallos} promesa(s) incumplida(s). El cambio no puede entrar así.");
         return _fallos;
+    }
+
+    /// <summary>
+    /// El filtro opcional <c>U_CONTRATO_SOLO</c>: rangos como «440-479» o «440,452-455». Nulo si no
+    /// está puesto, que es el caso del CI y del portero: ahí se juzga todo, siempre.
+    /// </summary>
+    private static readonly string _soloTexto = (Environment.GetEnvironmentVariable("U_CONTRATO_SOLO") ?? "").Trim();
+    private static readonly List<(int Desde, int Hasta)>? _solo = LeerSolo(_soloTexto);
+    private static int _juzgadas;
+
+    private static List<(int, int)>? LeerSolo(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return null;
+        var rangos = new List<(int, int)>();
+        foreach (var trozo in texto.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var partes = trozo.Split('-', 2);
+            int desde = int.Parse(partes[0]);
+            rangos.Add((desde, partes.Length == 2 ? int.Parse(partes[1]) : desde));
+        }
+        return rangos;
+    }
+
+    private static bool SeJuzga(string nombre)
+    {
+        if (_solo == null) return true;
+        return int.TryParse(nombre.Split('.')[0], out var n) && _solo.Any(r => n >= r.Item1 && n <= r.Item2);
     }
 
     // ── Las promesas ─────────────────────────────────────────────────────────
@@ -4593,6 +4643,241 @@ internal static class Contrato
         Debe(senalar.Con(null) == LoQueSenalas.NadaDebajo,
             "sin nada con nombre bajo el cursor se pide mover el cursor. Contestar con lo último "
             + "señalado sería peor que no contestar: quien pregunta creería que acertó");
+    }
+
+    // ── La plantilla se elige y la nota se corrige (spec 015): las promesas ──
+
+    /// <summary>Un catálogo de mentira con las cuatro piezas de la cadena. Promesa 189.</summary>
+    private static System.Collections.IList CatalogoDePrueba(Type tPlantilla, bool conUrgencias,
+        bool conAbierta, bool conAjena = true)
+    {
+        var lista = (System.Collections.IList)Activator.CreateInstance(
+            typeof(List<>).MakeGenericType(tPlantilla))!;
+
+        // La AJENA va PRIMERA y encima marcada por defecto: es la trampa. Con 204 plantillas en el
+        // catálogo real, «la primera» o «la marcada» son plantillas concretas de servicios
+        // concretos, y una nota sale bien formada con la plantilla equivocada.
+        if (conAjena)
+            lista.Add(Activator.CreateInstance(tPlantilla, "inst-1", "Consulta inicial adulto",
+                "medicina_general", true)!);
+        if (conUrgencias)
+            lista.Add(Activator.CreateInstance(tPlantilla, "urg-1", "Atención general de urgencias",
+                "medicina_de_urgencias", true)!);
+        if (conAbierta)
+            lista.Add(Activator.CreateInstance(tPlantilla, "mia-9", "Nota abierta (Ü)",
+                "medicina_general", false)!);
+        return lista;
+    }
+
+    private static void LaPlantillaSaleDeUnaCadenaConOrden()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.ReglaDeLaPlantilla");
+        var elegir = t?.GetMethod("Elegir");
+        var tPlantilla = Capacidad("U.WindowsClient.Clinical.PlantillaClinica");
+        if (t == null || elegir == null || tPlantilla == null)
+        {
+            Pendiente("Clinical.ReglaDeLaPlantilla.Elegir", "440", "053");
+            return;
+        }
+
+        string? Id(object? p) => p == null ? null : (string?)tPlantilla.GetProperty("Id")!.GetValue(p);
+        string? Elige(System.Collections.IList catalogo, string? elegida, string? sugerida) =>
+            Id(elegir.Invoke(null, new object?[] { catalogo, elegida, sugerida }));
+
+        var completo = CatalogoDePrueba(tPlantilla, conUrgencias: true, conAbierta: true);
+
+        Debe(Elige(completo, null, null) == "urg-1",
+            "sin elegir nada y sin sugerida, manda la de URGENCIAS: es la de la casa. Y no la "
+            + "primera del catálogo, que además está marcada por defecto para probar justo eso");
+        Debe(Elige(completo, null, "mia-9") == "mia-9",
+            "su sugerida gana a la de urgencias: es una decisión suya de otro día, y sigue siendo suya");
+        Debe(Elige(completo, "inst-1", "mia-9") == "inst-1",
+            "y lo que eligió para ESTA consulta gana a todo: es lo único explícito de la cadena");
+
+        var sinUrgencias = CatalogoDePrueba(tPlantilla, conUrgencias: false, conAbierta: true);
+        Debe(Elige(sinUrgencias, null, null) == "mia-9",
+            "sin urgencias en el catálogo baja a la abierta, que es la que garantiza que grabar "
+            + "siempre pueda arrancar");
+
+        // LA MITAD QUE DE VERDAD PROTEGE: sin ningún eslabón, se contesta NULL y quien llama crea
+        // la abierta. Caer en «la primera» sería elegir por el médico sin decírselo.
+        var soloAjena = CatalogoDePrueba(tPlantilla, conUrgencias: false, conAbierta: false);
+        Debe(Elige(soloAjena, null, null) == null,
+            "y sin ninguno de los cuatro NO se coge una cualquiera: se contesta que no hay, y el "
+            + "que llama crea la abierta (promesa 94)");
+
+        Debe(Elige(completo, null, "borrada-hace-un-mes") == "urg-1",
+            "una sugerida que ya no está en el catálogo no rompe la cadena ni deja al médico sin "
+            + "plantilla: se baja al siguiente eslabón");
+
+        // VACÍO NO ES AUSENTE (patrón nº9): un id en blanco llegado de la red o del disco no puede
+        // casar con nada.
+        Debe(Elige(completo, "", "") == "urg-1",
+            "un id vacío no cuenta como elección: es la forma nº9 de fallar, y aquí significaría "
+            + "grabar con la primera plantilla cuyo id viniera también vacío");
+
+        var esUrgencias = t.GetMethod("EsDeUrgencias");
+        if (esUrgencias != null)
+        {
+            bool Urg(string e) => (bool)esUrgencias.Invoke(null, new object?[] { e })!;
+            Debe(Urg("urgencias") && Urg("medicina_de_urgencias") && Urg("Urgencias"),
+                "urgencias se reconoce en sus variantes: el backend normaliza a snake_case y el "
+                + "catálogo trae varias formas. Comparar contra una sola es la forma nº16 de fallar");
+            Debe(!Urg("pediatria") && !Urg(""),
+                "y lo que no es urgencias no lo es: sin esto, la comparación diría que sí siempre");
+        }
+    }
+
+    private static void LaSugeridaSeGuardaPorEspecialidad()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.SugeridaDelMedico");
+        var fila = t?.GetMethod("Fila");
+        var aplanar = t?.GetMethod("Aplanar");
+        if (t == null || fila == null || aplanar == null)
+        {
+            Pendiente("Clinical.SugeridaDelMedico.Fila", "441", "053");
+            return;
+        }
+
+        string cuerpo = (string)fila.Invoke(null, new object?[] { "Medicina de Urgencias", "urg-1" })!;
+
+        Debe(cuerpo.Contains("\"template_id\":\"urg-1\""),
+            "el pin dice QUÉ plantilla se fija");
+        Debe(cuerpo.Contains("\"specialty_code\":\"medicina_de_urgencias\""),
+            "y CON QUÉ ESPECIALIDAD: la clave primaria de la tabla es (user_id, specialty_code), "
+            + "así que sin ella el pin se guardaría en la fila equivocada y el portal no lo vería");
+
+        // La normalización tiene que ser la del portal (normalizeSpecialtyCode). Si aquí se guardara
+        // con otra forma, el pin puesto en Windows sería invisible en el navegador y al revés: es
+        // exactamente la forma nº16 de fallar, y no daría ningún error.
+        string Plano(string x) => (string)aplanar.Invoke(null, new object?[] { x })!;
+        Debe(Plano("Medicina de Urgencias") == "medicina_de_urgencias"
+             && Plano("Pediatría") == "pediatria",
+            $"la especialidad se aplana como en el portal (dio «{Plano("Medicina de Urgencias")}» "
+            + $"y «{Plano("Pediatría")}»)");
+
+        Debe(!cuerpo.Contains("user_id"),
+            "y el user_id NO viaja: la columna es «default auth.uid()» y la RLS lo exige. Mandarlo "
+            + "desde el cliente sería dejar que el cliente diga de quién es la preferencia");
+    }
+
+    /// <summary>Una nota con una sección VACÍA, que es donde está la trampa. Promesa 442.</summary>
+    private static U.WindowsClient.Clinical.NotaClinica NotaConUnaVacia() =>
+        new("resumen", new[]
+        {
+            new U.WindowsClient.Clinical.SeccionDeNota("motivo_consulta", "Motivo de consulta", "cefalea de tres días"),
+            new U.WindowsClient.Clinical.SeccionDeNota("hallazgos", "Hallazgos y datos objetivos", ""),
+            new U.WindowsClient.Clinical.SeccionDeNota("plan", "Plan y recomendaciones", "control en 48 horas"),
+        }, Array.Empty<string>(), Array.Empty<string>());
+
+    private static void CorregirMandaLaNotaEntera()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.ClinicaClient");
+        var cuerpoDe = t?.GetMethod("CuerpoDeNotaEditada");
+        if (t == null || cuerpoDe == null)
+        {
+            Pendiente("ClinicaClient.CuerpoDeNotaEditada", "442", "053");
+            return;
+        }
+
+        var nota = NotaConUnaVacia();
+        string json = (string)cuerpoDe.Invoke(null, new object?[] { nota })!;
+
+        // LA PROMESA ENTERA. El backend exige las claves EXACTAS del snapshot (una de menos → 400
+        // NOTE_JSON_INVALID), y la pantalla pinta solo las secciones CON texto. Componer el cuerpo
+        // con lo que se ve mandaría dos claves de tres.
+        Debe(json.Contains("motivo_consulta") && json.Contains("plan"),
+            "las secciones con texto viajan");
+        Debe(json.Contains("hallazgos"),
+            "y la que quedó VACÍA también: es la clave que la pantalla no pinta, y sin ella el "
+            + "backend contesta 400 — o, peor, la sección desaparecería de la historia clínica sin "
+            + "dejar hueco");
+
+        // Se comprueba sobre lo que de verdad se manda, no sobre el número de secciones del objeto:
+        // el bug vive en la traducción a JSON, que es donde se pierde lo que no se pintó.
+        int claves = json.Split("\"key\"").Length - 1;
+        Debe(claves == 3, $"van las TRES claves del snapshot, no las dos que se ven (fueron {claves})");
+
+        Debe(json.Contains("note_json") && json.Contains("\"content\""),
+            "con la forma del contrato: note_json y «content», no «texto» ni «value»");
+        Debe(!json.Contains("\"label\""),
+            "y sin label: el backend lo restaura del snapshot, y mandarlo sería dejar que corregir "
+            + "una falta de ortografía redefina la plantilla");
+    }
+
+    private static void LaNotaFirmadaNoSeEdita()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.ReglaDeLaEdicion");
+        var sePuede = t?.GetMethod("SePuedeEditar");
+        if (t == null || sePuede == null)
+        {
+            Pendiente("Clinical.ReglaDeLaEdicion.SePuedeEditar", "443", "053");
+            return;
+        }
+
+        bool Puede(string estado) => (bool)sePuede.Invoke(null, new object?[] { estado })!;
+
+        Debe(Puede("borrador") && Puede("revisada"),
+            "una nota en borrador o revisada se corrige: es justo para lo que existe el editor");
+        Debe(Puede(""),
+            "y la recién generada también, que todavía no ha llegado a la lista del portal");
+
+        // LO QUE PROTEGE. Una firmada cambiada por PUT /note sí pasaría por Graph, y el espejo lo
+        // pararía el trigger CONSULTATION_IMMUTABLE: la misma consulta quedaría distinta según por
+        // dónde se mire, sin un error a la vista. Aprendizaje nº10.
+        Debe(!Puede("aprobada"),
+            "una nota FIRMADA no: es un documento clínico-legal, y su corrección va por adenda");
+        Debe(!Puede("exportada"),
+            "y una ya exportada a la historia clínica, tampoco");
+
+        // LISTA BLANCA Y NO NEGRA: con una lista negra, un estado que el portal añadiera mañana
+        // nacería editable en Windows sin que nadie lo hubiera decidido.
+        Debe(!Puede("un_estado_que_no_existe_todavia"),
+            "un estado que esta app no conoce nace BLOQUEADO, no editable: lo contrario sería "
+            + "decidir por el portal sobre una fila que no entendemos");
+    }
+
+    private static void CorregirNoDegradaLaConsulta()
+    {
+        var t = Capacidad("U.WindowsClient.Clinical.EspejoDeConsulta");
+        var correccion = t?.GetMethod("FilaDeCorreccion");
+        var alta = t?.GetMethod("Fila");
+        if (t == null || correccion == null || alta == null)
+        {
+            Pendiente("EspejoDeConsulta.FilaDeCorreccion", "444", "053");
+            return;
+        }
+
+        var nota = NotaConUnaVacia();
+        string fila = (string)correccion.Invoke(null, new object?[] { "enc-1", nota })!;
+
+        // Se busca un trozo SIN TILDES a propósito: Utf8JsonWriter escapa los no-ASCII («días» sale
+        // como «d\u00EDas»), así que una promesa que buscara la palabra acentuada saldría roja por
+        // cómo se escribe el JSON y no por lo que promete — un juez que falla por su propio arnés
+        // manda la investigación al sitio equivocado (aprendizaje nº17).
+        Debe(fila.Contains("\"id\":\"enc-1\"") && fila.Contains("cefalea de tres"),
+            "la corrección lleva a QUÉ fila va y el texto nuevo");
+
+        // EL CORAZÓN DE LA PROMESA. El upsert es merge-duplicates —un UPDATE cuando la fila ya
+        // está— y PostgREST escribe solo las columnas del cuerpo. Mandar «estado: borrador» y
+        // «firma: null» al corregir devolvería a borrador una consulta revisada, y contra una
+        // firmada reventaría el trigger dejando el backend y el portal diciendo cosas distintas.
+        Debe(!fila.Contains("\"estado\""),
+            "y NO manda estado: corregir no puede devolver a borrador una consulta que el portal ya "
+            + "avanzó a revisada");
+        Debe(!fila.Contains("\"firma\""),
+            "ni firma: corregir no puede borrar la firma de nadie");
+        Debe(!fila.Contains("\"plantilla\"") && !fila.Contains("\"fecha\"")
+             && !fila.Contains("\"especialidad\""),
+            "ni plantilla, fecha o especialidad, que aquí no se conocen: mandarlas a medias las "
+            + "sobrescribiría con lo que hubiera a mano (aprendizaje nº4)");
+
+        // Y EL ALTA SIGUE SIENDO EL ALTA: arreglar la corrección rompiendo el alta dejaría cada
+        // consulta nueva fuera del ciclo de revisión del portal.
+        string nace = (string)alta.Invoke(null, new object?[]
+            { "enc-2", nota, "lo dicho", "Nota abierta (Ü)", "medicina_general", DateTimeOffset.UnixEpoch })!;
+        Debe(nace.Contains("\"estado\":\"borrador\""),
+            "una consulta NUEVA sí nace borrador: es lo que la mete en el ciclo de revisión y firma");
     }
 
     // ── LA CONSULTA CLÍNICA (spec 004): el arnés ─────────────────────────────
@@ -11760,6 +12045,8 @@ internal static class Contrato
 
     private static void Prueba(string nombre, Action cuerpo)
     {
+        if (!SeJuzga(nombre)) return;
+        _juzgadas++;
         // Cada promesa se juzga sobre un mapa recién nacido en su propio directorio.
         string dir = Path.Combine(_raiz, nombre.Split('.')[0]);
         Directory.CreateDirectory(dir);

@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using U.WindowsClient.Cuenta;
@@ -67,7 +67,12 @@ public sealed class ClinicaClient
                     Nombre: Texto(t, "name"),
                     Especialidad: Texto(t, "specialty"),
                     EsLaPorDefecto: t.TryGetProperty("is_default", out var d)
-                                    && d.ValueKind == JsonValueKind.True));
+                                    && d.ValueKind == JsonValueKind.True)
+                {
+                    // `personal` la creó el médico; `institutional` la puso la institución. Solo
+                    // sirve para agrupar el selector — quién puede usar qué lo decide el backend.
+                    Ambito = Texto(t, "scope"),
+                });
             }
         }
         LogBus.Log("clinica", $"{lista.Count} plantilla(s)");
@@ -139,6 +144,70 @@ public sealed class ClinicaClient
         LogBus.Log("clinica", $"nota generada · {nota.Secciones.Count} sección(es) · "
                             + $"{nota.Avisos.Count} aviso(s)");
         return nota;
+    }
+
+    /// <summary>
+    /// EL CUERPO DE `PUT /note`, sin red. Promesa 442 (spec 053).
+    /// </summary>
+    /// <remarks>
+    /// VAN TODAS LAS SECCIONES, INCLUIDAS LAS VACÍAS, y esto es la promesa entera. El contrato del
+    /// backend lo dice con estas palabras: *«Valida estructura estricta: exactamente las keys del
+    /// snapshot (extra o faltante → 400 NOTE_JSON_INVALID)»*.
+    ///
+    /// Y LA TRAMPA ESTÁ EN LA PANTALLA, no aquí: la ventana pinta solo las secciones CON texto
+    /// —«una casilla vacía no es información»— y la plantilla abierta deja en blanco a propósito lo
+    /// que no se dijo. Componer el cuerpo con lo que se ve mandaría menos claves de las que hay. El
+    /// fallo bueno es el 400; el malo sería que colara y las secciones no pintadas desaparecieran de
+    /// la historia clínica sin dejar hueco.
+    ///
+    /// POR ESO SE COMPONE DESDE LA NOTA COMPLETA y no desde una lista de lo editado: quien llama
+    /// pasa la <see cref="NotaClinica"/> entera con UNA sección cambiada, no las que cambió.
+    ///
+    /// `label` y el orden NO se mandan: el backend los restaura desde el snapshot. Mandarlos sería
+    /// dejar que el cliente redefina la plantilla al corregir una falta de ortografía.
+    /// </remarks>
+    public static string CuerpoDeNotaEditada(NotaClinica nota)
+    {
+        var buffer = new System.IO.MemoryStream();
+        using (var w = new Utf8JsonWriter(buffer))
+        {
+            w.WriteStartObject();
+            w.WriteStartObject("note_json");
+            w.WriteString("summary", nota.Resumen);
+
+            w.WriteStartArray("sections");
+            foreach (var s in nota.Secciones)
+            {
+                w.WriteStartObject();
+                w.WriteString("key", s.Clave);
+                // `content` y nunca text/body: lo dice el contrato con esa palabra.
+                w.WriteString("content", s.Contenido);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+
+            w.WriteStartArray("warnings");
+            foreach (string a in nota.Avisos) w.WriteStringValue(a);
+            w.WriteEndArray();
+
+            w.WriteEndObject();
+            w.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// Guarda la nota corregida por el médico. No llama al LLM y deja el encounter en `completed`.
+    /// </summary>
+    public async Task<NotaClinica> GuardarNotaEditadaAsync(string encounterId, NotaClinica nota,
+        CancellationToken ct = default)
+    {
+        var raiz = await PedirAsync(HttpMethod.Put,
+            $"/api/clinical/encounters/{Uri.EscapeDataString(encounterId)}/note",
+            CuerpoDeNotaEditada(nota), ct);
+        var guardada = NotaClinica.Leer(raiz.TryGetProperty("note_json", out var n) ? n : default);
+        LogBus.Log("clinica", $"nota corregida guardada · {guardada.Secciones.Count} sección(es)");
+        return guardada;
     }
 
     /// <summary>La consulta entera, con transcripción y nota si las tiene.</summary>
@@ -235,7 +304,24 @@ public sealed class ClinicaClient
 
 // ── los modelos del contrato, solo lo que esta app usa ───────────────────────
 
-public sealed record PlantillaClinica(string Id, string Nombre, string Especialidad, bool EsLaPorDefecto);
+public sealed record PlantillaClinica(string Id, string Nombre, string Especialidad, bool EsLaPorDefecto)
+{
+    /// <summary>
+    /// `personal` si la creó el médico, `institutional` si la puso la institución. Vacío si el
+    /// backend no lo dijo.
+    /// </summary>
+    /// <remarks>
+    /// PROPIEDAD Y NO PARÁMETRO POSICIONAL, a propósito: el contrato construye este record por
+    /// reflexión con cuatro argumentos (promesa 94, `Contrato.cs`), y añadir un quinto al
+    /// constructor habría puesto esa promesa en rojo por una razón que no tiene nada que ver con
+    /// lo que promete. Un arnés que se rompe al crecer el modelo manda la investigación al sitio
+    /// equivocado (aprendizaje nº17).
+    /// </remarks>
+    public string Ambito { get; init; } = "";
+
+    /// <summary>La creó el médico, no la institución.</summary>
+    public bool EsMia => Ambito.Equals("personal", StringComparison.OrdinalIgnoreCase);
+}
 
 public sealed record SeccionDeNota(string Clave, string Titulo, string Contenido);
 
@@ -249,6 +335,33 @@ public sealed record NotaClinica(
     IReadOnlyList<string> Avisos,
     IReadOnlyList<string> SeccionesQueFaltan)
 {
+    /// <summary>
+    /// La misma nota con UNA sección cambiada. Las demás siguen enteras, vacías incluidas.
+    /// </summary>
+    /// <remarks>
+    /// DEVUELVE UNA NOTA NUEVA en vez de mutar la lista, y no es purismo: la nota que se está
+    /// corrigiendo es la misma que alimenta el ✓ a SAP y el espejo. Mutarla dejaría a esos dos
+    /// leyendo un texto a medio guardar si el `PUT` fallara — y entonces lo que viajara a la
+    /// historia clínica no sería ni lo viejo ni lo guardado.
+    ///
+    /// UNA CLAVE QUE NO ESTÁ NO SE AÑADE: sería una sección de más y el backend contesta
+    /// `400 NOTE_JSON_INVALID`. Se devuelve la nota igual, y quien llame verá que no cambió nada.
+    /// </remarks>
+    public NotaClinica ConSeccion(string clave, string contenido)
+    {
+        var cambiadas = new List<SeccionDeNota>(Secciones.Count);
+        foreach (var s in Secciones)
+        {
+            cambiadas.Add(string.Equals(s.Clave, clave, StringComparison.Ordinal)
+                ? s with { Contenido = contenido ?? "" }
+                : s);
+        }
+        return this with { Secciones = cambiadas };
+    }
+
+    /// <summary>La misma nota con otro resumen. Viaja en `note_json.summary`, como las secciones.</summary>
+    public NotaClinica ConResumen(string resumen) => this with { Resumen = resumen ?? "" };
+
     public static NotaClinica Leer(JsonElement n)
     {
         if (n.ValueKind != JsonValueKind.Object)
