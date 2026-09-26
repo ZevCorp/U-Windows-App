@@ -1,6 +1,7 @@
 ﻿using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using U.WindowsClient.Cuenta;
 using U.WindowsClient.Diagnostics;
 
@@ -72,6 +73,7 @@ public sealed class ClinicaClient
                     // `personal` la creó el médico; `institutional` la puso la institución. Solo
                     // sirve para agrupar el selector — quién puede usar qué lo decide el backend.
                     Ambito = Texto(t, "scope"),
+                    Estado = Texto(t, "status"),
                 });
             }
         }
@@ -168,6 +170,18 @@ public sealed class ClinicaClient
     /// </remarks>
     public static string CuerpoDeNotaEditada(NotaClinica nota)
     {
+        // SOBRE LA NOTA COMO LLEGÓ, cuando se tiene (promesa 461, spec 055). El cuerpo de abajo solo
+        // sabía de resumen, secciones y avisos, y se dejaba el CIERRE —plan, medicamentos,
+        // recomendaciones, signos de alarma— y la confianza y la evidencia de cada sección. Si el
+        // backend reemplaza `note_json` con lo que recibe, corregir una coma desde Windows borraba el
+        // plan que la web enseña en «Plan y egreso». La web manda la nota entera; ahora Windows también,
+        // y solo cambia lo que el médico corrigió.
+        if (nota.Crudo.ValueKind == JsonValueKind.Object)
+        {
+            var envuelta = new JsonObject { ["note_json"] = nota.ComoNodo() };
+            return envuelta.ToJsonString(NotaClinica.Escritura);
+        }
+
         var buffer = new System.IO.MemoryStream();
         using (var w = new Utf8JsonWriter(buffer))
         {
@@ -210,6 +224,30 @@ public sealed class ClinicaClient
         return guardada;
     }
 
+    /// <summary>
+    /// Pide al asistente un ajuste de la nota (spec 055, promesas 453-454). Devuelve la respuesta tal
+    /// cual: la PROPUESTA no se guarda sola — la aplica <see cref="AjusteDeLaNota.Aplicar"/> sobre lo que
+    /// se ve y la guarda el médico con un gesto. Es la regla de la web (`adjustNoteWithAssistant`).
+    /// </summary>
+    /// <param name="tipo">«rewrite» (reorganiza sin datos nuevos) o «dictation» (el médico es la fuente).</param>
+    public async Task<JsonElement> AjustarNotaAsync(string encounterId, string instruccion, string? seccion,
+        string tipo, CancellationToken ct = default)
+    {
+        var raiz = await PedirAsync(HttpMethod.Post, "/api/clinical/assistant/note-adjustment",
+            AjusteDeLaNota.Cuerpo(encounterId, instruccion, seccion, tipo), ct);
+        LogBus.Log("clinica", $"ajuste de nota · {tipo} · {(seccion is { Length: > 0 } ? "una sección" : "la nota")}");
+        return raiz;
+    }
+
+    /// <summary>Asocia (o retira, con null) el paciente del encounter. Promesa 464.</summary>
+    public async Task AsociarPacienteAsync(string encounterId, string? pacienteId, CancellationToken ct = default)
+    {
+        var cuerpo = new JsonObject { ["patient_id"] = pacienteId };
+        await PedirAsync(HttpMethod.Patch,
+            $"/api/clinical/encounters/{Uri.EscapeDataString(encounterId)}/patient", cuerpo.ToJsonString(), ct);
+        LogBus.Log("clinica", pacienteId == null ? "paciente retirado del encounter" : "paciente asociado al encounter");
+    }
+
     /// <summary>La consulta entera, con transcripción y nota si las tiene.</summary>
     public async Task<EncounterClinico> LeerEncounterAsync(string encounterId,
         CancellationToken ct = default)
@@ -222,7 +260,13 @@ public sealed class ClinicaClient
             Estado: Texto(e, "status"),
             Transcripcion: Texto(e, "transcript"),
             Nota: e.TryGetProperty("note_json", out var n) && n.ValueKind == JsonValueKind.Object
-                ? NotaClinica.Leer(n) : null);
+                ? NotaClinica.Leer(n) : null)
+        {
+            // La plantilla congelada: de ahí salen las secciones obligatorias que juzgan los avisos.
+            PlantillaCongelada = e.TryGetProperty("template_snapshot", out var p) && p.ValueKind == JsonValueKind.Object
+                ? p.Clone() : default,
+            PacienteId = Texto(e, "patient_id"),
+        };
     }
 
     // ── el camino ────────────────────────────────────────────────────────────
@@ -321,6 +365,12 @@ public sealed record PlantillaClinica(string Id, string Nombre, string Especiali
 
     /// <summary>La creó el médico, no la institución.</summary>
     public bool EsMia => Ambito.Equals("personal", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// `active` o `archived`. Una archivada no se elige nunca: la web la salta (spec 055, promesa 458).
+    /// Propiedad y no parámetro por la misma razón que <see cref="Ambito"/>.
+    /// </summary>
+    public string Estado { get; init; } = "";
 }
 
 public sealed record SeccionDeNota(string Clave, string Titulo, string Contenido);
@@ -356,11 +406,76 @@ public sealed record NotaClinica(
                 ? s with { Contenido = contenido ?? "" }
                 : s);
         }
-        return this with { Secciones = cambiadas };
+        var nueva = this with { Secciones = cambiadas };
+        return nueva with { Crudo = nueva.CrudoAlDia() };
     }
 
     /// <summary>La misma nota con otro resumen. Viaja en `note_json.summary`, como las secciones.</summary>
-    public NotaClinica ConResumen(string resumen) => this with { Resumen = resumen ?? "" };
+    public NotaClinica ConResumen(string resumen)
+    {
+        var nueva = this with { Resumen = resumen ?? "" };
+        return nueva with { Crudo = nueva.CrudoAlDia() };
+    }
+
+    /// <summary>
+    /// LA NOTA TAL COMO LLEGÓ del backend, con todo lo que Windows no pinta: el cierre (plan,
+    /// medicamentos, recomendaciones, signos de alarma), la confianza y la evidencia de cada sección,
+    /// y cualquier campo que el backend añada mañana. Promesa 461 (spec 055).
+    /// </summary>
+    /// <remarks>
+    /// EXISTE PORQUE CORREGIR BORRABA. El cuerpo del `PUT` se componía solo con lo que este record
+    /// sabe —resumen, secciones, avisos—, así que una corrección desde Windows mandaba una nota sin
+    /// cierre. Guardar el original y cambiar en él SOLO lo corregido es la única forma de no destruir
+    /// lo que no se entiende: no es de Windows decidir qué sobra de una historia clínica.
+    ///
+    /// <c>default</c> (sin valor) en las notas construidas a mano: entonces el cuerpo se compone como
+    /// antes. Lo usan también los avisos (<see cref="RevisionDeLaNota"/>), que miran el cierre.
+    /// </remarks>
+    public JsonElement Crudo { get; init; }
+
+    /// <summary>
+    /// Cómo se escribe la nota al mandarla: con las tildes tal cual. El escapado por defecto de .NET
+    /// convierte «Acetaminofén» en «Acetaminof\u00E9n» — es el mismo JSON, pero es otro texto, y una
+    /// nota clínica que viaja no tiene por qué cambiar de forma por el camino.
+    /// </summary>
+    public static readonly JsonSerializerOptions Escritura = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>El crudo con el resumen y los textos de ESTE record. Si no hay crudo, nada.</summary>
+    private JsonElement CrudoAlDia()
+    {
+        if (Crudo.ValueKind != JsonValueKind.Object) return default;
+        using var doc = JsonDocument.Parse(ComoNodo().ToJsonString(Escritura));
+        return doc.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// La nota como nodo JSON: el crudo con el resumen y el contenido de cada sección tomados de este
+    /// record (que es lo que el médico ve y corrige). Lo demás, intacto.
+    /// </summary>
+    public JsonObject ComoNodo()
+    {
+        var nodo = (Crudo.ValueKind == JsonValueKind.Object
+            ? JsonNode.Parse(Crudo.GetRawText()) as JsonObject : null) ?? new JsonObject();
+        nodo["summary"] = Resumen;
+        var porClave = Secciones.ToDictionary(s => s.Clave, s => s.Contenido, StringComparer.Ordinal);
+        if (nodo["sections"] is JsonArray secciones)
+        {
+            foreach (var s in secciones.OfType<JsonObject>())
+            {
+                string clave = s["key"]?.GetValue<string>() ?? "";
+                if (porClave.TryGetValue(clave, out var contenido)) s["content"] = contenido;
+            }
+        }
+        else
+        {
+            nodo["sections"] = new JsonArray(Secciones.Select(s =>
+                (JsonNode)new JsonObject { ["key"] = s.Clave, ["label"] = s.Titulo, ["content"] = s.Contenido }).ToArray());
+        }
+        return nodo;
+    }
 
     public static NotaClinica Leer(JsonElement n)
     {
@@ -382,7 +497,7 @@ public sealed record NotaClinica(
         }
 
         return new NotaClinica(Str(n, "summary"), secciones,
-            Lista(n, "warnings"), Lista(n, "missing_required_sections"));
+            Lista(n, "warnings"), Lista(n, "missing_required_sections")) { Crudo = n.Clone() };
     }
 
     private static string Str(JsonElement o, string campo) =>
@@ -400,4 +515,11 @@ public sealed record NotaClinica(
     }
 }
 
-public sealed record EncounterClinico(string Id, string Estado, string Transcripcion, NotaClinica? Nota);
+public sealed record EncounterClinico(string Id, string Estado, string Transcripcion, NotaClinica? Nota)
+{
+    /// <summary>El `template_snapshot`: la plantilla congelada al crear el encounter. Sin valor si no vino.</summary>
+    public JsonElement PlantillaCongelada { get; init; }
+
+    /// <summary>El paciente asociado, o vacío.</summary>
+    public string PacienteId { get; init; } = "";
+}

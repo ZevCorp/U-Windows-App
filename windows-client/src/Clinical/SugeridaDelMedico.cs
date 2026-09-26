@@ -48,17 +48,10 @@ public static class SugeridaDelMedico
     /// <c>normalizeSpecialtyCode</c> del portal: si aquí se guardara con otra forma, el pin puesto
     /// en Windows sería invisible desde el navegador y al revés (forma nº16 de fallar).
     /// </summary>
-    public static string Aplanar(string? especialidad)
-    {
-        string plano = Navigation.Nombres.Aplanar(especialidad ?? "").Trim();
-        var sb = new StringBuilder(plano.Length);
-        foreach (char c in plano)
-        {
-            if (char.IsLetterOrDigit(c)) sb.Append(c);
-            else if (sb.Length > 0 && sb[^1] != '_') sb.Append('_');
-        }
-        return sb.ToString().Trim('_');
-    }
+    public static string Aplanar(string? especialidad) =>
+        // UN SOLO SITIO que aplana la especialidad (aprendizaje nº16): el mismo que usa la cadena de
+        // la plantilla predeterminada, que es el puerto exacto de `normalizeSpecialtyCode` de la web.
+        PlantillaPredeterminada.NormalizarEspecialidad(especialidad);
 
     /// <summary>La plantilla fijada para esa especialidad, o vacío si no hay ninguna.</summary>
     public static async Task<string> LeerAsync(SesionMiracle sesion, HttpClient http,

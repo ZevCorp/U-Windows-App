@@ -397,6 +397,36 @@ public sealed class SesionMiracle
     /// Guarda el nombre del médico en su perfil. Es el único camino de ESCRITURA de esta clase —
     /// todo lo demás lee.
     /// </summary>
+    /// <summary>
+    /// UNA LLAMADA A LA BASE DEL PORTAL (PostgREST) con la clave pública y el token del médico, por el
+    /// mismo transporte que la sesión. Devuelve el código HTTP y el cuerpo; 401 sin pedir nada si no
+    /// hay médico dentro.
+    /// </summary>
+    /// <remarks>
+    /// UN SOLO CAMINO, y es lo que lo hace juzgable (spec 055: atajos, preferencias, pacientes). Hasta
+    /// hoy cada lectura de Supabase se armaba a mano contra <c>Nube</c> y un <c>HttpClient</c> propio,
+    /// y el contrato no podía ver qué se pedía. Por aquí pasa por el transporte que se le inyectó a la
+    /// sesión, así que una prueba ve cada petición y sus cabeceras.
+    ///
+    /// NUNCA SE MANDA EL <c>user_id</c>: lo pone la RLS con <c>auth.uid()</c>. Mandarlo sería dejar que
+    /// el cliente diga de quién son los datos — la misma frontera que ya respetan el espejo y el pin.
+    /// </remarks>
+    public async Task<(int Http, string Cuerpo)> RestAsync(HttpMethod metodo, string ruta,
+        string? cuerpo = null, string? prefer = null, CancellationToken ct = default)
+    {
+        string token = await TokenVigenteAsync(ct);
+        if (token.Length == 0) return (401, "");
+
+        using var req = new HttpRequestMessage(metodo, _urlSupabase + ruta);
+        req.Headers.Add("apikey", _clavePublicable);
+        req.Headers.Add("Authorization", $"Bearer {token}");
+        if (prefer != null) req.Headers.Add("Prefer", prefer);
+        if (cuerpo != null) req.Content = new StringContent(cuerpo, Encoding.UTF8, "application/json");
+
+        using var res = await _http.SendAsync(req, ct);
+        return ((int)res.StatusCode, await res.Content.ReadAsStringAsync(ct));
+    }
+
     /// <remarks>
     /// SE LEE EL PERFIL ACTUAL ANTES DE GUARDAR, y no por prudencia: la RPC
     /// <c>update_own_profile</c> reescribe los siete campos a la vez sin <c>COALESCE</c> con lo que

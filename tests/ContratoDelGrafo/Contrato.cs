@@ -5391,7 +5391,9 @@ internal static class Contrato
             string cuerpo = (string)cuerpoDe.Invoke(null, new object?[] { corregida })!;
             using var enviado = JsonDocument.Parse(cuerpo);
             var nj = enviado.RootElement.GetProperty("note_json");
-            Debe(nj.TryGetProperty("discharge", out var d) && d.GetRawText() == doc.RootElement.GetProperty("discharge").GetRawText(),
+            Debe(nj.TryGetProperty("discharge", out var d)
+                 && System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(d.GetRawText()),
+                        System.Text.Json.Nodes.JsonNode.Parse(doc.RootElement.GetProperty("discharge").GetRawText())),
                 $"al corregir {nombre}, el cierre (plan, medicamentos, recomendaciones, alarma) viaja idéntico: si no, se borra de la historia clínica");
             Debe(nj.TryGetProperty("extra_que_windows_no_conoce", out _),
                 $"al corregir {nombre}, lo que Windows no entiende también viaja: no es suyo borrarlo");
@@ -5460,8 +5462,11 @@ internal static class Contrato
         Debe(r != null && r.StartsWith("/rest/v1/patients?select="), $"se busca en patients (fue «{r}»)");
         if (r != null)
         {
-            string or = r[(r.IndexOf("or=(", StringComparison.Ordinal) + 4)..];
-            or = or[..or.IndexOf(')')];
+            // DECODIFICADO, como lo lee PostgREST: una coma escapada (%2C) vuelve a ser coma antes de
+            // que se parta la condición, así que mirar el texto sin decodificar no probaba nada.
+            string decodificada = Uri.UnescapeDataString(r);
+            string or = decodificada[(decodificada.IndexOf("or=(", StringComparison.Ordinal) + 4)..];
+            or = or[..or.LastIndexOf(')')];
             Debe(or.Split(',').Length == 2 && or.Contains("nombre.ilike.") && or.Contains("documento.ilike."),
                 $"por nombre O documento, y lo escrito no añade condiciones: las comas y paréntesis del médico no llegan crudos a la consulta (fue «{or}»)");
         }

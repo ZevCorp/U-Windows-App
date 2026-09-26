@@ -211,38 +211,67 @@ public static class EspejoDeConsulta
     public static async Task<IReadOnlyList<ConsultaVista>> UltimasAsync(SesionMiracle sesion,
         HttpClient http, int cuantas = 25, CancellationToken ct = default)
     {
-        string token = await sesion.TokenVigenteAsync(ct);
-        if (token.Length == 0) return Array.Empty<ConsultaVista>();
-
-        using var req = new HttpRequestMessage(HttpMethod.Get,
-            $"{Nube.SupabaseUrl}/rest/v1/consultations"
-            + $"?select=id,fecha,motivo,estado,resumen,plantilla&order=fecha.desc&limit={cuantas}");
-        req.Headers.Add("apikey", Nube.ClavePublicable);
-        req.Headers.Add("Authorization", $"Bearer {token}");
-
-        using var res = await http.SendAsync(req, ct);
-        string cuerpo = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
+        // Por el camino de la sesión (spec 055): el mismo transporte, la clave y el token del médico.
+        // `http` se queda en la firma por quien llama; el que manda es el de la sesión.
+        var (codigo, cuerpo) = await sesion.RestAsync(HttpMethod.Get, $"{RutaDeLaLista}&limit={cuantas}", ct: ct);
+        if (codigo == 401) return Array.Empty<ConsultaVista>();
+        if (codigo is < 200 or >= 300)
         {
-            LogBus.Log("espejo", $"no se pudieron leer las consultas · HTTP {(int)res.StatusCode}");
+            LogBus.Log("espejo", $"no se pudieron leer las consultas · HTTP {codigo}");
             return Array.Empty<ConsultaVista>();
         }
 
-        var lista = new List<ConsultaVista>();
         using var doc = JsonDocument.Parse(cuerpo);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return lista;
-        foreach (var c in doc.RootElement.EnumerateArray())
-        {
-            lista.Add(new ConsultaVista(
-                Id: Str(c, "id"),
-                Fecha: DateTimeOffset.TryParse(Str(c, "fecha"), out var f) ? f : DateTimeOffset.MinValue,
-                Motivo: Str(c, "motivo"),
-                Estado: Str(c, "estado"),
-                Resumen: Str(c, "resumen"),
-                Plantilla: Str(c, "plantilla")));
-        }
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<ConsultaVista>();
+        var lista = doc.RootElement.EnumerateArray().Select(Vista).ToList();
         LogBus.Log("espejo", $"{lista.Count} consulta(s) anteriores");
         return lista;
+    }
+
+    /// <summary>
+    /// Lo que pide la lista: con DE QUIÉN es cada consulta (promesa 465, spec 055). El médico busca a
+    /// su paciente, no un motivo; el portal lo enseña primero y Windows también. `paciente_nombre` lo
+    /// llena un trigger de la base desde la nota; `patients(nombre)` es el del paciente asociado.
+    /// </summary>
+    public const string RutaDeLaLista =
+        "/rest/v1/consultations?select=id,fecha,motivo,estado,resumen,plantilla,paciente_nombre,paciente_documento,patients(nombre,documento)"
+        + "&order=fecha.desc";
+
+    /// <summary>Una fila de `consultations` como se pinta en la lista.</summary>
+    public static ConsultaVista Vista(JsonElement c)
+    {
+        var asociado = c.TryGetProperty("patients", out var p) && p.ValueKind == JsonValueKind.Object ? p : default;
+        string nombre = Str(asociado, "nombre") is { Length: > 0 } n ? n : Str(c, "paciente_nombre");
+        string documento = Str(asociado, "documento") is { Length: > 0 } d ? d : Str(c, "paciente_documento");
+        return new ConsultaVista(
+            Id: Str(c, "id"),
+            Fecha: DateTimeOffset.TryParse(Str(c, "fecha"), out var f) ? f : DateTimeOffset.MinValue,
+            Motivo: Str(c, "motivo"),
+            Estado: Str(c, "estado"),
+            Resumen: Str(c, "resumen"),
+            Plantilla: Str(c, "plantilla"))
+        { Paciente = nombre.Trim(), Documento = documento.Trim() };
+    }
+
+    /// <summary>
+    /// La fila entera de una consulta —estado, resumen y nota del portal— para abrirla (promesa 462).
+    /// </summary>
+    public static async Task<JsonElement> LeerFilaAsync(SesionMiracle sesion, string id, CancellationToken ct = default)
+    {
+        try
+        {
+            var (codigo, cuerpo) = await sesion.RestAsync(HttpMethod.Get,
+                $"/rest/v1/consultations?select=id,estado,resumen,note,patient_id&id=eq.{Uri.EscapeDataString(id)}", ct: ct);
+            if (codigo is < 200 or >= 300) return default;
+            using var doc = JsonDocument.Parse(cuerpo);
+            return doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0
+                ? doc.RootElement[0].Clone() : default;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("espejo", $"no se pudo leer la consulta del portal: {e.GetType().Name}: {e.Message}");
+            return default;
+        }
     }
 
     /// <summary>Motivo de consulta: de la sección «motivo…» si existe, si no del resumen.</summary>
@@ -269,4 +298,11 @@ public static class EspejoDeConsulta
 
 /// <summary>Una consulta anterior, con lo justo para pintarla en una lista.</summary>
 public sealed record ConsultaVista(
-    string Id, DateTimeOffset Fecha, string Motivo, string Estado, string Resumen, string Plantilla);
+    string Id, DateTimeOffset Fecha, string Motivo, string Estado, string Resumen, string Plantilla)
+{
+    /// <summary>De quién es: el nombre del paciente, o vacío si la consulta no lo dice.</summary>
+    public string Paciente { get; init; } = "";
+
+    /// <summary>Su documento, o vacío.</summary>
+    public string Documento { get; init; } = "";
+}
