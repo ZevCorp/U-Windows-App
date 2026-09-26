@@ -257,7 +257,8 @@ public static class Estudio
     /// Un nombre que no está en el catálogo es un error de programación y se dice por su nombre,
     /// no se pinta un hueco.
     /// </remarks>
-    public static FrameworkElement Icono(string nombre, double tamano, Brush color, double grosor = 2)
+    public static FrameworkElement Icono(string nombre, double tamano, Brush color, double grosor = 2,
+                                         Brush? relleno = null)
     {
         if (!_geometrias.TryGetValue(nombre, out var geometria))
         {
@@ -271,6 +272,7 @@ public static class Estudio
         {
             Data = geometria,
             Stroke = color,
+            Fill = relleno,
             StrokeThickness = grosor,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
@@ -295,6 +297,284 @@ public static class Estudio
         if (icono is Viewbox { Child: Canvas lienzo })
             foreach (var hijo in lienzo.Children)
                 if (hijo is System.Windows.Shapes.Path p) p.Stroke = color;
+    }
+
+    // ── piezas de Miracle (spec 054) ─────────────────────────────────────────
+    //
+    // Los botones de la web (`.clinical-primary`, `-secondary`, `-tertiary`, `.icon-btn`) con el
+    // relieve de U: la web los separa con un filete y un brillo; U, con la sombra que sube al pasar
+    // el ratón. Se llevan las dos cosas.
+
+    /// <summary>Un icono y un texto en fila, como el contenido de los botones de la web.</summary>
+    public static StackPanel ConIcono(string? icono, string texto, Brush tinta, double tamano = 14,
+                                      double tamanoIcono = 16, FontWeight? peso = null)
+    {
+        var fila = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        if (icono != null)
+        {
+            var i = Icono(icono, tamanoIcono, tinta);
+            i.Margin = new Thickness(0, 0, texto.Length > 0 ? 8 : 0, 0);
+            fila.Children.Add(i);
+        }
+        if (texto.Length > 0)
+            fila.Children.Add(new TextBlock
+            {
+                Text = texto,
+                Foreground = tinta,
+                FontFamily = FuenteCuerpo,
+                FontSize = tamano,
+                FontWeight = peso ?? FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        return fila;
+    }
+
+    /// <summary>Recolorea el icono y el texto del contenido de un botón hecho con <see cref="ConIcono"/>.</summary>
+    public static void Tintar(object? contenido, Brush tinta)
+    {
+        if (contenido is not Panel fila) return;
+        foreach (var hijo in fila.Children)
+        {
+            if (hijo is TextBlock t) t.Foreground = tinta;
+            else if (hijo is FrameworkElement f) Colorear(f, tinta);
+        }
+    }
+
+    /// <summary>
+    /// El botón primario de Miracle: la píldora azul en degradado, con el texto blanco. Uno por
+    /// pantalla: es «lo siguiente que hay que hacer».
+    /// </summary>
+    public static Button BotonPrimario(string texto, string? icono = null, double alto = 44)
+    {
+        var b = new Button
+        {
+            Content = ConIcono(icono, texto, Brushes.White),
+            Height = alto,
+            Padding = new Thickness(20, 0, 20, 0),
+            MinWidth = 44,
+            Background = AcentoDegradado,
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Template = Pastilla(alto / 2),
+        };
+        b.MouseEnter += (_, _) => { if (b.IsEnabled) b.Background = AcentoDegradadoEncima; };
+        b.MouseLeave += (_, _) => b.Background = AcentoDegradado;
+        return b.ConRelieve(Sombra1);
+    }
+
+    /// <summary>El secundario: blanco con filete, tinta fuerte. Se aclara hacia el hielo al pasar el ratón.</summary>
+    public static Button BotonSecundario(string texto, string? icono = null, double alto = 40, Brush? tinta = null)
+    {
+        var laTinta = tinta ?? TintaFuerte;
+        var b = new Button
+        {
+            Content = ConIcono(icono, texto, laTinta, 13.5, 15),
+            Height = alto,
+            Padding = new Thickness(16, 0, 16, 0),
+            Background = Superficie,
+            BorderBrush = BordeFuerte,
+            BorderThickness = new Thickness(1),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Template = Pastilla(alto / 2),
+        };
+        b.MouseEnter += (_, _) => { if (!b.IsEnabled) return; b.Background = HieloSuave; b.BorderBrush = Niebla; };
+        b.MouseLeave += (_, _) => { b.Background = Superficie; b.BorderBrush = BordeFuerte; };
+        return b.ConRelieve(Sombra1);
+    }
+
+    /// <summary>El terciario: solo texto azul. Para lo que no compite con la acción principal.</summary>
+    public static Button BotonTerciario(string texto, string? icono = null, double alto = 34)
+    {
+        var b = new Button
+        {
+            Content = ConIcono(icono, texto, Acento, 13, 15),
+            Height = alto,
+            Padding = new Thickness(12, 0, 12, 0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Template = Pastilla(alto / 2),
+        };
+        b.MouseEnter += (_, _) => { if (!b.IsEnabled) return; b.Background = AcentoSuave; Tintar(b.Content, AcentoEncima); };
+        b.MouseLeave += (_, _) => { b.Background = Brushes.Transparent; Tintar(b.Content, Acento); };
+        return b;
+    }
+
+    /// <summary>
+    /// Un botón de solo icono (`.icon-btn` de la web): redondo, callado en reposo, y se enciende
+    /// en azul al acercarse — que es cuando importa.
+    /// </summary>
+    public static Button BotonIcono(string icono, string queHace, double lado = 32, double tamanoIcono = 16,
+                                    Brush? tinta = null)
+    {
+        var reposo = tinta ?? TintaMedia;
+        var dibujo = Icono(icono, tamanoIcono, reposo);
+        var b = new Button
+        {
+            Content = dibujo,
+            Width = lado,
+            Height = lado,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Template = Pastilla(lado / 2),
+            Focusable = false,
+        };
+        System.Windows.Automation.AutomationProperties.SetName(b, queHace);
+        b.MouseEnter += (_, _) => { if (!b.IsEnabled) return; b.Background = HieloSuave; Colorear(dibujo, Acento); };
+        b.MouseLeave += (_, _) => { b.Background = Brushes.Transparent; Colorear(dibujo, reposo); };
+        return b;
+    }
+
+    /// <summary>Una ficha pequeña de texto sobre un fondo suave (el `Badge` de la web).</summary>
+    public static Border Chip(string texto, Brush fondo, Brush tinta, bool conPunto = false)
+    {
+        var fila = new StackPanel { Orientation = Orientation.Horizontal };
+        if (conPunto)
+            fila.Children.Add(new System.Windows.Shapes.Ellipse
+            {
+                Width = 6, Height = 6, Fill = tinta, Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        fila.Children.Add(new TextBlock
+        {
+            Text = texto, Foreground = tinta, FontFamily = FuenteCuerpo, FontSize = 11.5,
+            FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center,
+        });
+        return new Border
+        {
+            CornerRadius = new CornerRadius(999),
+            Background = fondo,
+            Padding = new Thickness(10, 3, 10, 4),
+            Child = fila,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+    }
+
+    /// <summary>
+    /// El estado de una consulta, con los colores y las palabras del portal (`StatusBadge` de la
+    /// web): Borrador, Revisada, Aprobada, Exportada, En curso.
+    /// </summary>
+    public static Border ChipDeEstado(string estado)
+    {
+        var (etiqueta, tono) = Marca.EstadoDeConsulta(estado);
+        var (fondo, tinta) = tono switch
+        {
+            "espera" => (EsperaSuave, EsperaTinta),
+            "acento" => (AcentoSuave, AcentoTinta),
+            "ok" => (OkSuave, OkTinta),
+            _ => (SuperficieSuave, TintaSuave),
+        };
+        return Chip(etiqueta, fondo, tinta, conPunto: true);
+    }
+
+    /// <summary>
+    /// Un aviso en banda (`AlertBanner` de la web): icono, título y cuerpo sobre el fondo suave del
+    /// tono. Lo que el médico tiene que leer antes de seguir.
+    /// </summary>
+    public static Border Aviso(string tono, string titulo, string cuerpo = "")
+    {
+        var (fondo, tinta, borde, icono) = tono switch
+        {
+            "alerta" => (AlertaSuave, AlertaTinta, Alerta, "triangle-alert"),
+            "ok" => (OkSuave, OkTinta, Ok, "circle-check"),
+            "acento" => (AcentoSuave, AcentoTinta, Acento, "info"),
+            _ => (EsperaSuave, EsperaTinta, Espera, "triangle-alert"),
+        };
+        var fila = new DockPanel();
+        var i = Icono(icono, 17, tinta);
+        i.VerticalAlignment = VerticalAlignment.Top;
+        i.Margin = new Thickness(0, 1, 11, 0);
+        DockPanel.SetDock(i, Dock.Left);
+        fila.Children.Add(i);
+        var textos = new StackPanel();
+        textos.Children.Add(new TextBlock
+        {
+            Text = titulo, Foreground = tinta, FontFamily = FuenteCuerpo, FontSize = 13.5,
+            FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+        });
+        if (cuerpo.Length > 0)
+            textos.Children.Add(new TextBlock
+            {
+                Text = cuerpo, Foreground = tinta, Opacity = 0.9, FontFamily = FuenteCuerpo, FontSize = 12.5,
+                LineHeight = 18, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 0),
+            });
+        fila.Children.Add(textos);
+        var bordeSuave = new SolidColorBrush(((SolidColorBrush)borde).Color) { Opacity = 0.35 };
+        bordeSuave.Freeze();
+        return new Border
+        {
+            CornerRadius = new CornerRadius(RadioChico),
+            Background = fondo,
+            BorderBrush = bordeSuave,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(14, 11, 14, 12),
+            Child = fila,
+        };
+    }
+
+    /// <summary>
+    /// EL ORBE DE MIRACLE, redibujado del de la web (`components/brand/orb-art.tsx`): el halo celeste,
+    /// el núcleo en degradado radial, el brillo arriba a la izquierda, el aro y la sonrisa.
+    /// </summary>
+    /// <remarks>
+    /// Se dibuja en su rejilla de 100 y se escala: los números son los del SVG de la web, para que el
+    /// día que se cambie allí se sepa qué cambiar aquí. Sin el desenfoque del aro: WPF lo haría con un
+    /// efecto que come ClearType (ver <see cref="Elevar"/>), y a 24 px no se nota.
+    /// </remarks>
+    public static FrameworkElement Orbe(double tamano, bool conSonrisa = true)
+    {
+        var lienzo = new Canvas { Width = 100, Height = 100 };
+
+        var halo = new RadialGradientBrush { GradientOrigin = new Point(0.5, 0.5), Center = new Point(0.5, 0.5), RadiusX = 0.5, RadiusY = 0.5 };
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x73, 0xA6, 0xE4, 0xFF), 0));
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x66, 0x96, 0xDF, 0xFF), 0.76));
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x35, 0x88, 0xDA, 0xFF), 0.82));
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x1A, 0x7E, 0xD4, 0xFF), 0.88));
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x09, 0x7E, 0xD4, 0xFF), 0.94));
+        halo.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0x7E, 0xD4, 0xFF), 1));
+        halo.Freeze();
+        lienzo.Children.Add(new System.Windows.Shapes.Ellipse { Width = 100, Height = 100, Fill = halo });
+
+        var nucleo = new RadialGradientBrush { GradientOrigin = new Point(0.44, 0.40), Center = new Point(0.44, 0.40), RadiusX = 0.72, RadiusY = 0.72 };
+        nucleo.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#6AD9FD"), 0));
+        nucleo.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#42CCFD"), 0.34));
+        nucleo.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#1CB4F4"), 0.62));
+        nucleo.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#039CEB"), 0.86));
+        nucleo.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#0F9AE6"), 1));
+        nucleo.Freeze();
+        var disco = new System.Windows.Shapes.Ellipse { Width = 76, Height = 76, Fill = nucleo };
+        Canvas.SetLeft(disco, 12); Canvas.SetTop(disco, 12);
+        lienzo.Children.Add(disco);
+
+        var brillo = new RadialGradientBrush { GradientOrigin = new Point(0.34, 0.30), Center = new Point(0.34, 0.30), RadiusX = 0.38, RadiusY = 0.38 };
+        brillo.GradientStops.Add(new GradientStop(Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF), 0));
+        brillo.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1));
+        brillo.Freeze();
+        var luz = new System.Windows.Shapes.Ellipse { Width = 76, Height = 76, Fill = brillo };
+        Canvas.SetLeft(luz, 12); Canvas.SetTop(luz, 12);
+        lienzo.Children.Add(luz);
+
+        var aro = new RadialGradientBrush { GradientOrigin = new Point(0.26, 0.20), Center = new Point(0.26, 0.20), RadiusX = 0.96, RadiusY = 0.96 };
+        aro.GradientStops.Add(new GradientStop(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF), 0));
+        aro.GradientStops.Add(new GradientStop(Color.FromArgb(0xD1, 0xFF, 0xFF, 0xFF), 0.45));
+        aro.GradientStops.Add(new GradientStop(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF), 1));
+        aro.Freeze();
+        var borde = new System.Windows.Shapes.Ellipse { Width = 76, Height = 76, Stroke = aro, StrokeThickness = Math.Max(1.2, 140 / tamano) };
+        Canvas.SetLeft(borde, 12); Canvas.SetTop(borde, 12);
+        lienzo.Children.Add(borde);
+
+        if (conSonrisa && tamano >= 22)
+            lienzo.Children.Add(new System.Windows.Shapes.Path
+            {
+                Data = Geometry.Parse("M 44.4 55.8 q 5.6 6.2 11.2 0"),
+                Stroke = new SolidColorBrush(Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF)),
+                StrokeThickness = Math.Max(1.4, 120 / tamano) * 2.2,
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
+            });
+
+        return new Viewbox { Width = tamano, Height = tamano, Child = lienzo, VerticalAlignment = VerticalAlignment.Center };
     }
 
     // ── la rampa FLOTANTE ────────────────────────────────────────────────────

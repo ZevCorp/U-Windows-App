@@ -197,4 +197,23 @@ public static class Marca
         }
         return sb.ToString();
     }
+
+    // ── el estado de una consulta ────────────────────────────────────────────
+
+    /// <summary>
+    /// La etiqueta y el tono con que el portal pinta el estado de una consulta (`StatusBadge` de la
+    /// web): lo mismo en los dos sitios, o el médico ve «borrador» aquí y «Borrador» allí y duda.
+    /// El tono es uno de «neutro», «espera», «acento» u «ok»; <see cref="Estudio"/> lo vuelve color.
+    /// </summary>
+    public static (string Etiqueta, string Tono) EstadoDeConsulta(string? estado) =>
+        (estado ?? "").Trim().ToLowerInvariant() switch
+        {
+            "en_curso" => ("En curso", "espera"),
+            "borrador" => ("Borrador", "neutro"),
+            "revisada" => ("Revisada", "espera"),
+            "aprobada" => ("Aprobada", "acento"),
+            "exportada" => ("Exportada", "ok"),
+            "" => ("Sin estado", "neutro"),
+            var otro => (char.ToUpperInvariant(otro[0]) + otro[1..].Replace('_', ' '), "neutro"),
+        };
 }

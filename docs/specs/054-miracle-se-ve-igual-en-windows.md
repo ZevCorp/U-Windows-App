@@ -105,7 +105,25 @@ Nivel 4, a mano: capturas lado a lado —login, lista y nota— web contra Windo
 
 ## Hallazgos
 
+1. **2026-09-26 — Un juez juzgó una U.dll vieja.** La primera corrida después de escribir `Marca`
+   seguía diciendo «Ui.Marca todavía no existe»: el build había fallado (`Typography` sin su espacio
+   de nombres) y el arnés de Linux juzgó el binario anterior. Es el mismo tropiezo que ya contó el
+   commit de cardio (spec 046). El arnés local ahora se niega a juzgar si no compila.
+2. **2026-09-26 — Los menús no heredan la letra.** Un `Popup` no cuelga del árbol visual: sin
+   ponerle la familia a él, los tres menús (cuenta, micrófono, plantilla) se pintaban en Segoe UI con
+   la ventana en Inter. Contados los sitios con `Popup` en `ConsultaWindow`: 3, los tres cubiertos.
+3. **2026-09-26 — El ✓ a SAP se esconde sin SAP.** El usuario de ahora es el médico privado, que no
+   tiene SAP: un ✓ que manda a un sistema que no existe es un botón que miente. Se enseña si hay
+   puente Y hay un `saplogon` corriendo (2 sitios: el ✓ de cada sección y «Todo a SAP»).
+4. **2026-09-26 — El contrato entero, en Linux, contra la línea base.** Con el juicio parcial se
+   corrió 1-999 sobre la mezcla de Jose (318 promesas: 78 no se pueden juzgar sin WPF/DPAPI) y sobre
+   esta rama (323): la ÚNICA roja nueva es la 447, que toca brochas de WPF. Ninguna regresión en lo
+   que Linux puede juzgar; lo de WPF lo dirá Windows.
+
 ## Cierre
 
-- [ ] 445-449 verdes, sabotaje comprobado
-- [ ] A mano: login, lista y nota, lado a lado con la web
+- [x] 445, 446, 448, 449 verdes; sabotaje 4/4 comprobado aplicado y restaurado
+- [ ] 447 verde — se juzga en Windows (`.\scripts\contrato-del-grafo.ps1`)
+- [x] Reskin de `ConsultaWindow` y `LoginWindow`: letra, iconos Lucide (0 glifos de MDL2 en las dos),
+      botón primario en degradado, la nota como UN papel con rótulos con aire y cuerpo serif, marco a 28
+- [ ] A mano: login, lista y nota, lado a lado con la web (nivel 4, en el PC real)

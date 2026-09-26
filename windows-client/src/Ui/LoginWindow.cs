@@ -53,6 +53,8 @@ public sealed class LoginWindow : Window
         _sesion = sesion;
 
         Title = "Miracle";
+        // La letra de Miracle (spec 054), como la ventana de la nota.
+        FontFamily = Estudio.FuenteCuerpo;
         Width = 452;
         SizeToContent = SizeToContent.Height;
         WindowStyle = WindowStyle.None;
@@ -64,7 +66,7 @@ public sealed class LoginWindow : Window
 
         var tarjeta = new Border
         {
-            CornerRadius = new CornerRadius(34),
+            CornerRadius = new CornerRadius(28),
             Background = Estudio.Fondo,
             BorderBrush = Estudio.Borde,
             BorderThickness = new Thickness(1),
@@ -76,13 +78,7 @@ public sealed class LoginWindow : Window
         // ── el marco: solo cerrar. Aquí no hay nada que minimizar todavía ────
         var cerrar = new Button
         {
-            Content = new TextBlock
-            {
-                Text = "",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 9.5,
-                Foreground = Estudio.TintaMedia,
-            },
+            Content = Estudio.Icono("x", 15, Estudio.TintaMedia),
             Width = 30, Height = 30,
             HorizontalAlignment = HorizontalAlignment.Right,
             Background = Brushes.Transparent,
@@ -92,27 +88,33 @@ public sealed class LoginWindow : Window
             Margin = new Thickness(0, -6, -6, 2),
         };
         cerrar.Click += (_, __) => { DialogResult = false; Close(); };
-        cerrar.MouseEnter += (_, __) => cerrar.Background = Estudio.SuperficieSuave;
+        cerrar.MouseEnter += (_, __) => cerrar.Background = Estudio.HieloSuave;
         cerrar.MouseLeave += (_, __) => cerrar.Background = Brushes.Transparent;
         pila.Children.Add(cerrar);
 
         // ── marca ────────────────────────────────────────────────────────────
-        pila.Children.Add(new System.Windows.Shapes.Polygon
+        // EL ORBE DE MIRACLE Y NO EL TRIÁNGULO (spec 054): lo primero que ve el médico es la misma
+        // marca que en la web.
+        var marca = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 20) };
+        marca.Children.Add(Estudio.Orbe(40));
+        marca.Children.Add(new TextBlock
         {
-            Points = new PointCollection { new Point(15, 2), new Point(28, 25), new Point(2, 25) },
-            Stroke = Estudio.Acento,
-            StrokeThickness = 1.8,
-            Fill = Estudio.AcentoSuave,
-            Width = 30, Height = 27,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 0, 0, 18),
+            Text = string.Join('\u2009', "Miracle".ToCharArray()),
+            FontFamily = Estudio.FuenteCuerpo,
+            FontWeight = FontWeights.ExtraLight,
+            FontSize = 19,
+            Foreground = Estudio.TintaFuerte,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 2),
         });
+        pila.Children.Add(marca);
 
         _titulo = new TextBlock
         {
-            Foreground = Estudio.Tinta,
-            FontSize = 22,
-            FontWeight = FontWeights.Bold,
+            Foreground = Estudio.TintaFuerte,
+            FontFamily = Estudio.FuenteTitulo,
+            FontSize = 24,
+            FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 7),
         };
         _bajada = new TextBlock
@@ -195,7 +197,8 @@ public sealed class LoginWindow : Window
             Height = 48,
             Margin = new Thickness(0, 22, 0, 0),
             Foreground = Brushes.White,
-            Background = Estudio.Acento,
+            // El primario de Miracle: el degradado del azul un punto más claro (spec 054).
+            Background = Estudio.AcentoDegradado,
             BorderThickness = new Thickness(0),
             FontSize = 14.5,
             FontWeight = FontWeights.SemiBold,
@@ -205,6 +208,8 @@ public sealed class LoginWindow : Window
             Template = Estudio.Pastilla(24),
         };
         _entrar.ConRelieve(Estudio.Sombra1);
+        _entrar.MouseEnter += (_, __) => { if (_entrar.IsEnabled) _entrar.Background = Estudio.AcentoDegradadoEncima; };
+        _entrar.MouseLeave += (_, __) => _entrar.Background = Estudio.AcentoDegradado;
         _entrar.Click += async (_, __) => await ConfirmarAsync();
         pila.Children.Add(_entrar);
 
@@ -354,9 +359,9 @@ public sealed class LoginWindow : Window
     /// </summary>
     private static Border Caja(UIElement dentro) => new()
     {
-        CornerRadius = new CornerRadius(14),
+        CornerRadius = new CornerRadius(Estudio.RadioChico),
         Background = Estudio.Superficie,
-        BorderBrush = Estudio.Borde,
+        BorderBrush = Estudio.BordeFuerte,
         BorderThickness = new Thickness(1),
         Padding = new Thickness(14, 1, 14, 1),
         Margin = new Thickness(0, 0, 0, 16),

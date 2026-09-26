@@ -84,14 +84,20 @@ public sealed partial class ConsultaWindow : Window
     /// <summary>«¿Por qué vino a cardiología?», arriba de la Nota, al soltar la historia clínica (spec 051).</summary>
     private readonly PanelDelMotivo _motivo = new();
     private readonly Button _grabar;
-    private readonly TextBlock _puntoDeGrabar;
+    /// <summary>El icono del botón: el micrófono en reposo, el punto rojo vivo mientras se graba.</summary>
+    private readonly Border _puntoDeGrabar;
     private readonly TextBlock _etiquetaDeGrabar;
+    /// <summary>El cronómetro, dentro del botón y en Geist Mono como el de la web (`.capture-time`).</summary>
+    private readonly TextBlock _relojDeGrabar;
+    /// <summary>La tarjeta de «Transcripción en vivo»: se ve solo mientras llega texto.</summary>
+    private readonly Border _tarjetaVivo;
     private readonly TextBlock _estado;
 
     // ── el micrófono ─────────────────────────────────────────────────────────
     private readonly Button _microfono;
     private readonly Popup _menuMicrofono;
-    private readonly TextBlock _iconoMicrofono;
+    /// <summary>El sitio del icono de la fuente: se cambia de icono y de color según quién entrega.</summary>
+    private readonly Border _iconoMicrofono;
 
     /// <summary>Quién manda entre las tres fuentes. La decisión es suya, no de esta ventana.</summary>
     private readonly Omi.Selector _selector = new();
@@ -130,9 +136,10 @@ public sealed partial class ConsultaWindow : Window
             ? v
             : "wss://zyvfamlhlmztliexvmej.supabase.co/functions/v1/omi-directo";
 
-    private const string GlifoMicrofono = "";
-    private const string GlifoBluetooth = "";
-    private const string GlifoTelefono = "";
+    // Los iconos de Lucide de cada fuente (spec 054): los mismos que dibuja la web.
+    private const string GlifoMicrofono = "mic";
+    private const string GlifoBluetooth = "bluetooth";
+    private const string GlifoTelefono = "smartphone";
 
     private readonly DispatcherTimer _cronometro = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -226,6 +233,9 @@ public sealed partial class ConsultaWindow : Window
 
         // ── el marco ─────────────────────────────────────────────────────────
         Title = "Miracle";
+        // LA LETRA DE MIRACLE (spec 054): Inter para toda la ventana. Los títulos, la nota y el
+        // reloj piden la suya en su sitio.
+        FontFamily = Estudio.FuenteCuerpo;
         Width = TamanoInicial.Width;
         Height = TamanoInicial.Height;
         MinWidth = TamanoMinimo.Width;
@@ -240,8 +250,11 @@ public sealed partial class ConsultaWindow : Window
 
         var tarjeta = new Border
         {
-            // El radio del boceto: casi una pastilla, y eso es lo que hace que no parezca una ventana.
-            CornerRadius = new CornerRadius(46),
+            // 28 Y NO 46 DESDE EL 2026-09-26 (spec 054): el 46 del boceto era una pastilla, y una
+            // ventana de 988×656 con la nota dentro ya no lo es — se leía como un globo. 28 sigue
+            // siendo más redondo que cualquier ventana de Windows (el marco de U), y queda en la
+            // escala de la web (radius-xl 30).
+            CornerRadius = new CornerRadius(28),
             Background = Estudio.Fondo,
             BorderBrush = Estudio.Borde,
             BorderThickness = new Thickness(1),
@@ -261,9 +274,9 @@ public sealed partial class ConsultaWindow : Window
         var cabecera = new DockPanel { Margin = new Thickness(6, 0, 0, 16) };
 
         var botonera = new StackPanel { Orientation = Orientation.Horizontal };
-        var minimizar = BotonDeMarco("", "Minimizar");
+        var minimizar = BotonDeMarco("minus", "Minimizar");
         minimizar.Click += (_, __) => WindowState = WindowState.Minimized;
-        var cerrar = BotonDeMarco("", "Cerrar");
+        var cerrar = BotonDeMarco("x", "Cerrar");
         cerrar.Click += (_, __) => Close();
         botonera.Children.Add(minimizar);
         botonera.Children.Add(cerrar);
@@ -280,15 +293,8 @@ public sealed partial class ConsultaWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        var chevron = new TextBlock
-        {
-            Text = "",   // ChevronDown de Segoe MDL2: el mismo lenguaje que minimizar/cerrar
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 8,
-            Foreground = Estudio.TintaTenue,
-            Margin = new Thickness(7, 3, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var chevron = Estudio.Icono("chevron-down", 13, Estudio.TintaTenue);
+        chevron.Margin = new Thickness(6, 1, 0, 0);
         var contenidoQuien = new StackPanel { Orientation = Orientation.Horizontal };
         contenidoQuien.Children.Add(_quien);
         contenidoQuien.Children.Add(chevron);
@@ -335,14 +341,12 @@ public sealed partial class ConsultaWindow : Window
             Cursor = Cursors.Hand,
             Template = Estudio.Pastilla(14),
         };
-        _iconoMicrofono = new TextBlock
+        // UN ICONO DE LUCIDE y no un emoji ni un glifo de MDL2: un emoji lo pinta la fuente del
+        // sistema con su propio color y su propio peso, y MDL2 dibuja otra familia de iconos que la
+        // web (spec 054). PintarMicrofono cambia el icono y el color.
+        _iconoMicrofono = new Border
         {
-            // Segoe MDL2 y no un emoji, por lo mismo que la tira de la carita: un emoji lo pinta la
-            // fuente del sistema, trae su propio color y su propio peso, y rompe la línea.
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            Text = GlifoMicrofono,
-            FontSize = 13,
-            Foreground = Estudio.TintaMedia,
+            Child = Estudio.Icono(GlifoMicrofono, 15, Estudio.TintaMedia),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -381,7 +385,35 @@ public sealed partial class ConsultaWindow : Window
             PopupAnimation = PopupAnimation.Fade,
         };
 
+        // LOS MENÚS NO HEREDAN LA LETRA DE LA VENTANA: un Popup no cuelga del árbol visual, así que
+        // sin esto se pintarían en Segoe UI. Se la pone cada uno, y sus hijos la heredan de él.
+        foreach (var menu in new[] { _menuCuenta, _menuMicrofono })
+            menu.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, Estudio.FuenteCuerpo);
+
+        // EL ORBE Y «MIRACLE», como la barra de la web (`Logo`): lo primero que dice que esta es la
+        // misma app que el portal. La palabra se esconde cuando la ventana se estrecha — el nombre
+        // del médico no puede quedarse sin sitio por un adorno.
+        var marca = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        marca.Children.Add(Estudio.Orbe(26));
+        var palabra = new TextBlock
+        {
+            Text = "Miracle",
+            FontFamily = Estudio.FuenteCuerpo,
+            FontWeight = FontWeights.ExtraLight,
+            FontSize = 15.5,
+            Foreground = Estudio.TintaFuerte,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 1),
+        };
+        // El tracking de .22em de la palabra de la web: WPF no tiene espaciado, van espacios finos.
+        palabra.Text = string.Join('\u2009', "Miracle".ToCharArray());
+        marca.Children.Add(palabra);
+        SizeChanged += (_, __) => palabra.Visibility = ActualWidth < 620 ? Visibility.Collapsed : Visibility.Visible;
+        var separador = new Border { Width = 1, Height = 18, Background = Estudio.Borde, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+
         var izquierdaDeLaCabecera = new StackPanel { Orientation = Orientation.Horizontal };
+        izquierdaDeLaCabecera.Children.Add(marca);
+        izquierdaDeLaCabecera.Children.Add(separador);
         izquierdaDeLaCabecera.Children.Add(_quienBoton);
         izquierdaDeLaCabecera.Children.Add(_microfono);
 
@@ -389,7 +421,7 @@ public sealed partial class ConsultaWindow : Window
         // estoy mirando DE ESTE PACIENTE» —sus consultas, su nota—; los aprendizajes no son del
         // paciente, son del asistente. Meterlos ahí es un error de categoría, y se nota como ruido
         // aunque cada pieza esté bien dibujada.
-        _aprendizajes = BotonDeIcono(CerebroDibujado(), "Aprendizajes");
+        _aprendizajes = BotonDeIcono(Estudio.Icono("brain", 17, Estudio.TintaMedia), "Aprendizajes");
         _aprendizajes.Click += (_, __) => { if (_enAprendizajes) Mostrar(nota: _enNota); else AbrirAprendizajes(); };
         izquierdaDeLaCabecera.Children.Add(_aprendizajes);
 
@@ -399,11 +431,15 @@ public sealed partial class ConsultaWindow : Window
         raiz.Children.Add(cabecera);
 
         // ── el segmentado ────────────────────────────────────────────────────
+        // El `.seg` de la web: carril hundido con su filete y la pestaña activa como un botón blanco
+        // que sobresale. El relieve lo pone la sombra de U.
         var carril = new Border
         {
             CornerRadius = new CornerRadius(21),
             Background = Estudio.SuperficieSuave,
-            Padding = new Thickness(4),
+            BorderBrush = Estudio.Borde,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(3),
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 0, 0, 18),
         };
@@ -426,22 +462,45 @@ public sealed partial class ConsultaWindow : Window
 
         _vivo = new TextBlock
         {
-            Foreground = Estudio.Tinta,
+            Foreground = Estudio.TintaSuave,
             FontSize = 15,
             LineHeight = 25,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(4, 0, 4, 8),
         };
+        // «TRANSCRIPCIÓN EN VIVO» con su punto rojo, como la tarjeta de la web. Solo existe mientras
+        // llega texto: vacía no dice nada que el botón no diga ya.
+        var cabeceraVivo = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+        cabeceraVivo.Children.Add(PuntoVivo());
+        var rotuloVivo = Estudio.Rotulo("Transcripción en vivo");
+        rotuloVivo.Margin = new Thickness(8, 0, 0, 0);
+        rotuloVivo.VerticalAlignment = VerticalAlignment.Center;
+        cabeceraVivo.Children.Add(rotuloVivo);
+        var pilaVivo = new StackPanel();
+        pilaVivo.Children.Add(cabeceraVivo);
+        pilaVivo.Children.Add(_vivo);
+        _tarjetaVivo = Estudio.Tarjeta(Estudio.RadioMedio);
+        _tarjetaVivo.Padding = new Thickness(18, 14, 18, 16);
+        _tarjetaVivo.Margin = new Thickness(2, 0, 2, 10);
+        _tarjetaVivo.Child = pilaVivo;
+        _tarjetaVivo.Visibility = Visibility.Collapsed;
         _nota = new StackPanel();
         // VACÍO NO ES FALLO, y una pantalla en blanco no lo distingue: se dice qué va a pasar aquí.
-        _vacioNota = Estudio.Tarjeta(20);
-        _vacioNota.Padding = new Thickness(20, 22, 20, 22);
+        _vacioNota = Estudio.Tarjeta(Estudio.RadioMedio);
+        _vacioNota.Padding = new Thickness(22, 22, 22, 22);
         _vacioNota.Margin = new Thickness(2, 8, 2, 0);
         var pilaVacio = new StackPanel();
+        // El `EmptyState` de la web: una baldosa hielo con el icono en azul, y el título debajo.
+        pilaVacio.Children.Add(new Border
+        {
+            Width = 44, Height = 44, CornerRadius = new CornerRadius(14), Background = Estudio.Hielo,
+            HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 14),
+            Child = Estudio.Icono("mic", 20, Estudio.Acento),
+        });
         pilaVacio.Children.Add(new TextBlock
         {
             Text = "Pulsa grabar y habla con normalidad.",
-            Foreground = Estudio.Tinta, FontSize = 14, FontWeight = FontWeights.SemiBold,
+            Foreground = Estudio.TintaFuerte, FontFamily = Estudio.FuenteTitulo, FontSize = 16.5,
+            FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
         });
         pilaVacio.Children.Add(new TextBlock
@@ -463,7 +522,7 @@ public sealed partial class ConsultaWindow : Window
         _panelNota = new StackPanel();
         // ARRIBA DE TODO: es lo primero que el médico tiene que leer (spec 051).
         _panelNota.Children.Add(_motivo.Vista);
-        _panelNota.Children.Add(_vivo);
+        _panelNota.Children.Add(Estudio.Elevar(_tarjetaVivo));
         _panelNota.Children.Add(Estudio.Elevar(_vacioNota));
         _panelNota.Children.Add(_nota);
         _panelNota.Children.Add(HuecoDeLaCarita());   // promesa 272: aquí se sienta la carita
@@ -499,46 +558,63 @@ public sealed partial class ConsultaWindow : Window
 
         // ── el botón ─────────────────────────────────────────────────────────
         //
-        // BLANCO SOBRE CLARO, Y LA SOMBRA HACE EL RESTO. Un botón oscuro aquí gritaría; este se
-        // lee como un objeto que sobresale del papel. El punto de color es lo único que cambia
-        // entre reposo y grabando: el objeto es el mismo, su estado no.
+        // EL GRANDE DE U CON EL AZUL DE MIRACLE (spec 054). El tamaño y el relieve son la base de U
+        // —es LO que se toca en esta ventana—; el color es el del botón de grabar de la web: la
+        // píldora azul con el micrófono blanco. Grabando, pasa al secundario con filete rojo, el
+        // punto vivo y el reloj en Geist Mono, como el panel de dictado de la web: el objeto es el
+        // mismo, su estado no.
         var dentroDelBoton = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        _puntoDeGrabar = new TextBlock
+        _puntoDeGrabar = new Border
         {
-            Text = "●",
-            Foreground = Estudio.Alerta,
-            FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0),
+            Child = Estudio.Icono("mic", 20, Brushes.White),
         };
         _etiquetaDeGrabar = new TextBlock
         {
             Text = "Grabar",
-            Foreground = Estudio.Tinta,
+            Foreground = Brushes.White,
             FontSize = 17.5,
             FontWeight = FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _relojDeGrabar = new TextBlock
+        {
+            Foreground = Estudio.TintaMedia,
+            FontFamily = Estudio.FuenteMono,
+            FontSize = 16,
+            FontWeight = FontWeights.Medium,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 0, 0),
+            Visibility = Visibility.Collapsed,
+        };
         dentroDelBoton.Children.Add(_puntoDeGrabar);
         dentroDelBoton.Children.Add(_etiquetaDeGrabar);
+        dentroDelBoton.Children.Add(_relojDeGrabar);
 
         _grabar = new Button
         {
             Content = dentroDelBoton,
-            Width = 178,
-            Height = 74,
+            MinWidth = 178,
+            Height = 64,
+            Padding = new Thickness(28, 0, 28, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Background = Estudio.Superficie,
-            BorderBrush = Estudio.Borde,
+            Background = Estudio.AcentoDegradado,
+            BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(1),
             Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(37),
+            Template = Estudio.Pastilla(32),
         };
         _grabar.ConRelieve(Estudio.Sombra2);
+        _grabar.MouseEnter += (_, __) =>
+        {
+            if (_grabar.IsEnabled && _consulta.Estado != EstadoDeConsulta.Grabando) _grabar.Background = Estudio.AcentoDegradadoEncima;
+        };
+        _grabar.MouseLeave += (_, __) => PintarElBotonDeGrabar(_consulta.Estado == EstadoDeConsulta.Grabando);
         _grabar.Click += async (_, __) => await AlternarAsync();
         _grabar.HorizontalAlignment = HorizontalAlignment.Center;
 
@@ -558,20 +634,16 @@ public sealed partial class ConsultaWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxWidth = 320,
         };
-        var chevronPlantilla = new TextBlock
-        {
-            Text = "",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 8,
-            Foreground = Estudio.TintaTenue,
-            Margin = new Thickness(7, 1, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var chevronPlantilla = Estudio.Icono("chevron-down", 13, Estudio.TintaTenue);
+        chevronPlantilla.Margin = new Thickness(6, 1, 0, 0);
+        var iconoPlantilla = Estudio.Icono("layout-template", 14, Estudio.TintaTenue);
+        iconoPlantilla.Margin = new Thickness(0, 0, 7, 0);
         var dentroDeLaPlantilla = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        dentroDeLaPlantilla.Children.Add(iconoPlantilla);
         dentroDeLaPlantilla.Children.Add(_rotuloPlantilla);
         dentroDeLaPlantilla.Children.Add(chevronPlantilla);
 
@@ -598,6 +670,7 @@ public sealed partial class ConsultaWindow : Window
             AllowsTransparency = true,
             PopupAnimation = PopupAnimation.Fade,
         };
+        _menuPlantilla.SetValue(System.Windows.Documents.TextElement.FontFamilyProperty, Estudio.FuenteCuerpo);
 
         var abajo = new StackPanel();
         abajo.Children.Add(_grabar);
@@ -624,6 +697,7 @@ public sealed partial class ConsultaWindow : Window
         _dictado.Parcial += t => Dispatcher.BeginInvoke(() =>
         {
             _vivo.Text = t;
+            _tarjetaVivo.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             _vacioNota.Visibility = t.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
             if (_enNota) _superficie.ScrollToEnd();
         });
@@ -971,15 +1045,8 @@ public sealed partial class ConsultaWindow : Window
         fila.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
         fila.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var icono = new TextBlock
-        {
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            Text = glifo,
-            FontSize = 14,
-            Foreground = activa ? Estudio.Ok : manda ? Estudio.Acento : Estudio.TintaMedia,
-            HorizontalAlignment = HorizontalAlignment.Center,   // centrado EN SU COLUMNA
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var icono = Estudio.Icono(glifo, 16, activa ? Estudio.Ok : manda ? Estudio.Acento : Estudio.TintaMedia);
+        icono.HorizontalAlignment = HorizontalAlignment.Center;   // centrado EN SU COLUMNA
         Grid.SetColumn(icono, 0);
         fila.Children.Add(icono);
 
@@ -1288,7 +1355,7 @@ public sealed partial class ConsultaWindow : Window
         bool enlaceEnPie = EnlaceEnPie(origen);
         bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
 
-        _iconoMicrofono.Text = origen switch
+        string icono = origen switch
         {
             Origen.CollarPorBluetooth => GlifoBluetooth,
             Origen.CollarPorTelefono => GlifoTelefono,
@@ -1301,11 +1368,18 @@ public sealed partial class ConsultaWindow : Window
         // Y el verde NO consulta el enlace, sólo la última trama (ver Omi.Vigia): el 2026-09-01 el
         // collar entregó 4.815 tramas con el icono en gris porque `Conectado` seguía en false — sale
         // de un evento de transición que no dispara al abrir sobre un aparato ya conectado.
-        _iconoMicrofono.Foreground =
+        var color =
             entregando ? Estudio.Ok
             : grabando ? Estudio.Alerta
             : origen != Origen.MicrofonoDelPc && !enlaceEnPie ? Estudio.Espera
             : Estudio.TintaMedia;
+        // Se repinta cada segundo: el icono solo se rehace si cambió de fuente, el color siempre.
+        if ((_iconoMicrofono.Tag as string) != icono)
+        {
+            _iconoMicrofono.Child = Estudio.Icono(icono, 15, color);
+            _iconoMicrofono.Tag = icono;
+        }
+        else if (_iconoMicrofono.Child is FrameworkElement dibujo) Estudio.Colorear(dibujo, color);
     }
 
     // ── arranque ─────────────────────────────────────────────────────────────
@@ -1455,16 +1529,9 @@ public sealed partial class ConsultaWindow : Window
 
         var estrella = new Button
         {
-            Content = new TextBlock
-            {
-                // Llena si es la suya, hueca si no: el estado se lee sin leer.
-                Text = esLaSugerida ? "" : "",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 12,
-                Foreground = esLaSugerida ? Estudio.Espera : Estudio.TintaTenue,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
+            // Llena si es la suya, hueca si no: el estado se lee sin leer.
+            Content = Estudio.Icono("star", 15, esLaSugerida ? Estudio.Espera : Estudio.TintaTenue,
+                                    relleno: esLaSugerida ? Estudio.Espera : null),
             Width = 30,
             Height = 30,
             VerticalAlignment = VerticalAlignment.Center,
@@ -1786,7 +1853,7 @@ public sealed partial class ConsultaWindow : Window
     {
         _aprendizajes.Background = _enAprendizajes ? Estudio.AcentoSuave : Brushes.Transparent;
         if (_aprendizajes.Content is FrameworkElement dibujo)
-            dibujo.SetValue(System.Windows.Shapes.Shape.StrokeProperty, _enAprendizajes ? Estudio.Acento : Estudio.TintaMedia);
+            Estudio.Colorear(dibujo, _enAprendizajes ? Estudio.Acento : Estudio.TintaMedia);
     }
 
     private void PintarLaLista()
@@ -2187,9 +2254,9 @@ public sealed partial class ConsultaWindow : Window
         void Pintar(Button b, bool activa)
         {
             b.Background = activa ? Estudio.Superficie : Brushes.Transparent;
-            b.Foreground = activa ? Estudio.Tinta : Estudio.TintaMedia;
-            b.FontWeight = activa ? FontWeights.SemiBold : FontWeights.Normal;
-            b.Effect = activa ? Estudio.Sombra1 : null;
+            b.BorderBrush = activa ? Estudio.Borde : Brushes.Transparent;
+            b.Foreground = activa ? Estudio.TintaFuerte : Estudio.TintaSuave;
+            b.Tag = activa ? Estudio.Sombra1 : null;
         }
         // EN APRENDIZAJES NO MANDA NINGUNA DE LAS DOS. Medido en la máquina el 2026-09-11: con
         // el panel abierto, el carril seguía pintando «Nota» como activa, así que la interfaz
@@ -2296,9 +2363,8 @@ public sealed partial class ConsultaWindow : Window
     private void PintarSegunEstado()
     {
         bool grabando = _consulta.Estado == EstadoDeConsulta.Grabando;
-        _etiquetaDeGrabar.Text = grabando ? "Parar" : "Grabar";
-        _puntoDeGrabar.Foreground = grabando ? Estudio.Alerta : Estudio.TintaTenue;
-        _puntoDeGrabar.Text = grabando ? "■" : "●";
+        PintarElBotonDeGrabar(grabando);
+        if (!grabando) _tarjetaVivo.Visibility = Visibility.Collapsed;
 
         if (grabando) { _empezoAGrabar = DateTimeOffset.Now; _cronometro.Start(); PintarCronometro(); }
         else _cronometro.Stop();
@@ -2318,7 +2384,68 @@ public sealed partial class ConsultaWindow : Window
     private void PintarCronometro()
     {
         var va = DateTimeOffset.Now - _empezoAGrabar;
-        Estado($"Escuchando · {va:mm\\:ss}");
+        _relojDeGrabar.Text = va.ToString(va.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss");
+        Estado("Escuchando…");
+    }
+
+    /// <summary>
+    /// El botón de grabar en sus dos estados, en UN sitio: el reposo es el primario azul de la web
+    /// con el micrófono blanco; grabando es el secundario con filete rojo, el punto vivo, «Parar» y
+    /// el reloj. Lo llaman el estado de la consulta y el ratón al salir, y los dos tienen que decir lo
+    /// mismo — dos sitios que pintan el mismo botón acaban discrepando (aprendizaje nº16).
+    /// </summary>
+    private void PintarElBotonDeGrabar(bool grabando)
+    {
+        if (grabando)
+        {
+            _grabar.Background = Estudio.Superficie;
+            _grabar.BorderBrush = Estudio.Alerta;
+            _puntoDeGrabar.Child = PuntoVivo(12);
+            _etiquetaDeGrabar.Text = "Parar";
+            _etiquetaDeGrabar.Foreground = Estudio.AlertaTinta;
+            _relojDeGrabar.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _grabar.Background = Estudio.AcentoDegradado;
+            _grabar.BorderBrush = Brushes.Transparent;
+            _puntoDeGrabar.Child = Estudio.Icono("mic", 20, Brushes.White);
+            _etiquetaDeGrabar.Text = "Grabar";
+            _etiquetaDeGrabar.Foreground = Brushes.White;
+            _relojDeGrabar.Visibility = Visibility.Collapsed;
+            _relojDeGrabar.Text = "";
+        }
+    }
+
+    /// <summary>
+    /// El punto rojo que late mientras se graba (`.live-dot` de la web): un halo que se abre y se
+    /// desvanece cada 2,1 s. Es la única animación de la nota y dice lo único que importa ahí: te
+    /// estoy oyendo.
+    /// </summary>
+    private static FrameworkElement PuntoVivo(double lado = 10)
+    {
+        var caja = new Grid { Width = lado * 2.4, Height = lado * 2.4, VerticalAlignment = VerticalAlignment.Center };
+        var halo = new System.Windows.Shapes.Ellipse
+        {
+            Width = lado, Height = lado, Fill = Estudio.Alerta, Opacity = 0.55,
+            RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1),
+        };
+        var punto = new System.Windows.Shapes.Ellipse { Width = lado, Height = lado, Fill = Estudio.Alerta };
+        caja.Children.Add(halo);
+        caja.Children.Add(punto);
+        var escala = new System.Windows.Media.Animation.DoubleAnimation(1, 2.4, TimeSpan.FromSeconds(1.5))
+        {
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+            BeginTime = TimeSpan.Zero,
+        };
+        var desvanece = new System.Windows.Media.Animation.DoubleAnimation(0.55, 0, TimeSpan.FromSeconds(1.5))
+        {
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+        };
+        ((ScaleTransform)halo.RenderTransform).BeginAnimation(ScaleTransform.ScaleXProperty, escala);
+        ((ScaleTransform)halo.RenderTransform).BeginAnimation(ScaleTransform.ScaleYProperty, escala);
+        halo.BeginAnimation(UIElement.OpacityProperty, desvanece);
+        return caja;
     }
 
     private void PintarNota()
@@ -2383,12 +2510,17 @@ public sealed partial class ConsultaWindow : Window
 
         if (cinta.Length > 0) _nota.Children.Add(Cinta(cinta));
 
+        // EL PAPEL (spec 054): las secciones van dentro de UN documento con el filete cálido de la
+        // web y el blanco de U, separadas por un hilo. Es lo que hace que la nota se lea como
+        // registro y no como una lista de controles.
+        var secciones = new List<UIElement>();
+
         // EL RESUMEN TAMBIÉN SE CORRIGE. Es el bloque más grande y el primero que se lee —y el que
         // el portal enseña en la lista de consultas—, así que dejarlo muerto mientras las secciones
         // se editaban era la mitad del trabajo y encima la mitad que más se toca. No lleva ✓: no es
         // una sección del snapshot, y el emparejador de SAP trabaja con secciones.
         if (nota.Resumen.Length > 0 || editable)
-            _nota.Children.Add(TarjetaDeSeccion(
+            secciones.Add(TarjetaDeSeccion(
                 new SeccionDeNota("", "Resumen", nota.Resumen), editable,
                 guardar: (_, texto) => guardarResumen(texto), conEnvioASap: false));
 
@@ -2398,10 +2530,30 @@ public sealed partial class ConsultaWindow : Window
             bool vacia = s.Contenido.Trim().Length == 0;
             if (vacia && !editable) continue;
             if (!vacia) conTexto.Add(s);
-            _nota.Children.Add(TarjetaDeSeccion(s, editable, guardar));
+            secciones.Add(TarjetaDeSeccion(s, editable, guardar));
         }
 
-        if (conTexto.Count > 1) _nota.Children.Add(BotonTodoASap(conTexto));
+        var hojas = new StackPanel();
+        for (int i = 0; i < secciones.Count; i++)
+            hojas.Children.Add(new Border
+            {
+                Child = secciones[i],
+                BorderBrush = Estudio.DocLineaSuave,
+                BorderThickness = new Thickness(0, 0, 0, i < secciones.Count - 1 ? 1 : 0),
+            });
+        var papel = new Border
+        {
+            CornerRadius = new CornerRadius(Estudio.RadioChico),
+            Background = Estudio.Superficie,
+            BorderBrush = Estudio.DocLinea,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(26, 4, 22, 4),
+            Margin = new Thickness(2, 0, 2, 12),
+            Child = hojas,
+        };
+        _nota.Children.Add(Estudio.Elevar(papel, Estudio.Sombra2));
+
+        if (conTexto.Count > 1 && MostrarElEnvioASap()) _nota.Children.Add(BotonTodoASap(conTexto));
         if (nota.Avisos.Count > 0)
             _nota.Children.Add(TarjetaDeTexto("Avisos", string.Join("\n", nota.Avisos)));
         _superficie.ScrollToHome();
@@ -2410,19 +2562,9 @@ public sealed partial class ConsultaWindow : Window
     /// <summary>Un renglón que explica por qué esta nota no se puede tocar.</summary>
     private static UIElement Cinta(string texto)
     {
-        var t = Estudio.Tarjeta(14);
-        t.Background = Estudio.EsperaSuave;
-        t.BorderBrush = Estudio.EsperaSuave;
-        t.Padding = new Thickness(14, 10, 14, 11);
-        t.Margin = new Thickness(2, 0, 2, 10);
-        t.Child = new TextBlock
-        {
-            Text = texto,
-            Foreground = Estudio.Espera,
-            FontSize = 12,
-            LineHeight = 17,
-            TextWrapping = TextWrapping.Wrap,
-        };
+        // El `AlertBanner` de la web en su tono de advertencia: icono, texto, filete y fondo suave.
+        var t = Estudio.Aviso("espera", texto);
+        t.Margin = new Thickness(2, 0, 2, 12);
         return t;
     }
 
@@ -2455,8 +2597,13 @@ public sealed partial class ConsultaWindow : Window
     private UIElement TarjetaDeSeccion(SeccionDeNota s, bool editable,
         Func<string, string, Task<bool>> guardar, bool conEnvioASap = true)
     {
+        // UNA SECCIÓN DEL DOCUMENTO, NO UNA TARJETA SUELTA (spec 054, 2026-09-26). Hasta hoy cada
+        // sección flotaba en su propia tarjeta con sombra, y la nota se leía como una pila de
+        // controles. La web la pinta como UN papel con secciones separadas por un filete: el rótulo
+        // en versalitas con aire y el cuerpo en serif. Esto es la sección; el papel lo pone
+        // PintarSecciones.
         string contenido = s.Contenido;
-        var cuerpo = new Grid();
+        var cuerpo = new Grid { Margin = new Thickness(0, 8, 0, 0) };
 
         var estado = new TextBlock
         {
@@ -2474,58 +2621,45 @@ public sealed partial class ConsultaWindow : Window
             LogBus.Log("consulta-ui", $"editor abierto en «{s.Titulo}»");
             cuerpo.Children.Clear();
 
+            // El campo de la web (`.clinical-control`): esquinas de 12, filete azul al escribir.
+            // WPF no redondea un TextBox, así que lo redondea el borde que lo envuelve.
             var caja = new TextBox
             {
                 Text = contenido,
                 AcceptsReturn = true,
                 TextWrapping = TextWrapping.Wrap,
-                MinHeight = 76,
-                MaxHeight = 280,
+                MinHeight = 84,
+                MaxHeight = 320,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                FontSize = 13.5,
-                Padding = new Thickness(10, 8, 10, 8),
-                Background = Estudio.Superficie,
+                FontSize = 14.5,
+                Padding = new Thickness(4, 2, 4, 2),
+                Background = Brushes.Transparent,
                 Foreground = Estudio.Tinta,
-                BorderBrush = Estudio.Acento,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(0),
                 CaretBrush = Estudio.Acento,
+                SelectionBrush = Estudio.Acento,
+            };
+            var marcoDeLaCaja = new Border
+            {
+                Child = caja,
+                CornerRadius = new CornerRadius(Estudio.RadioChico),
+                BorderBrush = Estudio.Acento,
+                BorderThickness = new Thickness(1.5),
+                Background = Estudio.Superficie,
+                Padding = new Thickness(8, 7, 8, 7),
             };
 
-            var guardarBtn = new Button
-            {
-                Content = "Guardar",
-                Height = 32,
-                MinWidth = 92,
-                Background = Estudio.Acento,
-                Foreground = Brushes.White,
-                BorderThickness = new Thickness(0),
-                FontSize = 12.5,
-                FontWeight = FontWeights.SemiBold,
-                Cursor = Cursors.Hand,
-                Template = Estudio.Pastilla(16),
-            };
-            var cancelar = new Button
-            {
-                Content = "Cancelar",
-                Height = 32,
-                MinWidth = 88,
-                Margin = new Thickness(8, 0, 0, 0),
-                Background = Brushes.Transparent,
-                Foreground = Estudio.TintaMedia,
-                BorderBrush = Estudio.Borde,
-                BorderThickness = new Thickness(1),
-                FontSize = 12.5,
-                Cursor = Cursors.Hand,
-                Template = Estudio.Pastilla(16),
-            };
+            var guardarBtn = Estudio.BotonPrimario("Guardar", "check", 34);
+            var cancelar = Estudio.BotonSecundario("Cancelar", null, 34);
+            cancelar.Margin = new Thickness(8, 0, 0, 0);
             cancelar.Click += (_, __) => Leer();
-            guardarBtn.Click += async (_, __) =>
+            async Task Guardar()
             {
                 string nuevo = caja.Text ?? "";
                 if (nuevo == contenido) { Leer(); return; }
                 guardarBtn.IsEnabled = false;
                 cancelar.IsEnabled = false;
-                guardarBtn.Content = "Guardando…";
+                guardarBtn.Content = Estudio.ConIcono("loader-circle", "Guardando…", Brushes.White);
                 bool ok = await guardar(s.Clave, nuevo);
                 if (ok) { contenido = nuevo; Leer(); }
                 else
@@ -2534,20 +2668,41 @@ public sealed partial class ConsultaWindow : Window
                     // poder reintentar. Cerrarlo perdería el trabajo y encima parecería guardado.
                     guardarBtn.IsEnabled = true;
                     cancelar.IsEnabled = true;
-                    guardarBtn.Content = "Guardar";
+                    guardarBtn.Content = Estudio.ConIcono("check", "Guardar", Brushes.White);
                 }
+            }
+            guardarBtn.Click += async (_, __) => await Guardar();
+
+            // EL TECLADO PRIMERO, que es lo que hace a Windows más rápido que la web: Ctrl+Enter o
+            // Ctrl+S guardan, Esc deja la sección como estaba. Esc se atiende AQUÍ porque la ventana
+            // entera lo usa para minimizarse, y sin marcarlo se minimizaría con el texto a medias.
+            caja.PreviewKeyDown += async (_, e) =>
+            {
+                bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+                if (ctrl && (e.Key == Key.Enter || e.Key == Key.S)) { e.Handled = true; await Guardar(); }
+                else if (e.Key == Key.Escape) { e.Handled = true; Leer(); }
+            };
+
+            var ayuda = new TextBlock
+            {
+                Text = "Ctrl+Enter guarda · Esc cancela",
+                Foreground = Estudio.TintaTenue,
+                FontSize = 11.5,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
             };
 
             var botones = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 9, 0, 0),
+                Margin = new Thickness(0, 10, 0, 0),
             };
             botones.Children.Add(guardarBtn);
             botones.Children.Add(cancelar);
+            botones.Children.Add(ayuda);
 
             var pilaEdicion = new StackPanel();
-            pilaEdicion.Children.Add(caja);
+            pilaEdicion.Children.Add(marcoDeLaCaja);
             pilaEdicion.Children.Add(botones);
             cuerpo.Children.Add(pilaEdicion);
 
@@ -2564,12 +2719,11 @@ public sealed partial class ConsultaWindow : Window
                 ? new TextBlock
                 {
                     Text = editable ? "Sin contenido. Toca para escribir." : "Sin contenido.",
-                    Foreground = Estudio.TintaTenue,
-                    FontSize = 13,
-                    FontStyle = FontStyles.Italic,
+                    Foreground = Estudio.DocTenue,
+                    FontSize = 14,
                     TextWrapping = TextWrapping.Wrap,
                 }
-                : Estudio.Parrafo(contenido);
+                : Estudio.Documento(contenido);
 
             if (!editable) { cuerpo.Children.Add(texto); return; }
 
@@ -2577,129 +2731,93 @@ public sealed partial class ConsultaWindow : Window
             {
                 Child = texto,
                 Background = Brushes.Transparent,
-                CornerRadius = new CornerRadius(10),
-                Padding = new Thickness(8, 6, 8, 6),
+                CornerRadius = new CornerRadius(Estudio.RadioChico),
+                Padding = new Thickness(10, 6, 10, 6),
                 // Márgenes negativos: la zona pulsable respira más que el texto sin mover el texto
                 // ni un píxel respecto a cómo se veía antes.
-                Margin = new Thickness(-8, -3, -8, -3),
+                Margin = new Thickness(-10, -4, -10, -4),
                 Cursor = Cursors.IBeam,
             };
-            zona.MouseEnter += (_, __) => zona.Background = Estudio.SuperficieSuave;
+            zona.MouseEnter += (_, __) => zona.Background = Estudio.HieloSuave;
             zona.MouseLeave += (_, __) => zona.Background = Brushes.Transparent;
             zona.MouseLeftButtonDown += (_, e) => { e.Handled = true; Editar(); };
             cuerpo.Children.Add(zona);
         }
 
-        // ── la cabecera: el rótulo y el ✓ ────────────────────────────────────
-        var check = new Button
-        {
-            Width = 30,
-            Height = 30,
-            // MÁS CALLADO QUE ANTES (2026-09-07, lo pidió el dueño: «se ve como unos fondos malucos
-            // que sobrecargan la parte visual»). Era una pastilla azul llena en CADA sección, así
-            // que la nota se leía como una cuadrícula de botones en vez de como un documento. Ahora
-            // el ✓ se enciende al acercarse, que es cuando importa.
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(15),
-        };
-        var glifoCheck = new TextBlock
-        {
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            Text = "",
-            FontSize = 13,
-            Foreground = Estudio.TintaTenue,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        check.Content = glifoCheck;
-        check.MouseEnter += (_, __) =>
-        {
-            check.Background = Estudio.AcentoSuave;
-            glifoCheck.Foreground = Estudio.Acento;
-        };
-        check.MouseLeave += (_, __) =>
-        {
-            check.Background = Brushes.Transparent;
-            glifoCheck.Foreground = Estudio.TintaTenue;
-        };
-        check.Click += async (_, e) => { e.Handled = true; await EnviarASapAsync(new[] { s.Clave }); };
-
-        // ── EL LÁPIZ ────────────────────────────────────────────────────────
+        // ── la cabecera: el rótulo y las acciones ───────────────────────────
         //
-        // POR QUÉ EXISTE, con fecha: el 2026-09-07 el dueño abrió la nota y escribió «¿qué putas no
-        // deja editar el texto?». El texto SÍ se podía tocar — pero nada en la pantalla lo decía, y
-        // la promesa 164 prohíbe los carteles al pasar el ratón, así que no había ni un solo indicio
-        // de que aquello fuera pulsable. Una función que existe y no se ve es una función que no
-        // existe: se enteró el que la escribió, y nadie más.
-        var lapiz = new Button
-        {
-            Content = new TextBlock
-            {
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                Text = "",
-                FontSize = 12.5,
-                Foreground = Estudio.TintaTenue,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-            Width = 30,
-            Height = 30,
-            Margin = new Thickness(0, 0, 2, 0),
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(15),
-            Visibility = editable ? Visibility.Visible : Visibility.Collapsed,
-        };
-        lapiz.MouseEnter += (_, __) => lapiz.Background = Estudio.SuperficieSuave;
-        lapiz.MouseLeave += (_, __) => lapiz.Background = Brushes.Transparent;
-        lapiz.Click += (_, e) => { e.Handled = true; Editar(); };
+        // ICONOS CALLADOS QUE SE ENCIENDEN AL ACERCARSE (2026-09-07, lo pidió el dueño: «se ve como
+        // unos fondos malucos que sobrecargan la parte visual»), y los de la web: copiar, corregir y
+        // —solo donde hay SAP— el ✓. El lápiz existe porque sin él nada decía que el texto se podía
+        // tocar (la promesa 164 prohíbe los carteles al pasar el ratón).
+        var acciones = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-        var acciones = new StackPanel { Orientation = Orientation.Horizontal };
-        acciones.Children.Add(lapiz);
-        if (conEnvioASap) acciones.Children.Add(check);
+        var copiar = Estudio.BotonIcono("clipboard-copy", "Copiar sección", 30, 15, Estudio.TintaTenue);
+        copiar.Click += (_, e) =>
+        {
+            e.Handled = true;
+            if (contenido.Trim().Length == 0) { Estado("Esa sección está vacía: no hay nada que copiar."); return; }
+            try { Clipboard.SetText(contenido); Estado($"«{s.Titulo}» copiada."); }
+            catch (Exception ex) { Estado($"No se pudo copiar: {ex.Message}"); }
+        };
+        acciones.Children.Add(copiar);
+
+        if (editable)
+        {
+            var lapiz = Estudio.BotonIcono("pencil", "Corregir sección", 30, 15, Estudio.TintaTenue);
+            lapiz.Margin = new Thickness(2, 0, 0, 0);
+            lapiz.Click += (_, e) => { e.Handled = true; Editar(); };
+            acciones.Children.Add(lapiz);
+        }
+
+        if (conEnvioASap && MostrarElEnvioASap())
+        {
+            var check = Estudio.BotonIcono("check", "Enviar a SAP", 30, 16, Estudio.TintaTenue);
+            check.Margin = new Thickness(2, 0, 0, 0);
+            check.Click += async (_, e) => { e.Handled = true; await EnviarASapAsync(new[] { s.Clave }); };
+            acciones.Children.Add(check);
+        }
 
         var cabecera = new DockPanel();
         DockPanel.SetDock(acciones, Dock.Right);
         cabecera.Children.Add(acciones);
-        var rotulo = Estudio.Rotulo(s.Titulo);
+        var rotulo = Estudio.RotuloDeDocumento(s.Titulo);
         rotulo.VerticalAlignment = VerticalAlignment.Center;
-        rotulo.Margin = new Thickness(0, 0, 0, 0);
         cabecera.Children.Add(rotulo);
 
         Leer();
 
-        var pila = new StackPanel();
+        var pila = new StackPanel { Margin = new Thickness(0, 14, 0, 16) };
         pila.Children.Add(cabecera);
         pila.Children.Add(cuerpo);
         pila.Children.Add(estado);
+        return pila;
+    }
 
-        var t = Estudio.Tarjeta(18);
-        t.Padding = new Thickness(16, 13, 16, 15);
-        t.Margin = new Thickness(2, 0, 2, 10);
-        t.Child = pila;
-        return Estudio.Elevar(t);
+    /// <summary>
+    /// ¿SE ENSEÑA EL ✓ A SAP? Solo si hay puente y SAP GUI está abierto en este equipo.
+    /// </summary>
+    /// <remarks>
+    /// El médico privado —el usuario de ahora, dicho por el dueño el 2026-09-25— no tiene SAP, y un ✓
+    /// que manda a un sistema que no existe es un botón que miente. El envío no se toca: vuelve en
+    /// cuanto hay un SAP abierto, que es la etapa hospital.
+    /// </remarks>
+    private static bool MostrarElEnvioASap()
+    {
+        if (!PuenteASap.Disponible) return false;
+        try { return System.Diagnostics.Process.GetProcessesByName("saplogon").Length > 0; }
+        catch (Exception e)
+        {
+            LogBus.Log("consulta-ui", $"no se pudo mirar si SAP está abierto: {e.GetType().Name}: {e.Message}");
+            return false;
+        }
     }
 
     private UIElement BotonTodoASap(IReadOnlyList<SeccionDeNota> secciones)
     {
-        var b = new Button
-        {
-            Content = "✓ Todo a SAP",
-            Height = 36,
-            MinWidth = 150,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 2, 0, 12),
-            Background = Estudio.AcentoSuave,
-            Foreground = Estudio.Acento,
-            BorderThickness = new Thickness(0),
-            FontSize = 13.5,
-            FontWeight = FontWeights.SemiBold,
-            Cursor = Cursors.Hand,
-            Template = Estudio.Pastilla(18),
-        };
+        var b = Estudio.BotonSecundario("Todo a SAP", "check", 38, Estudio.Acento);
+        b.HorizontalAlignment = HorizontalAlignment.Center;
+        b.Margin = new Thickness(0, 2, 0, 12);
         b.Click += async (_, __) => await EnviarASapAsync(secciones.Select(x => x.Clave).ToList());
         return b;
     }
@@ -2758,10 +2876,13 @@ public sealed partial class ConsultaWindow : Window
         {
             Orientation = Orientation.Horizontal, Margin = new Thickness(2, 2, 2, 16),
         };
-        fila.Children.Add(new TextBlock
+        // El título de página de la web: Schibsted Grotesk con la barra azul a la izquierda.
+        fila.Children.Add(new Border
         {
-            Text = texto, Foreground = Estudio.Tinta, FontSize = 21, FontWeight = FontWeights.SemiBold,
+            Width = 3, Height = 22, CornerRadius = new CornerRadius(2), Background = Estudio.Acento,
+            Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center,
         });
+        fila.Children.Add(Estudio.Titulo(texto, 21));
         if (coletilla.Length > 0)
             fila.Children.Add(new TextBlock
             {
@@ -2839,13 +2960,20 @@ public sealed partial class ConsultaWindow : Window
         return b;
     }
 
-    private static Button BotonPrincipal(string texto, Brush? fondo = null) => new()
+    private static Button BotonPrincipal(string texto, Brush? fondo = null)
     {
-        Content = new TextBlock { Text = texto, FontSize = 14.5, FontWeight = FontWeights.SemiBold },
-        Height = 46, Margin = new Thickness(2, 0, 2, 0), Cursor = Cursors.Hand,
-        Background = fondo ?? Estudio.Acento, Foreground = Brushes.White,
-        BorderThickness = new Thickness(0), Template = Estudio.Pastilla(23, estirado: true),
-    };
+        // El primario de la web (degradado azul) salvo cuando el fondo dice otra cosa (borrar es rojo).
+        var b = Estudio.BotonPrimario(texto, alto: 46);
+        b.Margin = new Thickness(2, 0, 2, 0);
+        b.HorizontalAlignment = HorizontalAlignment.Stretch;
+        if (fondo != null)
+        {
+            b.Background = fondo;
+            b.MouseEnter += (_, __) => b.Background = fondo;
+            b.MouseLeave += (_, __) => b.Background = fondo;
+        }
+        return b;
+    }
 
     private static Button Enlace(string texto, Brush? tinta = null) => new()
     {
@@ -2860,38 +2988,23 @@ public sealed partial class ConsultaWindow : Window
         var pila = new StackPanel();
         pila.Children.Add(new TextBlock
         {
-            Text = titulo, Foreground = Estudio.Tinta, FontSize = 14, FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
+            Text = titulo, Foreground = Estudio.TintaFuerte, FontFamily = Estudio.FuenteTitulo, FontSize = 16,
+            FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
         });
         pila.Children.Add(new TextBlock
         {
             Text = cuerpo, Foreground = Estudio.TintaMedia, FontSize = 12.5, LineHeight = 19,
             TextWrapping = TextWrapping.Wrap,
         });
-        var t = Estudio.Tarjeta(20);
+        var t = Estudio.Tarjeta(Estudio.RadioMedio);
         t.Padding = new Thickness(20, 22, 20, 22);
         t.Margin = new Thickness(2, 8, 2, 0);
         t.Child = pila;
         return Estudio.Elevar(t);
     }
 
-    /// <summary>
-    /// El cerebro, dibujado y no un glifo del sistema: «Segoe MDL2 Assets» no tiene ninguno que
-    /// signifique esto, y un glifo que no existe se pinta como un cuadrado vacío.
-    /// </summary>
-    private static System.Windows.Shapes.Shape CerebroDibujado() => new System.Windows.Shapes.Path
-    {
-        Data = Geometry.Parse(
-            "M9.5 3.5 A3 3 0 0 0 6.6 6 A2.8 2.8 0 0 0 4.8 10.6 A3 3 0 0 0 6 15.6 "
-            + "A3 3 0 0 0 9.5 19.9 A2.5 2.5 0 0 0 12 17.7 L12 5.9 A2.5 2.5 0 0 0 9.5 3.5 Z "
-            + "M14.5 3.5 A3 3 0 0 1 17.4 6 A2.8 2.8 0 0 1 19.2 10.6 A3 3 0 0 1 18 15.6 "
-            + "A3 3 0 0 1 14.5 19.9 A2.5 2.5 0 0 1 12 17.7"),
-        Stroke = Estudio.TintaMedia, StrokeThickness = 1.5, Fill = null,
-        StrokeLineJoin = PenLineJoin.Round, Stretch = Stretch.Uniform, Width = 17, Height = 17,
-    };
-
     /// <summary>Como <see cref="BotonDeMarco"/>, pero con un dibujo dentro en vez de un glifo.</summary>
-    private static Button BotonDeIcono(System.Windows.Shapes.Shape dibujo, string queHace)
+    private static Button BotonDeIcono(FrameworkElement dibujo, string queHace)
     {
         var b = new Button
         {
@@ -2900,24 +3013,18 @@ public sealed partial class ConsultaWindow : Window
             Cursor = Cursors.Hand, Template = Estudio.Pastilla(15),
         };
         AutomationProperties.SetName(b, queHace);
-        b.MouseEnter += (_, __) => { if (b.Background == Brushes.Transparent) b.Background = Estudio.SuperficieSuave; };
-        b.MouseLeave += (_, __) => { if (b.Background == Estudio.SuperficieSuave) b.Background = Brushes.Transparent; };
+        b.MouseEnter += (_, __) => { if (b.Background == Brushes.Transparent) b.Background = Estudio.HieloSuave; };
+        b.MouseLeave += (_, __) => { if (b.Background == Estudio.HieloSuave) b.Background = Brushes.Transparent; };
         return b;
     }
 
-    private static Button BotonDeMarco(string glifo, string queHace)
+    private static Button BotonDeMarco(string icono, string queHace)
     {
+        // Los de Lucide y no los de MDL2 (spec 054): minimizar y cerrar se reconocen sin leerlos en
+        // cualquier familia de iconos, y así la cabecera entera habla la misma.
         var b = new Button
         {
-            Content = new TextBlock
-            {
-                Text = glifo,
-                // La fuente de iconos de Windows: el mismo glifo de minimizar y cerrar que usa el
-                // sistema, para que se reconozcan sin leerlos.
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 9.5,
-                Foreground = Estudio.TintaMedia,
-            },
+            Content = Estudio.Icono(icono, 15, Estudio.TintaMedia),
             Width = 30,
             Height = 30,
             Margin = new Thickness(7, 0, 0, 0),
@@ -2928,7 +3035,8 @@ public sealed partial class ConsultaWindow : Window
         };
         // Los del marco no llevan sombra en reposo —serían dos objetos flotando junto al nombre—
         // pero sí se encienden al pasar por encima, que es lo que dice que son pulsables.
-        b.MouseEnter += (_, __) => b.Background = Estudio.SuperficieSuave;
+        System.Windows.Automation.AutomationProperties.SetName(b, queHace);
+        b.MouseEnter += (_, __) => b.Background = Estudio.HieloSuave;
         b.MouseLeave += (_, __) => b.Background = Brushes.Transparent;
         return b;
     }
@@ -2940,8 +3048,12 @@ public sealed partial class ConsultaWindow : Window
         MinWidth = 122,
         Margin = new Thickness(0),
         Background = Brushes.Transparent,
-        BorderThickness = new Thickness(0),
-        FontSize = 13.5,
+        BorderBrush = Brushes.Transparent,
+        BorderThickness = new Thickness(1),
+        FontSize = 13,
+        // Todas en seminegrita, como `.seg-item` de la web: la activa no se lee por el peso sino
+        // por ser la pieza blanca que sobresale del carril.
+        FontWeight = FontWeights.SemiBold,
         Cursor = Cursors.Hand,
         Template = Estudio.Pastilla(18),
     };
@@ -2960,29 +3072,18 @@ public sealed partial class ConsultaWindow : Window
 
     private UIElement FilaDeConsulta(ConsultaVista c)
     {
+        // LA TARJETA DE CONSULTA DE LA WEB (`ConsultationCard`, spec 054): arriba lo que la
+        // identifica y el estado con las MISMAS palabras y colores que el portal; debajo el motivo.
         var pila = new StackPanel();
 
-        var arriba = new DockPanel { Margin = new Thickness(0, 0, 0, 7) };
-        if (c.Estado.Length > 0)
-        {
-            var chip = new Border
-            {
-                CornerRadius = new CornerRadius(9),
-                Background = Estudio.AcentoSuave,
-                Padding = new Thickness(8, 3, 8, 3),
-                Child = new TextBlock
-                {
-                    Text = c.Estado, Foreground = Estudio.Acento,
-                    FontSize = 9.5, FontWeight = FontWeights.SemiBold,
-                },
-            };
-            DockPanel.SetDock(chip, Dock.Right);
-            arriba.Children.Add(chip);
-        }
+        var arriba = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var chip = Estudio.ChipDeEstado(c.Estado);
+        DockPanel.SetDock(chip, Dock.Right);
+        arriba.Children.Add(chip);
         arriba.Children.Add(new TextBlock
         {
             Text = c.Fecha == DateTimeOffset.MinValue ? "" : c.Fecha.ToLocalTime().ToString("d MMM · HH:mm"),
-            Foreground = Estudio.TintaTenue, FontSize = 10.5, FontWeight = FontWeights.SemiBold,
+            Foreground = Estudio.TintaMedia, FontSize = 12.5,
             VerticalAlignment = VerticalAlignment.Center,
         });
         pila.Children.Add(arriba);
@@ -2992,11 +3093,17 @@ public sealed partial class ConsultaWindow : Window
             Text = c.Motivo.Length > 0 ? c.Motivo
                  : c.Resumen.Length > 0 ? c.Resumen
                  : "Consulta sin motivo anotado",
-            Foreground = Estudio.Tinta, FontSize = 13.5, LineHeight = 20,
-            TextWrapping = TextWrapping.Wrap, MaxHeight = 62, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = Estudio.TintaFuerte, FontSize = 14.5, FontWeight = FontWeights.SemiBold, LineHeight = 21,
+            TextWrapping = TextWrapping.Wrap, MaxHeight = 64, TextTrimming = TextTrimming.CharacterEllipsis,
         });
+        if (c.Plantilla.Length > 0)
+            pila.Children.Add(new TextBlock
+            {
+                Text = c.Plantilla, Foreground = Estudio.TintaMedia, FontSize = 12.5,
+                Margin = new Thickness(0, 4, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+            });
 
-        var t = Estudio.Tarjeta(18);
+        var t = Estudio.Tarjeta(Estudio.RadioMedio);
         t.Padding = new Thickness(16, 13, 16, 14);
         t.Margin = new Thickness(2, 0, 2, 10);
         t.Child = pila;
@@ -3004,8 +3111,8 @@ public sealed partial class ConsultaWindow : Window
         // LA LISTA SE ABRE. Hasta el 2026-09-07 esto era un escaparate: la consulta se veía y no se
         // podía tocar, así que corregir una nota de hace diez minutos obligaba a irse al navegador.
         t.Cursor = Cursors.Hand;
-        t.MouseEnter += (_, __) => t.Background = Estudio.SuperficieSuave;
-        t.MouseLeave += (_, __) => t.Background = Estudio.Superficie;
+        t.MouseEnter += (_, __) => { t.Background = Estudio.HieloSuave; t.BorderBrush = Estudio.Niebla; };
+        t.MouseLeave += (_, __) => { t.Background = Estudio.Superficie; t.BorderBrush = Estudio.Borde; };
         // Atendido aquí porque la ventana arrastra con este mismo evento: sin marcarlo, DragMove se
         // queda con el clic y la tarjeta parecería pulsable sin serlo.
         t.MouseLeftButtonDown += async (_, e) => { e.Handled = true; await AbrirConsultaAsync(c); };
