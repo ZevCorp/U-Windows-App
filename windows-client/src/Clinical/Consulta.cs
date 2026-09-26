@@ -108,6 +108,12 @@ public sealed class Consulta
     public NotaClinica? Nota { get; private set; }
 
     /// <summary>
+    /// Lo que se suma a lo dicho antes de mandarlo a generar: los borradores que el médico escribió
+    /// por sección mientras grababa (spec 057). Nulo = solo lo dicho, como antes.
+    /// </summary>
+    public Func<string, Task<string>>? ConLoEscrito { get; set; }
+
+    /// <summary>
     /// ¿Se puede cambiar de cuenta ahora? Solo mientras no se está grabando (promesa 99).
     /// </summary>
     /// <remarks>
@@ -195,10 +201,23 @@ public sealed class Consulta
         string dicho = await _pararYRecogerLoDicho();
         Verbatim = dicho ?? "";
 
+        // LO ESCRITO VIAJA CON LO DICHO (promesa 470): el bloque de los borradores por sección va al
+        // final de la transcripción que se manda, no a la que se enseña — no es algo que se habló.
+        string enviado = Verbatim;
+        if (ConLoEscrito != null)
+        {
+            try { enviado = await ConLoEscrito(Verbatim); }
+            catch (Exception e)
+            {
+                // Sin los borradores la nota sale igual con lo dicho; se dice en el log, no se inventa.
+                LogBus.Log("consulta", $"no se pudieron sumar los borradores: {e.GetType().Name}: {e.Message}");
+            }
+        }
+
         // VACÍO SE DICE AQUÍ, no se manda. /transcript con texto vacío contesta 400
         // TRANSCRIPT_REQUIRED — un error evitable que además taparía el de verdad: el micrófono
-        // que no entregó nada.
-        if (string.IsNullOrWhiteSpace(dicho))
+        // que no entregó nada. Con borradores escritos NO está vacío: el médico escribió la consulta.
+        if (string.IsNullOrWhiteSpace(enviado))
         {
             // Llegar aquí significa que el dictado SÍ conectó (si no, no se habría llegado a
             // grabar) y aun así no entregó texto. Ahora sí es del lado del audio, y por eso este
@@ -210,7 +229,7 @@ public sealed class Consulta
 
         try
         {
-            await _clinica.GuardarTranscripcionAsync(EncounterId, dicho, ct);
+            await _clinica.GuardarTranscripcionAsync(EncounterId, enviado, ct);
             Pasar(EstadoDeConsulta.Transcrita);
 
             Pasar(EstadoDeConsulta.GenerandoNota);

@@ -523,6 +523,8 @@ public sealed partial class ConsultaWindow : Window
         // ARRIBA DE TODO: es lo primero que el médico tiene que leer (spec 051).
         _panelNota.Children.Add(_motivo.Vista);
         _panelNota.Children.Add(Estudio.Elevar(_tarjetaVivo));
+        // Lo que el médico escribe mientras graba (spec 057), justo debajo de lo que se oye.
+        _panelNota.Children.Add(_panelBorradores);
         _panelNota.Children.Add(Estudio.Elevar(_vacioNota));
         _panelNota.Children.Add(_nota);
         _panelNota.Children.Add(HuecoDeLaCarita());   // promesa 272: aquí se sienta la carita
@@ -713,7 +715,9 @@ public sealed partial class ConsultaWindow : Window
             _vivo.Text = t;
             _tarjetaVivo.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             _vacioNota.Visibility = t.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-            if (_enNota) _superficie.ScrollToEnd();
+            // SIN SALTAR AL FINAL MIENTRAS SE ESCRIBE: cada palabra oída movería la pantalla bajo el
+            // cursor del médico, que está en una sección de abajo.
+            if (_enNota && !_panelBorradores.IsKeyboardFocusWithin) _superficie.ScrollToEnd();
         });
         _dictado.Fallo += m => Dispatcher.BeginInvoke(() => Estado("Dictado: " + m));
         _consulta.Cambio += _ => Dispatcher.BeginInvoke(PintarSegunEstado);
@@ -2411,7 +2415,11 @@ public sealed partial class ConsultaWindow : Window
 
             if (!await _consulta.EmpezarAsync(_plantillaId)) Estado(_consulta.Motivo);
             // LA ÚLTIMA USADA SE ANOTA AL GRABAR, no al mirar el selector: es lo que hace la web.
-            else PreferenciasDelMedico.RecordarUltima(_sesion.MedicoId, _plantillaId);
+            else
+            {
+                PreferenciasDelMedico.RecordarUltima(_sesion.MedicoId, _plantillaId);
+                _ = PrepararBorradoresAsync(_consulta.EncounterId);
+            }
         }
         finally { _grabar.IsEnabled = true; }
     }
@@ -2427,9 +2435,9 @@ public sealed partial class ConsultaWindow : Window
 
         switch (_consulta.Estado)
         {
-            case EstadoDeConsulta.GenerandoNota: Estado("Organizando la nota…"); break;
-            case EstadoDeConsulta.NotaLista: PintarNota(); break;
-            case EstadoDeConsulta.Fallida: Estado(_consulta.Motivo); break;
+            case EstadoDeConsulta.GenerandoNota: CerrarBorradores(notaLista: false); Estado("Organizando la nota…"); break;
+            case EstadoDeConsulta.NotaLista: CerrarBorradores(notaLista: true); PintarNota(); break;
+            case EstadoDeConsulta.Fallida: CerrarBorradores(notaLista: false); Estado(_consulta.Motivo); break;
         }
     }
 

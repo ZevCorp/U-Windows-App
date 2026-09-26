@@ -915,6 +915,11 @@ internal static class Contrato
         // Spec 056: el atajo es el texto del médico, no un formulario (2026-09-26, lo pidió el dueño).
         Prueba("466. insertar un atajo deja el cursor al final de lo insertado y no selecciona nada, aunque el texto traiga corchetes o guiones: el atajo es texto del médico, no un formulario", ElAtajoNoEsUnFormulario);
         Prueba("467. sobre una sección vacía o que el generador dejó en relleno, el atajo la sustituye; sobre contenido real, se suma como en la web", ElAtajoSustituyeElRelleno);
+        // Spec 057: lo que el médico escribe mientras graba entra a la nota (2026-09-26).
+        Prueba("468. el bloque que se suma a la transcripción es el de la web: el mismo texto para los mismos borradores y la misma plantilla, sin bloque cuando no hay nada escrito, y quitarlo devuelve la transcripción sin él, así que regenerar nunca duplica", ElBloqueDeBorradoresEsElDeLaWeb);
+        Prueba("469. guardar un borrador escribe en encounter_section_drafts con upsert por encounter_id,section_key, sin user_id ni doctor_id; vaciarlo borra su fila; y un fallo de red devuelve «no guardado» sin lanzar", ElBorradorSeGuardaComoEnLaWeb);
+        Prueba("470. al terminar de grabar, lo que viaja a /transcript es lo dicho MÁS el bloque de lo escrito; y si no se dijo nada pero sí se escribió, la nota se genera igual", LoEscritoViajaConLoDicho);
+        Prueba("471. las secciones salen del template_snapshot congelado del encounter, en su orden; y al combinar la copia local con la de la nube, gana la local sección por sección y la nube llena lo que falta", LosBorradoresSeCombinanComoEnLaWeb);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -5270,6 +5275,188 @@ internal static class Contrato
             Debe((string)Leer(r, "Texto")! == (string)Leer(web, "Texto")!,
                 $"sobre «{real}» el atajo tenía que sumarse como en la web, no sustituir");
         }
+    }
+
+    // ── spec 057 ──────────────────────────────────────────────────────────────
+
+    private static Dictionary<string, string> Diccionario(JsonElement o)
+    {
+        var d = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (o.ValueKind == JsonValueKind.Object)
+            foreach (var p in o.EnumerateObject()) d[p.Name] = p.Value.GetString() ?? "";
+        return d;
+    }
+
+    private static object? SeccionesDelBorrador(Type tSeccion, JsonElement secciones)
+    {
+        if (secciones.ValueKind != JsonValueKind.Array) return null;
+        var lista = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tSeccion))!;
+        foreach (var s in secciones.EnumerateArray())
+            lista.Add(Activator.CreateInstance(tSeccion, Cad(s, "key") ?? "", Cad(s, "label") ?? "",
+                s.TryGetProperty("order", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : 0));
+        return lista;
+    }
+
+    private static void ElBloqueDeBorradoresEsElDeLaWeb()
+    {
+        var t = Clin("BorradoresDeSeccion");
+        var tSeccion = Clin("SeccionDelBorrador");
+        var bloque = t?.GetMethod("Bloque");
+        var quitar = t?.GetMethod("Quitar");
+        var contar = t?.GetMethod("Contar");
+        if (tSeccion == null || bloque == null || quitar == null || contar == null)
+        { Pendiente("Clinical.BorradoresDeSeccion (Bloque, Quitar, Contar)", "468", "057"); return; }
+        var casos = Vectores("borradores");
+        if (casos == null) return;
+
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            var w = caso.GetProperty("salida");
+            string dicho = Cad(e, "transcripcion") ?? "";
+            var borradores = Diccionario(e.GetProperty("borradores"));
+            var secciones = SeccionesDelBorrador(tSeccion, e.GetProperty("secciones"));
+            string suyo = (string)bloque.Invoke(null, new object?[] { dicho, borradores, secciones })!;
+            string web = Cad(w, "bloque")!;
+            Debe(suyo == web, $"el bloque para «{dicho.Replace("\n", "⏎")}» con {borradores.Count} borrador(es) no es el de la web:\n"
+                            + $"      Windows «{suyo.Replace("\n", "⏎")}»\n      la web  «{web.Replace("\n", "⏎")}»");
+            string limpio = (string)quitar.Invoke(null, new object?[] { suyo })!;
+            Debe(limpio == Cad(w, "limpio"), $"quitar el bloque de «{dicho.Replace("\n", "⏎")}» no deja lo que deja la web");
+            string regenerado = (string)bloque.Invoke(null, new object?[] { limpio, borradores, secciones })!;
+            Debe(regenerado.Split(BorradoresMarca).Length <= 2, "regenerar sobre una transcripción ya limpiada no puede llevar dos bloques");
+            Debe((int)contar.Invoke(null, new object?[] { borradores })! == w.GetProperty("contados").GetInt32(),
+                $"cuenta {borradores.Count} borrador(es) distinto que la web (los vacíos no cuentan)");
+        }
+    }
+
+    private const string BorradoresMarca = "--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---";
+
+    private static void ElBorradorSeGuardaComoEnLaWeb()
+    {
+        var t = Clin("BorradoresDelMedico");
+        var guardar = t?.GetMethod("GuardarAsync");
+        var leer = t?.GetMethod("LeerAsync");
+        if (guardar == null || leer == null) { Pendiente("Clinical.BorradoresDelMedico (GuardarAsync, LeerAsync)", "469", "057"); return; }
+
+        var cuerpos = new List<string>();
+        bool falla = false;
+        var backend = new BackendDeMentira(req =>
+        {
+            if (req.RequestUri!.AbsolutePath.Contains("/auth/v1/token")) return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600));
+            if (req.Content != null) cuerpos.Add(req.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+            if (falla) return (HttpStatusCode.InternalServerError, "{\"message\":\"caido\"}");
+            if (req.Method == HttpMethod.Get)
+                return (HttpStatusCode.OK, "[{\"section_key\":\"examen\",\"content\":\"Alerta, orientado.\"},{\"section_key\":\"plan\",\"content\":\"Control en 8 días\"}]");
+            return (HttpStatusCode.Created, "");
+        });
+        var (sesion, _) = MedicoDentro(backend);
+        backend.Peticiones.Clear();
+
+        bool ok = (bool)Esperar(guardar.Invoke(null, new object?[] { sesion, "enc-1", "examen", "Paciente alerta, orientado.", CancellationToken.None }))!;
+        Debe(ok, "guardar un borrador con la base respondiendo tiene que decir «guardado»");
+        string pet = backend.Peticiones.LastOrDefault() ?? "";
+        Debe(pet.StartsWith("POST /rest/v1/encounter_section_drafts") && Uri.UnescapeDataString(pet).Contains("on_conflict=encounter_id,section_key"),
+            $"guardar es un upsert en encounter_section_drafts por encounter_id,section_key (fue «{pet}»)");
+        using (var doc = JsonDocument.Parse(cuerpos.Last()))
+        {
+            var c = doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement[0] : doc.RootElement;
+            Debe(Cad(c, "encounter_id") == "enc-1" && Cad(c, "section_key") == "examen" && Cad(c, "content") == "Paciente alerta, orientado.",
+                "el cuerpo lleva encounter_id, section_key y content tal cual");
+            Debe(!c.TryGetProperty("user_id", out _) && !c.TryGetProperty("doctor_id", out _),
+                "sin user_id ni doctor_id: doctor_id es default auth.uid() y la RLS lo exige; mandarlo sería suplantable");
+        }
+        Debe(backend.UltimasCabeceras.TryGetValue("apikey", out var k) && k == "publishable"
+             && backend.UltimasCabeceras.TryGetValue("Authorization", out var a) && a.StartsWith("Bearer "),
+            "con la clave pública y el token del médico, nunca con otra llave");
+
+        ok = (bool)Esperar(guardar.Invoke(null, new object?[] { sesion, "enc-1", "examen", "   ", CancellationToken.None }))!;
+        pet = Uri.UnescapeDataString(backend.Peticiones.LastOrDefault() ?? "");
+        Debe(ok && pet.StartsWith("DELETE /rest/v1/encounter_section_drafts") && pet.Contains("encounter_id=eq.enc-1") && pet.Contains("section_key=eq.examen"),
+            $"vaciar la sección borra SU fila y solo la suya (fue «{pet}»)");
+
+        var leidos = Esperar(leer.Invoke(null, new object?[] { sesion, "enc-1", CancellationToken.None })) as System.Collections.IDictionary;
+        Debe(leidos != null && leidos.Count == 2 && (string?)leidos["plan"] == "Control en 8 días",
+            "leer trae los borradores de esa consulta por su section_key");
+        pet = Uri.UnescapeDataString(backend.Peticiones.LastOrDefault() ?? "");
+        Debe(pet.StartsWith("GET /rest/v1/encounter_section_drafts") && pet.Contains("encounter_id=eq.enc-1"),
+            "y se leen filtrando por el encounter");
+
+        falla = true;
+        object? r = null;
+        try { r = Esperar(guardar.Invoke(null, new object?[] { sesion, "enc-1", "plan", "algo", CancellationToken.None })); }
+        catch (Exception e) { Debe(false, $"un fallo de red no puede lanzar ({e.GetType().Name}): el médico está en mitad de una consulta"); }
+        Debe(r is false, "un fallo de red devuelve «no guardado», para que la pantalla lo diga y se reintente");
+    }
+
+    private static void LoEscritoViajaConLoDicho()
+    {
+        var tConsulta = Clin("Consulta");
+        var con = tConsulta?.GetProperty("ConLoEscrito");
+        if (tConsulta == null || con == null) { Pendiente("Clinical.Consulta.ConLoEscrito", "470", "057"); return; }
+
+        foreach (string dicho in new[] { "Paciente refiere cefalea de tres días.", "" })
+        {
+            string? transcrito = null;
+            bool generada = false;
+            var backend = new BackendDeMentira(req =>
+            {
+                string ruta = req.RequestUri!.AbsolutePath;
+                if (ruta.Contains("/auth/v1/token")) return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600));
+                if (ruta.EndsWith("/transcript"))
+                {
+                    using var d = JsonDocument.Parse(req.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                    transcrito = Cad(d.RootElement, "transcript");
+                    return (HttpStatusCode.OK, "{\"status\":\"transcribed\"}");
+                }
+                if (ruta.EndsWith("/generate-note"))
+                {
+                    generada = true;
+                    return (HttpStatusCode.OK, "{\"encounter_id\":\"enc-1\",\"status\":\"note_generated\",\"note_json\":{\"summary\":\"s\",\"sections\":[{\"key\":\"motivo\",\"label\":\"Motivo\",\"content\":\"Cefalea\"}],\"warnings\":[],\"missing_required_sections\":[]}}");
+                }
+                return (HttpStatusCode.Created, "{\"encounter_id\":\"enc-1\",\"status\":\"created\"}");
+            });
+            var (sesion, clinica) = MedicoDentro(backend);
+            var consulta = Activator.CreateInstance(tConsulta, sesion, clinica,
+                (Func<CancellationToken, Task<bool>>)(_ => Task.FromResult(true)),
+                (Func<Task<string>>)(() => Task.FromResult(dicho)),
+                null)!;
+            con.SetValue(consulta, (Func<string, Task<string>>)(t => Task.FromResult(t + "\n\n" + BorradoresMarca + "\n[Examen físico] Alerta, orientado.")));
+
+            Esperar(tConsulta.GetMethod("EmpezarAsync")!.Invoke(consulta, new object?[] { "plantilla-x", CancellationToken.None }));
+            Esperar(tConsulta.GetMethod("TerminarAsync")!.Invoke(consulta, new object?[] { CancellationToken.None }));
+
+            string que = dicho.Length > 0 ? "con algo dicho" : "sin nada dicho";
+            Debe(transcrito != null && transcrito.Contains(BorradoresMarca) && transcrito.Contains("[Examen físico] Alerta, orientado."),
+                $"{que}, /transcript tiene que llevar el bloque de lo escrito (llevó «{transcrito?.Replace("\n", "⏎")}»)");
+            if (dicho.Length > 0)
+                Debe(transcrito!.StartsWith(dicho), "y lo dicho va primero, intacto");
+            Debe(generada, $"{que} y con borradores escritos, la nota se tiene que generar");
+            Debe((string?)Leer(consulta, "Verbatim") == dicho,
+                "lo que se enseña como transcripción sigue siendo lo DICHO: el bloque no es algo que se habló");
+        }
+    }
+
+    private static void LosBorradoresSeCombinanComoEnLaWeb()
+    {
+        var t = Clin("BorradoresDeSeccion");
+        var secciones = t?.GetMethod("SeccionesDe");
+        var combinar = t?.GetMethod("Combinar");
+        if (secciones == null || combinar == null) { Pendiente("Clinical.BorradoresDeSeccion (SeccionesDe, Combinar)", "471", "057"); return; }
+
+        using var snap = JsonDocument.Parse("{\"template_id\":\"t\",\"sections\":[{\"key\":\"plan\",\"label\":\"Plan\",\"order\":3},{\"key\":\"motivo\",\"label\":\"Motivo de consulta\",\"order\":1},{\"key\":\"examen\",\"label\":\"Examen físico\",\"order\":2},{\"key\":\"\",\"label\":\"Sin clave\",\"order\":4}]}");
+        var lista = ((System.Collections.IEnumerable)secciones.Invoke(null, new object?[] { snap.RootElement })!).Cast<object>().ToList();
+        Debe(string.Join(",", lista.Select(x => Leer(x, "Clave"))) == "motivo,examen,plan",
+            $"las secciones salen en el orden de la plantilla y sin las que no tienen clave (salió {string.Join(",", lista.Select(x => Leer(x, "Clave")))})");
+        Debe(lista.Count > 0 && (string?)Leer(lista[0], "Titulo") == "Motivo de consulta", "con el nombre que ve el médico");
+        var vacias = ((System.Collections.IEnumerable)secciones.Invoke(null, new object?[] { default(JsonElement) })!).Cast<object>().Count();
+        Debe(vacias == 0, "sin snapshot, ninguna sección y ningún error");
+
+        var local = new Dictionary<string, string> { ["examen"] = "Local: alerta.", ["plan"] = "   " };
+        var nube = new Dictionary<string, string> { ["examen"] = "Nube: vieja.", ["plan"] = "Control en 8 días", ["motivo"] = "Cefalea" };
+        var r = (System.Collections.IDictionary)combinar.Invoke(null, new object?[] { local, nube })!;
+        Debe((string?)r["examen"] == "Local: alerta.", "la copia local gana: es lo que pudo no haber alcanzado a subir");
+        Debe((string?)r["plan"] == "Control en 8 días", "una sección local vacía no borra lo que hay en la nube");
+        Debe((string?)r["motivo"] == "Cefalea" && r.Count == 3, "lo que solo está en la nube se conserva");
     }
 
     private static void LosAtajosSeOrdenanComoEnLaWeb()

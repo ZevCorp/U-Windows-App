@@ -26,6 +26,8 @@ const atajos = await import(`${WEB}/lib/clinical/snippets.ts`);
 const buscar = await import(`${WEB}/lib/clinical/search.ts`);
 const plantillas = await import(`${WEB}/lib/clinical/template-preferences.ts`);
 const texto = await import(`${WEB}/lib/clinical/note-plain-text.ts`);
+const borradores = await import(`${WEB}/lib/clinical/section-drafts.ts`);
+const clinica = await import(`${WEB}/lib/api/clinical.ts`);
 
 // ── notas de ejemplo ─────────────────────────────────────────────────────────
 
@@ -278,10 +280,48 @@ const notasATexto = [
 ];
 const textosPlanos = notasATexto.map((n) => ({ entrada: n, salida: texto.noteAsPlainText(n) }));
 
+// ── lo que el médico escribe mientras graba (spec 057) ───────────────────────
+
+const seccionesPlantilla = [
+  { key: "examen", label: "Examen físico", order: 3 },
+  { key: "motivo", label: "Motivo de consulta", order: 1 },
+  { key: "plan", label: "Plan", order: 4 },
+  { key: "enfermedad", label: "Enfermedad actual", order: 2 },
+];
+const casosBorradores = [
+  { transcripcion: "Doctor: ¿qué lo trae?\nPaciente: dolor de cabeza.", borradores: {}, secciones: seccionesPlantilla },
+  { transcripcion: "Hablaron de cefalea.  \n\n", borradores: { motivo: "  Cefalea tensional  " }, secciones: seccionesPlantilla },
+  { transcripcion: "Consulta.", borradores: { plan: "Acetaminofén 500 mg\n\n  cada 8 horas", examen: "Paciente alerta,   orientado.\nPupilas isocóricas.", motivo: "   " }, secciones: seccionesPlantilla },
+  { transcripcion: "Consulta.", borradores: { vieja: "Sospecha de migraña", motivo: "Dolor" }, secciones: seccionesPlantilla },
+  { transcripcion: "", borradores: { enfermedad: "Tres días de evolución" }, secciones: [] },
+  { transcripcion: "Sin plantilla.", borradores: { b: "dos", a: "uno" }, secciones: null },
+];
+const bloquesDeBorradores = casosBorradores.map((c) => ({
+  entrada: c,
+  salida: {
+    bloque: borradores.buildTranscriptWithSectionDrafts(c.transcripcion, c.borradores, c.secciones),
+    // Regenerar: lo que ya lleva el bloque, sin él, y otra vez con él — nunca dos bloques.
+    limpio: borradores.stripSectionDraftsBlock(borradores.buildTranscriptWithSectionDrafts(c.transcripcion, c.borradores, c.secciones)),
+    contados: borradores.countSectionDrafts(c.borradores),
+  },
+}));
+
+// ── plan y egreso (spec 058) ─────────────────────────────────────────────────
+
+const egresos = [
+  undefined,
+  null,
+  {},
+  { plan: {} },
+  { plan: { medications: "no es lista", follow_up: [{ text: "Control en 8 días" }] }, alarm_signs: [{ text: "Fiebre", urgency: "priority" }] },
+  cierreCompleto,
+].map((d) => ({ entrada: d === undefined ? "__ausente__" : d, salida: clinica.ensureClinicalDischarge(d as never) }));
+
 const commit = execSync("git rev-parse --short HEAD", { cwd: WEB }).toString().trim();
 process.stdout.write(JSON.stringify({
   generado: new Date().toISOString().slice(0, 10),
   web: `joseph1356k/Pagina-web-clientes-final@${commit}`,
   revisiones, vitales, voces, literales, barras, huecos: huecosV, inserciones,
   catalogoDeAtajos: catalogo, filtros, normalizados, listasDePlantillas: listas, plantillas: plantillaV, textosPlanos,
+  borradores: bloquesDeBorradores, egresos,
 }, null, 1));

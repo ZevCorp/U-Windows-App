@@ -3976,5 +3976,335 @@
    },
    "salida": "Resumen\nPaciente con dolor torácico atípico, estable.\n\nDescripción\nPárrafo uno.\n\nPárrafo dos.\n\nPlan terapéutico\nLosartán · 50 mg · en ayunas\n\nRecomendaciones\nSin información documentada.\n\nSignos de alarma\nFiebre\nVómito"
   }
+ ],
+ "borradores": [
+  {
+   "entrada": {
+    "transcripcion": "Doctor: ¿qué lo trae?\nPaciente: dolor de cabeza.",
+    "borradores": {},
+    "secciones": [
+     {
+      "key": "examen",
+      "label": "Examen físico",
+      "order": 3
+     },
+     {
+      "key": "motivo",
+      "label": "Motivo de consulta",
+      "order": 1
+     },
+     {
+      "key": "plan",
+      "label": "Plan",
+      "order": 4
+     },
+     {
+      "key": "enfermedad",
+      "label": "Enfermedad actual",
+      "order": 2
+     }
+    ]
+   },
+   "salida": {
+    "bloque": "Doctor: ¿qué lo trae?\nPaciente: dolor de cabeza.",
+    "limpio": "Doctor: ¿qué lo trae?\nPaciente: dolor de cabeza.",
+    "contados": 0
+   }
+  },
+  {
+   "entrada": {
+    "transcripcion": "Hablaron de cefalea.  \n\n",
+    "borradores": {
+     "motivo": "  Cefalea tensional  "
+    },
+    "secciones": [
+     {
+      "key": "examen",
+      "label": "Examen físico",
+      "order": 3
+     },
+     {
+      "key": "motivo",
+      "label": "Motivo de consulta",
+      "order": 1
+     },
+     {
+      "key": "plan",
+      "label": "Plan",
+      "order": 4
+     },
+     {
+      "key": "enfermedad",
+      "label": "Enfermedad actual",
+      "order": 2
+     }
+    ]
+   },
+   "salida": {
+    "bloque": "Hablaron de cefalea.\n\n--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---\nEstas frases las escribió el médico durante la consulta; no se dijeron en voz alta. Son información explícita de la consulta: úsalas como cualquier otro dato dicho. Cada línea empieza con la sección a la que pertenece: redáctala DENTRO de esa sección, integrándola con lo que sí se habló. No las copies tal cual como una lista aparte, y no las lleves a otras secciones.\n[Motivo de consulta] Cefalea tensional",
+    "limpio": "Hablaron de cefalea.",
+    "contados": 1
+   }
+  },
+  {
+   "entrada": {
+    "transcripcion": "Consulta.",
+    "borradores": {
+     "plan": "Acetaminofén 500 mg\n\n  cada 8 horas",
+     "examen": "Paciente alerta,   orientado.\nPupilas isocóricas.",
+     "motivo": "   "
+    },
+    "secciones": [
+     {
+      "key": "examen",
+      "label": "Examen físico",
+      "order": 3
+     },
+     {
+      "key": "motivo",
+      "label": "Motivo de consulta",
+      "order": 1
+     },
+     {
+      "key": "plan",
+      "label": "Plan",
+      "order": 4
+     },
+     {
+      "key": "enfermedad",
+      "label": "Enfermedad actual",
+      "order": 2
+     }
+    ]
+   },
+   "salida": {
+    "bloque": "Consulta.\n\n--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---\nEstas frases las escribió el médico durante la consulta; no se dijeron en voz alta. Son información explícita de la consulta: úsalas como cualquier otro dato dicho. Cada línea empieza con la sección a la que pertenece: redáctala DENTRO de esa sección, integrándola con lo que sí se habló. No las copies tal cual como una lista aparte, y no las lleves a otras secciones.\n[Examen físico] Paciente alerta, orientado. Pupilas isocóricas.\n[Plan] Acetaminofén 500 mg cada 8 horas",
+    "limpio": "Consulta.",
+    "contados": 2
+   }
+  },
+  {
+   "entrada": {
+    "transcripcion": "Consulta.",
+    "borradores": {
+     "vieja": "Sospecha de migraña",
+     "motivo": "Dolor"
+    },
+    "secciones": [
+     {
+      "key": "examen",
+      "label": "Examen físico",
+      "order": 3
+     },
+     {
+      "key": "motivo",
+      "label": "Motivo de consulta",
+      "order": 1
+     },
+     {
+      "key": "plan",
+      "label": "Plan",
+      "order": 4
+     },
+     {
+      "key": "enfermedad",
+      "label": "Enfermedad actual",
+      "order": 2
+     }
+    ]
+   },
+   "salida": {
+    "bloque": "Consulta.\n\n--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---\nEstas frases las escribió el médico durante la consulta; no se dijeron en voz alta. Son información explícita de la consulta: úsalas como cualquier otro dato dicho. Cada línea empieza con la sección a la que pertenece: redáctala DENTRO de esa sección, integrándola con lo que sí se habló. No las copies tal cual como una lista aparte, y no las lleves a otras secciones.\n[Motivo de consulta] Dolor\n[vieja] Sospecha de migraña",
+    "limpio": "Consulta.",
+    "contados": 2
+   }
+  },
+  {
+   "entrada": {
+    "transcripcion": "",
+    "borradores": {
+     "enfermedad": "Tres días de evolución"
+    },
+    "secciones": []
+   },
+   "salida": {
+    "bloque": "\n\n--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---\nEstas frases las escribió el médico durante la consulta; no se dijeron en voz alta. Son información explícita de la consulta: úsalas como cualquier otro dato dicho. Cada línea empieza con la sección a la que pertenece: redáctala DENTRO de esa sección, integrándola con lo que sí se habló. No las copies tal cual como una lista aparte, y no las lleves a otras secciones.\n[enfermedad] Tres días de evolución",
+    "limpio": "",
+    "contados": 1
+   }
+  },
+  {
+   "entrada": {
+    "transcripcion": "Sin plantilla.",
+    "borradores": {
+     "b": "dos",
+     "a": "uno"
+    },
+    "secciones": null
+   },
+   "salida": {
+    "bloque": "Sin plantilla.\n\n--- ANOTACIONES ESCRITAS POR EL MÉDICO DURANTE LA CONSULTA ---\nEstas frases las escribió el médico durante la consulta; no se dijeron en voz alta. Son información explícita de la consulta: úsalas como cualquier otro dato dicho. Cada línea empieza con la sección a la que pertenece: redáctala DENTRO de esa sección, integrándola con lo que sí se habló. No las copies tal cual como una lista aparte, y no las lleves a otras secciones.\n[b] dos\n[a] uno",
+    "limpio": "Sin plantilla.",
+    "contados": 2
+   }
+  }
+ ],
+ "egresos": [
+  {
+   "entrada": "__ausente__",
+   "salida": {
+    "plan": {
+     "medications": [],
+     "non_pharmacological": [],
+     "follow_up": []
+    },
+    "recommendations": [],
+    "alarm_signs": []
+   }
+  },
+  {
+   "entrada": null,
+   "salida": {
+    "plan": {
+     "medications": [],
+     "non_pharmacological": [],
+     "follow_up": []
+    },
+    "recommendations": [],
+    "alarm_signs": []
+   }
+  },
+  {
+   "entrada": {},
+   "salida": {
+    "plan": {
+     "medications": [],
+     "non_pharmacological": [],
+     "follow_up": []
+    },
+    "recommendations": [],
+    "alarm_signs": []
+   }
+  },
+  {
+   "entrada": {
+    "plan": {}
+   },
+   "salida": {
+    "plan": {
+     "medications": [],
+     "non_pharmacological": [],
+     "follow_up": []
+    },
+    "recommendations": [],
+    "alarm_signs": []
+   }
+  },
+  {
+   "entrada": {
+    "plan": {
+     "medications": "no es lista",
+     "follow_up": [
+      {
+       "text": "Control en 8 días"
+      }
+     ]
+    },
+    "alarm_signs": [
+     {
+      "text": "Fiebre",
+      "urgency": "priority"
+     }
+    ]
+   },
+   "salida": {
+    "plan": {
+     "medications": [],
+     "non_pharmacological": [],
+     "follow_up": [
+      {
+       "text": "Control en 8 días"
+      }
+     ]
+    },
+    "recommendations": [],
+    "alarm_signs": [
+     {
+      "text": "Fiebre",
+      "urgency": "priority"
+     }
+    ]
+   }
+  },
+  {
+   "entrada": {
+    "plan": {
+     "medications": [
+      {
+       "name": "Acetaminofén",
+       "dose": "500 mg",
+       "route": "VO",
+       "frequency": "cada 8 horas",
+       "duration": "3 días",
+       "instructions": ""
+      }
+     ],
+     "non_pharmacological": [
+      {
+       "text": "Reposo relativo"
+      }
+     ],
+     "follow_up": [
+      {
+       "text": "Control en 8 días"
+      }
+     ]
+    },
+    "recommendations": [
+     {
+      "text": "Hidratación abundante"
+     }
+    ],
+    "alarm_signs": [
+     {
+      "text": "Dolor que no cede"
+     }
+    ]
+   },
+   "salida": {
+    "plan": {
+     "medications": [
+      {
+       "name": "Acetaminofén",
+       "dose": "500 mg",
+       "route": "VO",
+       "frequency": "cada 8 horas",
+       "duration": "3 días",
+       "instructions": ""
+      }
+     ],
+     "non_pharmacological": [
+      {
+       "text": "Reposo relativo"
+      }
+     ],
+     "follow_up": [
+      {
+       "text": "Control en 8 días"
+      }
+     ]
+    },
+    "recommendations": [
+     {
+      "text": "Hidratación abundante"
+     }
+    ],
+    "alarm_signs": [
+     {
+      "text": "Dolor que no cede"
+     }
+    ]
+   }
+  }
  ]
 }
