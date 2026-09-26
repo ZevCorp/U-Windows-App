@@ -500,6 +500,9 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
             // «Cállate», «ocúltate», «ciérrate»: van al chrome de la ventana, no al mapa de
             // pantallas — por eso se resuelven aquí y no dentro de SurfaceMapTools.
             _vivo.Autocontrol = AtenderAutocontrol;
+            // MIRACLE NOTES POR VOZ (spec 060): las nota_* las atiende la ventana de la nota, con sus
+            // propios métodos — por datos, no mirando el navegador.
+            _vivo.Nota = AtenderNotaAsync;
 
             // EL MAPA VIVO: el nodo donde estás rodeado de lo alcanzable, publicado en Neo4j para
             // poder mirarlo mientras ocurre. Lee las MISMAS fuentes que todo lo demás —el mapa y la
@@ -2733,6 +2736,26 @@ public partial class FaceWindow : Window, IVoice, IUserChannel
     /// WebSocket, y Ü se callaría a media frase de despedida en vez de decirla. Se deja un respiro
     /// para que la respuesta viaje y el modelo pueda hablar antes de que el proceso termine.
     /// </remarks>
+    /// <summary>
+    /// Las herramientas nota_* de la voz: se abre la ventana de la nota si no lo está (pide entrar si
+    /// hace falta), se trae al frente y se le pasa la herramienta.
+    /// </summary>
+    private Task<string> AtenderNotaAsync(string herramienta, IReadOnlyDictionary<string, string> args) =>
+        Dispatcher.InvokeAsync(async () =>
+        {
+            var nota = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
+            if (nota == null)
+            {
+                (Application.Current as App)?.AbrirLaConsulta();
+                nota = Application.Current.Windows.OfType<ConsultaWindow>().FirstOrDefault();
+                if (nota == null) return "No pude abrir la nota: hace falta entrar a Miracle con tu cuenta.";
+            }
+            if (!nota.IsVisible) nota.Show();
+            if (nota.WindowState == WindowState.Minimized) nota.WindowState = WindowState.Normal;
+            nota.Activate();
+            return await nota.AtenderVozAsync(herramienta, args);
+        }).Task.Unwrap();
+
     private string AtenderAutocontrol(string herramienta) => Dispatcher.Invoke(() =>
     {
         switch (herramienta)

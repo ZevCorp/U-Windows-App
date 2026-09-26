@@ -233,6 +233,30 @@ public static class EspejoDeConsulta
     /// su paciente, no un motivo; el portal lo enseña primero y Windows también. `paciente_nombre` lo
     /// llena un trigger de la base desde la nota; `patients(nombre)` es el del paciente asociado.
     /// </summary>
+    /// <summary>
+    /// La consulta más reciente de UN paciente, como se pinta en la lista (la abre la voz, spec 060).
+    /// Nula si no tiene o no se pudo leer.
+    /// </summary>
+    public static async Task<ConsultaVista?> UltimaDelPacienteAsync(SesionMiracle sesion, string pacienteId,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(pacienteId)) return null;
+        try
+        {
+            var (codigo, cuerpo) = await sesion.RestAsync(HttpMethod.Get,
+                $"{RutaDeLaLista}&patient_id=eq.{Uri.EscapeDataString(pacienteId)}&limit=1", ct: ct);
+            if (codigo is < 200 or >= 300) { LogBus.Log("espejo", $"no se pudo leer la última consulta · HTTP {codigo}"); return null; }
+            using var doc = JsonDocument.Parse(cuerpo);
+            return doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0
+                ? Vista(doc.RootElement[0]) : null;
+        }
+        catch (Exception e)
+        {
+            LogBus.Log("espejo", $"no se pudo leer la última consulta: {e.GetType().Name}");
+            return null;
+        }
+    }
+
     public const string RutaDeLaLista =
         "/rest/v1/consultations?select=id,fecha,motivo,estado,resumen,plantilla,paciente_nombre,paciente_documento,patients(nombre,documento)"
         + "&order=fecha.desc";

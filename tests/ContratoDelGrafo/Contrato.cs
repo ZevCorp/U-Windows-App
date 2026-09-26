@@ -929,6 +929,13 @@ internal static class Contrato
         Prueba("476. la fórmula nunca inventa: un medicamento sin concentración ni cantidad lleva esos campos vacíos, uno sin nombre no se receta, y sin medicamentos el papel lo dice", LaFormulaNuncaInventa);
         Prueba("477. lo que falta del médico, del paciente o de la institución se omite: ni «undefined», ni «null», ni una fila vacía en ningún papel", LoQueFaltaSeOmite);
         Prueba("478. la cantidad total va en números y letras como en la web", LaCantidadVaEnLetras);
+        // Spec 060: la voz de U maneja Notes, por datos y no por pantalla (2026-09-26).
+        Prueba("479. la voz tiene las herramientas de Notes con sus argumentos: nota_abrir, nota_grabar, nota_parar, nota_leer, nota_historial, nota_ajustar y nota_imprimir", LaVozTieneLasHerramientasDeNotes);
+        Prueba("480. el historial de un paciente se pide filtrado por SU patient_id, con el token del médico y sin mandar user_id, y de cada consulta se lee su plan del backend clínico", ElHistorialEsDeEsePaciente);
+        Prueba("481. ninguna herramienta de voz guarda, firma, borra ni aprueba la nota; nota_ajustar se describe como propuesta que aprueba el médico, y las instrucciones de la voz lo dicen", LaVozNoGuardaLaNota);
+        Prueba("482. lo que nota_historial entrega a la voz son las últimas 3 consultas como mucho, con fecha, motivo, diagnóstico, medicamentos y controles, recortado, y NUNCA la transcripción", ElHistorialParaLaVozEsMinimo);
+        Prueba("483. sin paciente que case o con varios que casan, la herramienta lo dice —nombrando a los candidatos— en vez de adivinar", ElPacienteNoSeAdivina);
+        Prueba("484. ninguna herramienta de Notes deja texto clínico en el log: ni lo pedido ni lo devuelto", LaVozDeNotesNoDejaTextoClinicoEnElLog);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -5700,6 +5707,177 @@ internal static class Contrato
             string suyo = (string)cantidad.Invoke(null, new object?[] { c })!;
             Debe(suyo == caso.GetProperty("salida").GetString(), $"la cantidad «{c}»: Windows «{suyo}», la web «{caso.GetProperty("salida").GetString()}»");
         }
+    }
+
+    // ── spec 060 ──────────────────────────────────────────────────────────────
+
+    private static readonly string[] HerramientasDeNotes =
+        { "nota_abrir", "nota_grabar", "nota_parar", "nota_leer", "nota_historial", "nota_ajustar", "nota_imprimir" };
+
+    private static void LaVozTieneLasHerramientasDeNotes()
+    {
+        if (ArgumentosDe("nota_historial") == null) { Pendiente("Voice.ConversacionEnVivo: herramientas nota_*", "479", "060"); return; }
+        foreach (var h in HerramientasDeNotes)
+            Debe(ArgumentosDe(h) != null, $"falta «{h}» en el catálogo de la voz");
+        Debe(ArgumentosDe("nota_historial")?.Contains("paciente") == true, "nota_historial recibe el paciente");
+        Debe(ArgumentosDe("nota_abrir")?.Contains("paciente") == true, "nota_abrir recibe el paciente");
+        Debe(ArgumentosDe("nota_ajustar")?.Contains("instruccion") == true && ArgumentosDe("nota_ajustar")?.Contains("seccion") == true,
+            "nota_ajustar recibe la instrucción y la sección");
+        Debe(ArgumentosDe("nota_imprimir")?.Contains("papel") == true, "nota_imprimir recibe qué papel");
+        Debe(ArgumentosDe("nota_leer")?.Contains("seccion") == true, "nota_leer recibe la sección");
+    }
+
+    /// <summary>Un backend con dos consultas del paciente y el plan de cada una en Graph.</summary>
+    private static BackendDeMentira BackendDelHistorial(List<string> rutas, int consultas = 2)
+    {
+        return new BackendDeMentira(req =>
+        {
+            string ruta = req.RequestUri!.AbsolutePath;
+            if (ruta.Contains("/auth/v1/token")) return (HttpStatusCode.OK, RespuestaDeLogin("medico-1", "unico", 3600));
+            rutas.Add(Uri.UnescapeDataString(req.RequestUri.PathAndQuery));
+            if (ruta.StartsWith("/rest/v1/consultations"))
+            {
+                var filas = Enumerable.Range(1, consultas).Select(n =>
+                    $"{{\"id\":\"enc-{n}\",\"fecha\":\"2026-0{Math.Min(9, n)}-1{n % 10}T15:00:00Z\",\"motivo\":\"Cefalea {n}\",\"resumen\":\"Resumen {n}\"}}");
+                return (HttpStatusCode.OK, "[" + string.Join(",", filas) + "]");
+            }
+            if (ruta.StartsWith("/api/clinical/encounters/"))
+            {
+                string id = ruta.Split('/').Last();
+                return (HttpStatusCode.OK, "{\"encounter\":{\"id\":\"" + id + "\",\"status\":\"note_generated\",\"transcript\":\"SECRETO-DE-LA-TRANSCRIPCION\","
+                    + "\"note_json\":{\"summary\":\"s\",\"sections\":[{\"key\":\"diagnostico\",\"label\":\"Impresión diagnóstica\",\"content\":\"Migraña sin aura\"}],"
+                    + "\"discharge\":{\"plan\":{\"medications\":[{\"name\":\"Losartán\",\"dose\":\"50 mg\",\"frequency\":\"cada día\"}],\"non_pharmacological\":[],"
+                    + "\"follow_up\":[{\"text\":\"Control en un mes\"}]},\"recommendations\":[],\"alarm_signs\":[]},\"warnings\":[],\"missing_required_sections\":[]}}}");
+            }
+            return (HttpStatusCode.OK, "[]");
+        });
+    }
+
+    private static void ElHistorialEsDeEsePaciente()
+    {
+        var leer = Clin("HistorialDelPaciente")?.GetMethod("LeerAsync");
+        if (leer == null) { Pendiente("Clinical.HistorialDelPaciente.LeerAsync", "480", "060"); return; }
+        var rutas = new List<string>();
+        var backend = BackendDelHistorial(rutas);
+        var (sesion, clinica) = MedicoDentro(backend);
+        rutas.Clear();
+        var lista = ((System.Collections.IEnumerable)Esperar(leer.Invoke(null, new object?[] { sesion, clinica, "pac-7", 3, CancellationToken.None }))!).Cast<object>().ToList();
+
+        string consulta = rutas.FirstOrDefault(r => r.StartsWith("/rest/v1/consultations")) ?? "";
+        Debe(consulta.Contains("patient_id=eq.pac-7"), $"el historial se pide filtrado por el patient_id de ESE paciente (fue «{consulta}»)");
+        Debe(!consulta.Contains("user_id") && !consulta.Contains("doctor_id"), "sin user_id: la RLS ya limita a las consultas del médico");
+        Debe(consulta.Contains("order=fecha.desc"), "de la más reciente a la más vieja");
+        Debe(backend.UltimasCabeceras.ContainsKey("Authorization"), "con el token del médico");
+        Debe(rutas.Count(r => r.StartsWith("/api/clinical/encounters/enc-")) == 2,
+            "y de cada consulta se lee su nota del backend clínico, que es donde vive el plan");
+        Debe(lista.Count == 2 && ((System.Collections.IEnumerable)Leer(lista[0], "Medicamentos")!).Cast<object>().Any(m => m.ToString()!.Contains("Losartán")),
+            "con los medicamentos que se mandaron");
+    }
+
+    private static void LaVozNoGuardaLaNota()
+    {
+        var t = Cap004("U.WindowsClient.Voice.ConversacionEnVivo");
+        if (ArgumentosDe("nota_ajustar") == null) { Pendiente("Voice.ConversacionEnVivo: nota_ajustar", "481", "060"); return; }
+        var todas = ((System.Collections.IEnumerable)t!.GetMethod("Herramientas", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)!.Invoke(null, null)!).Cast<object>().ToList();
+        foreach (var u in todas)
+        {
+            string nombre = (string)u.GetType().GetProperty("Nombre")!.GetValue(u)!;
+            if (!nombre.StartsWith("nota_")) continue;
+            Debe(!System.Text.RegularExpressions.Regex.IsMatch(nombre, "guard|firm|borr|aprob|save|sign|delet|approv"),
+                $"«{nombre}»: la voz no tiene herramienta que guarde, firme, borre o apruebe la nota");
+        }
+        var ajustar = todas.First(u => (string)u.GetType().GetProperty("Nombre")!.GetValue(u)! == "nota_ajustar");
+        string desc = (string)ajustar.GetType().GetProperty("Descripcion")!.GetValue(ajustar)!;
+        Debe(desc.Contains("propuesta", StringComparison.OrdinalIgnoreCase) && desc.Contains("NO GUARDA", StringComparison.Ordinal),
+            "nota_ajustar dice que deja una propuesta y que NO GUARDA: el médico la aprueba");
+        string instr = (string)(t.GetField("Instrucciones", BindingFlags.NonPublic | BindingFlags.Static)?.GetRawConstantValue() ?? "");
+        Debe(instr.Contains("NOTES", StringComparison.Ordinal) && instr.Contains("nunca la guardas", StringComparison.OrdinalIgnoreCase),
+            "las instrucciones de la voz dicen cuándo usar Notes y que nunca guarda la nota por su cuenta");
+    }
+
+    private static void ElHistorialParaLaVozEsMinimo()
+    {
+        var t = Clin("HistorialDelPaciente");
+        var leer = t?.GetMethod("LeerAsync");
+        var paraLaVoz = t?.GetMethod("ParaLaVoz");
+        if (leer == null || paraLaVoz == null) { Pendiente("Clinical.HistorialDelPaciente (LeerAsync, ParaLaVoz)", "482", "060"); return; }
+        var rutas = new List<string>();
+        var (sesion, clinica) = MedicoDentro(BackendDelHistorial(rutas, consultas: 6));
+        var lista = Esperar(leer.Invoke(null, new object?[] { sesion, clinica, "pac-7", 10, CancellationToken.None }))!;
+        int n = ((System.Collections.IEnumerable)lista).Cast<object>().Count();
+        Debe(n <= 3, $"como mucho las últimas 3 consultas aunque se pidan 10 ({n})");
+        Debe(rutas.Any(r => r.StartsWith("/rest/v1/consultations") && r.Contains("limit=3")), "y se piden 3 a la base, no todas");
+        Debe(rutas.All(r => !r.StartsWith("/rest/v1/consultations") || !r.Contains("transcript")), "sin pedir la transcripción al espejo");
+
+        string texto = (string)paraLaVoz.Invoke(null, new object?[] { "María Gómez", lista })!;
+        Debe(texto.Contains("Losartán 50 mg") && texto.Contains("Cefalea 1") && texto.Contains("Migraña sin aura") && texto.Contains("Control en un mes"),
+            $"lleva motivo, diagnóstico, medicamentos y controles («{texto[..Math.Min(300, texto.Length)]}…»)");
+        Debe(texto.Contains("2026"), "y la fecha de cada consulta");
+        Debe(!texto.Contains("SECRETO-DE-LA-TRANSCRIPCION"), "NUNCA la transcripción: lo que se habló en la consulta no viaja a la voz");
+        Debe(texto.Length <= 1600, $"recortado: la voz lo lee, no lo archiva ({texto.Length} caracteres)");
+    }
+
+    private static void ElPacienteNoSeAdivina()
+    {
+        var t = Clin("HistorialDelPaciente");
+        var elegir = t?.GetMethod("ElegirPaciente");
+        var paraLaVoz = t?.GetMethod("ParaLaVoz");
+        var tPac = Clin("Paciente");
+        if (elegir == null || paraLaVoz == null || tPac == null) { Pendiente("Clinical.HistorialDelPaciente.ElegirPaciente", "483", "060"); return; }
+
+        object P(string id, string nombre, string doc) => Activator.CreateInstance(tPac, id, nombre, doc, "", "", "",
+            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>())!;
+        System.Collections.IList Lista(params object[] ps)
+        {
+            var l = (System.Collections.IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(tPac))!;
+            foreach (var p in ps) l.Add(p);
+            return l;
+        }
+        (object? Elegido, string Motivo) Elegir(System.Collections.IList c, string dicho)
+        {
+            var r = elegir.Invoke(null, new object?[] { c, dicho })!;
+            var ft = r.GetType();
+            return (ft.GetField("Item1")?.GetValue(r) ?? ft.GetProperty("Elegido")?.GetValue(r),
+                    (string)(ft.GetField("Item2")?.GetValue(r) ?? ft.GetProperty("Motivo")?.GetValue(r) ?? ""));
+        }
+
+        var (e0, m0) = Elegir(Lista(), "Pedro Pérez");
+        Debe(e0 == null && m0.Contains("Pedro Pérez"), $"sin nadie que case, lo dice con el nombre que oyó («{m0}»)");
+
+        var (e1, _) = Elegir(Lista(P("p1", "María Gómez", "CC 1")), "maria gomez");
+        Debe(e1 != null, "uno solo que casa: ese");
+
+        var (e2, m2) = Elegir(Lista(P("p1", "María Gómez", "CC 1"), P("p2", "María Gómez Ruiz", "CC 2")), "María");
+        Debe(e2 == null && m2.Contains("María Gómez Ruiz") && m2.Contains("CC 2"),
+            $"varios que casan: NO elige, nombra a los candidatos con su documento («{m2}»)");
+
+        var (e3, _) = Elegir(Lista(P("p1", "María Gómez", "CC 1"), P("p2", "María Gómez Ruiz", "CC 2")), "María Gómez");
+        Debe(e3 != null && (string?)Leer(e3, "Id") == "p1", "si uno casa EXACTO por nombre, ese (el otro solo lo contiene)");
+
+        var vacia = Activator.CreateInstance(typeof(List<>).MakeGenericType(Clin("ConsultaAnterior")!))!;
+        string sin = (string)paraLaVoz.Invoke(null, new object?[] { "María Gómez", vacia })!;
+        Debe(sin.Contains("No encuentro") && sin.Contains("María Gómez"), $"sin consultas, lo dice («{sin}»)");
+    }
+
+    private static void LaVozDeNotesNoDejaTextoClinicoEnElLog()
+    {
+        var t = Clin("HistorialDelPaciente");
+        var leer = t?.GetMethod("LeerAsync");
+        var apuntar = Cap004("U.WindowsClient.Voice.ConversacionEnVivo")?.GetMethod("Apuntar", BindingFlags.NonPublic | BindingFlags.Static);
+        if (leer == null || apuntar == null || ArgumentosDe("nota_historial") == null)
+        { Pendiente("Clinical.HistorialDelPaciente + nota_* en la voz", "484", "060"); return; }
+
+        U.WindowsClient.Diagnostics.LogBus.Clear();
+        var (sesion, clinica) = MedicoDentro(BackendDelHistorial(new List<string>()));
+        Esperar(leer.Invoke(null, new object?[] { sesion, clinica, "pac-7", 3, CancellationToken.None }));
+        apuntar.Invoke(null, new object?[] { "nota_historial", new Dictionary<string, string> { ["paciente"] = "María Gómez" },
+            "María Gómez · 26 de septiembre: Losartán 50 mg cada día; diagnóstico Migraña sin aura", 12L });
+        apuntar.Invoke(null, new object?[] { "nota_ajustar", new Dictionary<string, string> { ["instruccion"] = "cámbiale el Losartán a 100 mg" },
+            "Te dejé la propuesta en pantalla", 8L });
+        string log = string.Join("\n", U.WindowsClient.Diagnostics.LogBus.Snapshot());
+        foreach (var clinico in new[] { "Losartán", "Migraña", "Cefalea", "María Gómez", "SECRETO-DE-LA-TRANSCRIPCION", "100 mg" })
+            Debe(!log.Contains(clinico, StringComparison.Ordinal), $"el log no puede contener «{clinico}»");
+        Debe(log.Contains("nota_historial"), "pero sí que la herramienta corrió: el log dice QUÉ pasó, no el contenido");
     }
 
     private static void LosAtajosSeOrdenanComoEnLaWeb()

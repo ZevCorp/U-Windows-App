@@ -968,6 +968,16 @@ public sealed class ConversacionEnVivo : IDisposable
         su selector es pedir lo mismo. Cambia de vía —mira (map_look) y elige otro candidato con
         which— o cuéntale al usuario qué está pasando y qué necesitas de él. Insistir en silencio es
         lo peor que puedes hacer con las manos puestas en el ordenador de alguien.
+
+        MIRACLE NOTES ES TUYO, no una app ajena: la nota clínica, las consultas y los pacientes del
+        médico los manejas con las herramientas nota_*, que hablan con los datos y con tu propia
+        ventana — NUNCA mirando la pantalla del navegador. «¿Qué le mandé la última vez a María?» es
+        nota_historial; «abre su última consulta», nota_abrir; «léeme el plan», nota_leer; «empieza la
+        consulta» / «termina», nota_grabar / nota_parar; «imprime la fórmula», nota_imprimir. Contesta
+        con lo que la herramienta devuelve, sin añadir datos clínicos que no estén ahí.
+        Para CAMBIAR la nota usas nota_ajustar: deja una propuesta en pantalla y nunca la guardas tú —
+        la guarda el médico con Guardar o Ctrl+S—. Díselo así: «te dejé el cambio en pantalla, guárdalo
+        si está bien». Si hay varios pacientes con ese nombre, pregunta cuál; no elijas por él.
         """;
 
     /// <summary>
@@ -1234,8 +1244,43 @@ public sealed class ConversacionEnVivo : IDisposable
             + "devuelve cuáles de ellas sabes conducir. Sirve para contarle a esta persona qué "
             + "puedes hacer POR ELLA en vez de hablar en general. Úsala cuando te lo pida "
             + "(«¿qué puedes hacer?», «revisa mi computador», «sí» tras ofrecérselo). No abre nada "
-            + "ni mira archivos ni documentos: solo la lista de aplicaciones.")
+            + "ni mira archivos ni documentos: solo la lista de aplicaciones."),
+
+        // ── Miracle Notes, por datos y en la ventana propia (spec 060) ──────────
+        Fn("nota_abrir", "Abre la ventana de la nota clínica de Miracle. Con un paciente, abre SU última "
+            + "consulta con la nota, el plan y el paciente a la vista.",
+            ("paciente", "Nombre o documento del paciente, si lo dijo. Vacío = solo abrir la ventana.")),
+        Fn("nota_grabar", "Empieza a grabar la consulta (abre la ventana si hace falta). Úsala con «empieza "
+            + "la consulta», «graba»."),
+        Fn("nota_parar", "Termina la consulta que se está grabando: Miracle organiza la nota y enseña los "
+            + "avisos. Úsala con «termina», «ya acabamos», «para de grabar»."),
+        Fn("nota_leer", "Lee la nota que se ve en la ventana, una sección o el plan, para decirlo en voz alta.",
+            ("seccion", "Qué parte: el nombre de una sección («examen físico»), «plan» para el plan y los "
+                      + "medicamentos, o vacío para la nota entera.")),
+        Fn("nota_historial", "Las últimas consultas de un paciente: fecha, motivo, diagnóstico, qué medicamentos "
+            + "se le mandaron y sus controles. Es la herramienta para «¿qué le mandé la última vez?», «¿qué "
+            + "tenía María?». Si el paciente no se dice, es el de la consulta que se ve.",
+            ("paciente", "Nombre o documento del paciente. Vacío = el de la nota que se ve.")),
+        Fn("nota_ajustar", "Propone un cambio a la nota: la MISMA propuesta que la barra de ajuste —se marca en "
+            + "pantalla lo que cambió—. NO GUARDA: el médico la aprueba con Guardar o Ctrl+S, o la descarta. "
+            + "«Quiero que diga …» se escribe tal cual; «agrega que …» se redacta dentro de la sección; lo "
+            + "demás es una instrucción («hazla más corta», «cámbiale la dosis a 1 g»).",
+            ("instruccion", "Lo que el médico pidió, con sus palabras."),
+            ("seccion", "La sección a la que va, si la nombró («plan», «examen físico»). Vacío = la nota entera.")),
+        Fn("nota_imprimir", "Abre el diálogo de imprimir con un papel de la consulta que se ve.",
+            ("papel", "«nota», «formula» o «indicaciones». Vacío = la nota."))
     };
+
+    /// <summary>Las herramientas de Miracle Notes: van al delegado <see cref="Nota"/>, no al mapa.</summary>
+    internal static readonly HashSet<string> HerramientasDeLaNota = new(StringComparer.Ordinal)
+        { "nota_abrir", "nota_grabar", "nota_parar", "nota_leer", "nota_historial", "nota_ajustar", "nota_imprimir" };
+
+    /// <summary>
+    /// Quien atiende las herramientas nota_*. Se inyecta desde la ventana de la carita, que es quien
+    /// sabe abrir y encontrar la ventana de la nota. Recibe el nombre y los argumentos y devuelve lo
+    /// que la voz puede decir.
+    /// </summary>
+    public Func<string, IReadOnlyDictionary<string, string>, Task<string>>? Nota { get; set; }
 
     /// <summary>Los nombres «self_mute», «self_hide», «self_close», para distinguirlos de las
     /// herramientas del mapa en el despacho — esas van a <see cref="_mapa"/>, estas a <see cref="Autocontrol"/>.</summary>
@@ -1280,6 +1325,14 @@ public sealed class ConversacionEnVivo : IDisposable
             "self_hide" => "ocultándome…",
             "self_close" => "cerrándome…",
             "scan_computer" => "mirando qué tienes instalado…",
+            // Sin el nombre del paciente ni lo pedido: esto se ve en pantalla y pasa por la barra de estado.
+            "nota_abrir" => "abriendo la nota…",
+            "nota_grabar" => "empezando la consulta…",
+            "nota_parar" => "terminando la consulta…",
+            "nota_leer" => "leyendo la nota…",
+            "nota_historial" => "mirando sus consultas anteriores…",
+            "nota_ajustar" => "preparando el cambio a la nota…",
+            "nota_imprimir" => "preparando el papel…",
             _ => tool,
         };
     }
@@ -1319,6 +1372,13 @@ public sealed class ConversacionEnVivo : IDisposable
     private static void Apuntar(string tool, IReadOnlyDictionary<string, string> args, string resultado, long ms)
     {
         Mapeador.PulsoDelMapeador.Actual.Costo("voz: " + tool, ms);
+        // NOTES NO DEJA TEXTO CLÍNICO EN EL LOG (promesa 484): ni el paciente pedido ni lo que
+        // devolvió —medicamentos, diagnósticos—. Se anota que corrió y cuánto tardó.
+        if (HerramientasDeLaNota.Contains(tool))
+        {
+            LogBus.Log("voz-tiempo", $"{ms,6} ms · {tool} → {resultado.Length} caracteres");
+            return;
+        }
         string donde = args.TryGetValue("surface", out var s) && s.Length > 0 ? s
                      : args.TryGetValue("path", out var p) && p.Length > 0 ? p
                      : args.TryGetValue("app", out var a) ? a : "";
@@ -2542,6 +2602,16 @@ public sealed class ConversacionEnVivo : IDisposable
                 relojPropio.Stop();
                 Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojPropio.ElapsedMilliseconds), true);
                 Apuntar(f.Nombre, f.Args, resultado, relojPropio.ElapsedMilliseconds);
+            }
+            else if (HerramientasDeLaNota.Contains(f.Nombre))
+            {
+                Accion?.Invoke(EnCurso(f.Nombre, f.Args), false);
+                var relojNota = System.Diagnostics.Stopwatch.StartNew();
+                try { resultado = Nota == null ? "no puedo: la nota clínica no está conectada todavía" : await Nota(f.Nombre, f.Args); }
+                catch (Exception e) { resultado = $"la herramienta falló: {e.Message}"; }
+                relojNota.Stop();
+                Accion?.Invoke(Terminado(f.Nombre, f.Args, resultado, relojNota.ElapsedMilliseconds), true);
+                Apuntar(f.Nombre, f.Args, resultado, relojNota.ElapsedMilliseconds);
             }
             else if (!SurfaceMapTools.IsMapTool(f.Nombre))
                 resultado = $"«{f.Nombre}» no es una herramienta del mapa";
