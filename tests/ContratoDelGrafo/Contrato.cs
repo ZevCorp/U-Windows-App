@@ -924,6 +924,11 @@ internal static class Contrato
         Prueba("472. el plan y el egreso se leen de la nota como en la web: las mismas listas, vacías cuando faltan o no son listas, con los mismos medicamentos, textos y urgencias", ElEgresoSeLeeComoEnLaWeb);
         Prueba("473. corregir un campo del plan cambia SOLO ese campo: la vía sobrevive a corregir la dosis, la duración a corregir la frecuencia, la evidencia y el resto de la nota viajan igual, y concentración y cantidad se guardan como campos propios", CorregirElPlanNoBorraElVecino);
         Prueba("474. con el plan, el seguimiento, las recomendaciones y los signos de alarma llenos desde U, la revisión deja de decir que falta el cierre", ElCierreLlenoCallaElAviso);
+        // Spec 059: los papeles del paciente, un modelo con la web (2026-09-26).
+        Prueba("475. los tres papeles de U son los de la web: para las mismas entradas, el mismo documento —membrete, datos, bloques, firma, sello, pie— campo a campo", LosPapelesSonLosDeLaWeb);
+        Prueba("476. la fórmula nunca inventa: un medicamento sin concentración ni cantidad lleva esos campos vacíos, uno sin nombre no se receta, y sin medicamentos el papel lo dice", LaFormulaNuncaInventa);
+        Prueba("477. lo que falta del médico, del paciente o de la institución se omite: ni «undefined», ni «null», ni una fila vacía en ningún papel", LoQueFaltaSeOmite);
+        Prueba("478. la cantidad total va en números y letras como en la web", LaCantidadVaEnLetras);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -5599,6 +5604,102 @@ internal static class Contrato
         Debe(FaltaCierre(n), "sin recomendaciones el cierre sigue incompleto, como en la web");
         n = t.GetMethod("AgregarItem")!.Invoke(null, new object?[] { n, "recommendations", "Hidratación abundante" })!;
         Debe(!FaltaCierre(n), "llenado el cierre desde U, la revisión deja de pedirlo");
+    }
+
+    // ── spec 059 ──────────────────────────────────────────────────────────────
+
+    private static readonly JsonSerializerOptions ComoLaWeb = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    private static System.Text.Json.Nodes.JsonNode? DocumentoComoJson(object doc) =>
+        System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(doc, doc.GetType(), ComoLaWeb));
+
+    private static void LosPapelesSonLosDeLaWeb()
+    {
+        var construir = Clin("DocumentosDelPaciente")?.GetMethod("Construir");
+        if (construir == null) { Pendiente("Clinical.DocumentosDelPaciente.Construir", "475", "059"); return; }
+        var casos = Vectores("documentos");
+        if (casos == null) return;
+        int n = 0;
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            n++;
+            var e = caso.GetProperty("entrada");
+            var doc = construir.Invoke(null, new object?[] { e })!;
+            var suyo = DocumentoComoJson(doc);
+            var web = System.Text.Json.Nodes.JsonNode.Parse(caso.GetProperty("salida").GetRawText());
+            bool igual = System.Text.Json.Nodes.JsonNode.DeepEquals(suyo, web);
+            if (!igual)
+            {
+                // Se dice QUÉ campo difiere, no solo que difieren: el papel es largo.
+                string primero = "";
+                foreach (var campo in new[] { "titulo", "membrete", "datos", "bloques", "firma", "sello", "pie", "demo" })
+                    if (!System.Text.Json.Nodes.JsonNode.DeepEquals(suyo?[campo], web?[campo]))
+                    { primero = $"{campo}: Windows {suyo?[campo]?.ToJsonString()} · la web {web?[campo]?.ToJsonString()}"; break; }
+                if (primero.Length > 600) primero = primero[..600] + "…";
+                Debe(false, $"el papel {n} («{Cad(e, "tipo")}») no es el de la web — {primero}");
+            }
+        }
+    }
+
+    private static void LaFormulaNuncaInventa()
+    {
+        var construir = Clin("DocumentosDelPaciente")?.GetMethod("Construir");
+        if (construir == null) { Pendiente("Clinical.DocumentosDelPaciente.Construir", "476", "059"); return; }
+        using var entrada = JsonDocument.Parse("{\"tipo\":\"formula\",\"fecha\":\"2026-09-26T10:00\",\"org\":{},\"medico\":{\"nombre\":\"Ana\"},\"paciente\":{\"nombre\":\"María\"},"
+            + "\"nota\":{\"discharge\":{\"plan\":{\"medications\":[{\"name\":\"Ibuprofeno\",\"dose\":\"400 mg\"},{\"name\":\" \",\"dose\":\"1 g\"}],\"non_pharmacological\":[],\"follow_up\":[]},\"recommendations\":[],\"alarm_signs\":[]}}}");
+        var doc = DocumentoComoJson(construir.Invoke(null, new object?[] { entrada.RootElement })!)!;
+        var bloques = doc["bloques"]!.AsArray();
+        Debe(bloques.Count == 1 && (string?)bloques[0]!["nombre"] == "Ibuprofeno",
+            "un medicamento sin nombre no se receta: solo sale el Ibuprofeno");
+        var campos = bloques.Count > 0 ? bloques[0]!["campos"]!.AsArray().ToDictionary(c => (string)c!["etiqueta"]!, c => (string?)c!["valor"]) : new();
+        Debe(campos.GetValueOrDefault("Dosis") == "400 mg", "lo que la nota trae, tal cual");
+        Debe(campos.GetValueOrDefault("Concentración y forma") == "" && campos.GetValueOrDefault("Cantidad total") == "" && campos.GetValueOrDefault("Vía") == "",
+            "lo que la nota NO trae va vacío, para escribirlo a mano: ni «N/A» ni un valor por defecto");
+
+        using var sinMeds = JsonDocument.Parse("{\"tipo\":\"formula\",\"fecha\":\"\",\"org\":{},\"medico\":{},\"paciente\":{},\"nota\":{}}");
+        var vacio = DocumentoComoJson(construir.Invoke(null, new object?[] { sinMeds.RootElement })!)!["bloques"]!.AsArray();
+        Debe(vacio.Count == 1 && (string?)vacio[0]!["tipo"] == "aviso", "sin medicamentos, el papel lo dice en vez de salir vacío");
+    }
+
+    private static void LoQueFaltaSeOmite()
+    {
+        var construir = Clin("DocumentosDelPaciente")?.GetMethod("Construir");
+        if (construir == null) { Pendiente("Clinical.DocumentosDelPaciente.Construir", "477", "059"); return; }
+        foreach (string tipo in new[] { "nota", "formula", "indicaciones" })
+        {
+            using var e = JsonDocument.Parse($"{{\"tipo\":\"{tipo}\",\"fecha\":\"\",\"org\":{{\"name\":null}},\"medico\":{{\"documento\":null}},\"paciente\":{{\"edad\":null,\"sexo\":null}},\"nota\":{{\"summary\":null,\"sections\":null,\"discharge\":null}}}}");
+            var doc = DocumentoComoJson(construir.Invoke(null, new object?[] { e.RootElement })!)!;
+            string json = doc.ToJsonString();
+            Debe(!json.Contains("undefined") && !json.Contains("null") && !json.Contains("NaN"),
+                $"el papel «{tipo}» sin datos no puede decir «undefined», «null» ni «NaN» ({json[..Math.Min(200, json.Length)]}…)");
+            var datos = doc["datos"]!.AsArray();
+            Debe(datos.Count == 1 && (string?)datos[0]!["valor"] == "Paciente sin identificar",
+                $"en «{tipo}», sin datos solo queda «Paciente sin identificar»: ninguna fila vacía");
+            Debe(doc["firma"]!["lineas"]!.AsArray().Count == 0 && doc["sello"]!.AsArray().Count == 0 && doc["membrete"]!["lineas"]!.AsArray().Count == 0,
+                $"en «{tipo}», sin médico ni institución no hay líneas de firma, sello ni membrete");
+        }
+    }
+
+    private static void LaCantidadVaEnLetras()
+    {
+        var t = Clin("DocumentosDelPaciente");
+        var letras = t?.GetMethod("NumeroEnLetras");
+        var cantidad = t?.GetMethod("CantidadEnNumerosYLetras");
+        if (letras == null || cantidad == null) { Pendiente("Clinical.DocumentosDelPaciente (NumeroEnLetras, CantidadEnNumerosYLetras)", "478", "059"); return; }
+        var vl = Vectores("letras"); var vc = Vectores("cantidades");
+        if (vl == null || vc == null) return;
+        foreach (var caso in vl.Value.EnumerateArray())
+        {
+            long n = caso.GetProperty("entrada").GetInt64();
+            string suyo = (string)letras.Invoke(null, new object?[] { n })!;
+            Debe(suyo == caso.GetProperty("salida").GetString(), $"{n} en letras: Windows «{suyo}», la web «{caso.GetProperty("salida").GetString()}»");
+        }
+        foreach (var caso in vc.Value.EnumerateArray())
+        {
+            string c = caso.GetProperty("entrada").GetString()!;
+            string suyo = (string)cantidad.Invoke(null, new object?[] { c })!;
+            Debe(suyo == caso.GetProperty("salida").GetString(), $"la cantidad «{c}»: Windows «{suyo}», la web «{caso.GetProperty("salida").GetString()}»");
+        }
     }
 
     private static void LosAtajosSeOrdenanComoEnLaWeb()

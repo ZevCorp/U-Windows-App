@@ -1,6 +1,6 @@
 {
  "generado": "2026-09-26",
- "web": "joseph1356k/Pagina-web-clientes-final@74d9e24",
+ "web": "joseph1356k/Pagina-web-clientes-final@4944fac",
  "revisiones": [
   {
    "nombre": "sin nota",
@@ -4305,6 +4305,1643 @@
      }
     ]
    }
+  }
+ ],
+ "documentos": [
+  {
+   "entrada": {
+    "fecha": "2026-09-26T14:05",
+    "org": {
+     "name": "Consultorio Dra. Pérez",
+     "nit": "900.123.456-7",
+     "address": "Cra 43A # 1-50",
+     "city": "Medellín",
+     "phone": "604 444 0000"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Medicina general"
+    },
+    "paciente": {
+     "nombre": "María Gómez",
+     "documento": "CC 1035421987",
+     "edad": 34,
+     "sexo": "F",
+     "eps": "Sura"
+    },
+    "nota": {
+     "summary": "Cefalea tensional sin signos de alarma.",
+     "sections": [
+      {
+       "label": "Motivo de consulta",
+       "content": "Dolor de cabeza de tres días"
+      },
+      {
+       "label": "Examen físico",
+       "content": "  "
+      },
+      {
+       "label": "",
+       "content": "Sin título"
+      }
+     ],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "concentration": "500 mg/tableta",
+         "dose": "1 tableta",
+         "route": "oral",
+         "frequency": "cada 8 horas",
+         "duration": "5 días",
+         "quantity": "15 tabletas",
+         "instructions": "después de comer"
+        },
+        {
+         "name": "Ibuprofeno",
+         "dose": "400 mg",
+         "quantity": "caja"
+        },
+        {
+         "name": "  ",
+         "dose": "x"
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        },
+        {
+         "text": " "
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Fiebre",
+        "urgency": "priority"
+       },
+       {
+        "text": "Pérdida de fuerza",
+        "urgency": "emergency"
+       },
+       {
+        "text": "Dolor que no cede"
+       },
+       {
+        "text": "Mareo",
+        "urgency": "monitor"
+       },
+       {
+        "text": "Vómito",
+        "urgency": "rara"
+       }
+      ]
+     }
+    },
+    "tipo": "nota"
+   },
+   "salida": {
+    "tipo": "nota",
+    "titulo": "Nota clínica",
+    "membrete": {
+     "nombre": "Consultorio Dra. Pérez",
+     "lineas": [
+      "NIT 900.123.456-7",
+      "Cra 43A # 1-50 · Medellín",
+      "Tel. 604 444 0000"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "María Gómez"
+     },
+     {
+      "etiqueta": "Documento",
+      "valor": "CC 1035421987"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "34 años · Femenino"
+     },
+     {
+      "etiqueta": "EPS",
+      "valor": "Sura"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "26 de septiembre de 2026, 2:05 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Medellín"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Medicina general"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "Resumen",
+      "texto": "Cefalea tensional sin signos de alarma.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "parrafo"
+     },
+     {
+      "titulo": "Motivo de consulta",
+      "texto": "Dolor de cabeza de tres días",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "parrafo"
+     },
+     {
+      "titulo": "Sección",
+      "texto": "Sin título",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "parrafo"
+     },
+     {
+      "titulo": "Plan farmacológico",
+      "texto": "",
+      "items": [
+       "Acetaminofén · 500 mg/tableta · 1 tableta · oral · cada 8 horas · 5 días",
+       "Ibuprofeno · 400 mg",
+       "x"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Medidas no farmacológicas",
+      "texto": "",
+      "items": [
+       "Reposo relativo"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Seguimiento",
+      "texto": "",
+      "items": [
+       "Control en 8 días"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Recomendaciones",
+      "texto": "",
+      "items": [
+       "Hidratación abundante"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Signos de alarma",
+      "texto": "",
+      "items": [
+       "Fiebre",
+       "Pérdida de fuerza",
+       "Dolor que no cede",
+       "Mareo",
+       "Vómito"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Medicina general",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [],
+    "pie": "Consultorio Dra. Pérez · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-09-26T14:05",
+    "org": {
+     "name": "Consultorio Dra. Pérez",
+     "nit": "900.123.456-7",
+     "address": "Cra 43A # 1-50",
+     "city": "Medellín",
+     "phone": "604 444 0000"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Medicina general"
+    },
+    "paciente": {
+     "nombre": "María Gómez",
+     "documento": "CC 1035421987",
+     "edad": 34,
+     "sexo": "F",
+     "eps": "Sura"
+    },
+    "nota": {
+     "summary": "Cefalea tensional sin signos de alarma.",
+     "sections": [
+      {
+       "label": "Motivo de consulta",
+       "content": "Dolor de cabeza de tres días"
+      },
+      {
+       "label": "Examen físico",
+       "content": "  "
+      },
+      {
+       "label": "",
+       "content": "Sin título"
+      }
+     ],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "concentration": "500 mg/tableta",
+         "dose": "1 tableta",
+         "route": "oral",
+         "frequency": "cada 8 horas",
+         "duration": "5 días",
+         "quantity": "15 tabletas",
+         "instructions": "después de comer"
+        },
+        {
+         "name": "Ibuprofeno",
+         "dose": "400 mg",
+         "quantity": "caja"
+        },
+        {
+         "name": "  ",
+         "dose": "x"
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        },
+        {
+         "text": " "
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Fiebre",
+        "urgency": "priority"
+       },
+       {
+        "text": "Pérdida de fuerza",
+        "urgency": "emergency"
+       },
+       {
+        "text": "Dolor que no cede"
+       },
+       {
+        "text": "Mareo",
+        "urgency": "monitor"
+       },
+       {
+        "text": "Vómito",
+        "urgency": "rara"
+       }
+      ]
+     }
+    },
+    "tipo": "formula"
+   },
+   "salida": {
+    "tipo": "formula",
+    "titulo": "Fórmula médica",
+    "membrete": {
+     "nombre": "Consultorio Dra. Pérez",
+     "lineas": [
+      "NIT 900.123.456-7",
+      "Cra 43A # 1-50 · Medellín",
+      "Tel. 604 444 0000"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "María Gómez"
+     },
+     {
+      "etiqueta": "Documento",
+      "valor": "CC 1035421987"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "34 años · Femenino"
+     },
+     {
+      "etiqueta": "EPS",
+      "valor": "Sura"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "26 de septiembre de 2026, 2:05 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Medellín"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Medicina general"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "",
+      "items": [],
+      "numero": 1,
+      "nombre": "Acetaminofén",
+      "campos": [
+       {
+        "etiqueta": "Concentración y forma",
+        "valor": "500 mg/tableta"
+       },
+       {
+        "etiqueta": "Dosis",
+        "valor": "1 tableta"
+       },
+       {
+        "etiqueta": "Vía",
+        "valor": "oral"
+       },
+       {
+        "etiqueta": "Frecuencia",
+        "valor": "cada 8 horas"
+       },
+       {
+        "etiqueta": "Duración del tratamiento",
+        "valor": "5 días"
+       },
+       {
+        "etiqueta": "Cantidad total",
+        "valor": "15 tabletas (quince)"
+       },
+       {
+        "etiqueta": "Indicaciones",
+        "valor": "después de comer"
+       }
+      ],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "medicamento"
+     },
+     {
+      "titulo": "",
+      "texto": "",
+      "items": [],
+      "numero": 2,
+      "nombre": "Ibuprofeno",
+      "campos": [
+       {
+        "etiqueta": "Concentración y forma",
+        "valor": ""
+       },
+       {
+        "etiqueta": "Dosis",
+        "valor": "400 mg"
+       },
+       {
+        "etiqueta": "Vía",
+        "valor": ""
+       },
+       {
+        "etiqueta": "Frecuencia",
+        "valor": ""
+       },
+       {
+        "etiqueta": "Duración del tratamiento",
+        "valor": ""
+       },
+       {
+        "etiqueta": "Cantidad total",
+        "valor": "caja"
+       },
+       {
+        "etiqueta": "Indicaciones",
+        "valor": ""
+       }
+      ],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "medicamento"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Medicina general",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [],
+    "pie": "Consultorio Dra. Pérez · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-09-26T14:05",
+    "org": {
+     "name": "Consultorio Dra. Pérez",
+     "nit": "900.123.456-7",
+     "address": "Cra 43A # 1-50",
+     "city": "Medellín",
+     "phone": "604 444 0000"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Medicina general"
+    },
+    "paciente": {
+     "nombre": "María Gómez",
+     "documento": "CC 1035421987",
+     "edad": 34,
+     "sexo": "F",
+     "eps": "Sura"
+    },
+    "nota": {
+     "summary": "Cefalea tensional sin signos de alarma.",
+     "sections": [
+      {
+       "label": "Motivo de consulta",
+       "content": "Dolor de cabeza de tres días"
+      },
+      {
+       "label": "Examen físico",
+       "content": "  "
+      },
+      {
+       "label": "",
+       "content": "Sin título"
+      }
+     ],
+     "discharge": {
+      "plan": {
+       "medications": [
+        {
+         "name": "Acetaminofén",
+         "concentration": "500 mg/tableta",
+         "dose": "1 tableta",
+         "route": "oral",
+         "frequency": "cada 8 horas",
+         "duration": "5 días",
+         "quantity": "15 tabletas",
+         "instructions": "después de comer"
+        },
+        {
+         "name": "Ibuprofeno",
+         "dose": "400 mg",
+         "quantity": "caja"
+        },
+        {
+         "name": "  ",
+         "dose": "x"
+        }
+       ],
+       "non_pharmacological": [
+        {
+         "text": "Reposo relativo"
+        },
+        {
+         "text": " "
+        }
+       ],
+       "follow_up": [
+        {
+         "text": "Control en 8 días"
+        }
+       ]
+      },
+      "recommendations": [
+       {
+        "text": "Hidratación abundante"
+       }
+      ],
+      "alarm_signs": [
+       {
+        "text": "Fiebre",
+        "urgency": "priority"
+       },
+       {
+        "text": "Pérdida de fuerza",
+        "urgency": "emergency"
+       },
+       {
+        "text": "Dolor que no cede"
+       },
+       {
+        "text": "Mareo",
+        "urgency": "monitor"
+       },
+       {
+        "text": "Vómito",
+        "urgency": "rara"
+       }
+      ]
+     }
+    },
+    "tipo": "indicaciones"
+   },
+   "salida": {
+    "tipo": "indicaciones",
+    "titulo": "Indicaciones para el paciente",
+    "membrete": {
+     "nombre": "Consultorio Dra. Pérez",
+     "lineas": [
+      "NIT 900.123.456-7",
+      "Cra 43A # 1-50 · Medellín",
+      "Tel. 604 444 0000"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "María Gómez"
+     },
+     {
+      "etiqueta": "Documento",
+      "valor": "CC 1035421987"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "34 años · Femenino"
+     },
+     {
+      "etiqueta": "EPS",
+      "valor": "Sura"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "26 de septiembre de 2026, 2:05 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Medellín"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Medicina general"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "Sus medicamentos",
+      "texto": "",
+      "items": [
+       "Acetaminofén · 500 mg/tableta · 1 tableta · oral · cada 8 horas · 5 días — después de comer",
+       "Ibuprofeno · 400 mg",
+       "x"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Recomendaciones",
+      "texto": "",
+      "items": [
+       "Hidratación abundante"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Cuidados en casa",
+      "texto": "",
+      "items": [
+       "Reposo relativo"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Sus próximos controles",
+      "texto": "",
+      "items": [
+       "Control en 8 días"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "lista"
+     },
+     {
+      "titulo": "Acuda a urgencias de inmediato si presenta",
+      "texto": "",
+      "items": [
+       "Pérdida de fuerza"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "emergency",
+      "columnas": [],
+      "filas": [],
+      "tipo": "alarma"
+     },
+     {
+      "titulo": "Consulte pronto, en las próximas 24 horas, si presenta",
+      "texto": "",
+      "items": [
+       "Fiebre"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "priority",
+      "columnas": [],
+      "filas": [],
+      "tipo": "alarma"
+     },
+     {
+      "titulo": "Esté atento y consulte si presenta",
+      "texto": "",
+      "items": [
+       "Mareo"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "monitor",
+      "columnas": [],
+      "filas": [],
+      "tipo": "alarma"
+     },
+     {
+      "titulo": "Consulte si presenta",
+      "texto": "",
+      "items": [
+       "Dolor que no cede",
+       "Vómito"
+      ],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "alarma"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Medicina general",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [],
+    "pie": "Consultorio Dra. Pérez · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-01-05T00:15",
+    "org": {
+     "name": "Hospital General"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Patología",
+     "honorifico": "Dra",
+     "responsable": "MÉDICO GENERAL"
+    },
+    "paciente": {
+     "nombre": "Juan",
+     "edad": 0,
+     "sexo": "M"
+    },
+    "nota": {
+     "summary": "",
+     "sections": [],
+     "discharge": null
+    },
+    "codigos": [
+     {
+      "sistema": "CIE-10",
+      "codigo": "R51",
+      "descripcion": "Cefalea"
+     }
+    ],
+    "adendas": [
+     {
+      "autor": "Dr. X",
+      "fecha": "2026-01-06T09:30",
+      "contenido": "Se agrega resultado."
+     }
+    ],
+    "demo": true,
+    "tipo": "nota"
+   },
+   "salida": {
+    "tipo": "nota",
+    "titulo": "Nota clínica",
+    "membrete": {
+     "nombre": "Hospital General",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Juan"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "Masculino"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "5 de enero de 2026, 12:15 a. m."
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Patología"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "Codificación",
+      "texto": "",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [
+       "Sistema",
+       "Código",
+       "Descripción"
+      ],
+      "filas": [
+       [
+        "CIE-10",
+        "R51",
+        "Cefalea"
+       ]
+      ],
+      "tipo": "tabla"
+     },
+     {
+      "titulo": "Adenda · Dr. X · 6 de enero de 2026, 9:30 a. m.",
+      "texto": "Se agrega resultado.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "parrafo"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Patología",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [
+     "Nota realizada por: Dra. Ana Pérez Empresa: Hospital General Fecha y hora: 05/01/2026, 12:15 a. m.",
+     "Responsable: MÉDICO GENERAL",
+     "Identificación: CC43123456",
+     "Reg. Med.: RM-4471",
+     "Especialidad: PATOLOGIA"
+    ],
+    "pie": "Hospital General · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": true
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-01-05T00:15",
+    "org": {
+     "name": "Hospital General"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Patología",
+     "honorifico": "Dra",
+     "responsable": "MÉDICO GENERAL"
+    },
+    "paciente": {
+     "nombre": "Juan",
+     "edad": 0,
+     "sexo": "M"
+    },
+    "nota": {
+     "summary": "",
+     "sections": [],
+     "discharge": null
+    },
+    "codigos": [
+     {
+      "sistema": "CIE-10",
+      "codigo": "R51",
+      "descripcion": "Cefalea"
+     }
+    ],
+    "adendas": [
+     {
+      "autor": "Dr. X",
+      "fecha": "2026-01-06T09:30",
+      "contenido": "Se agrega resultado."
+     }
+    ],
+    "demo": true,
+    "tipo": "formula"
+   },
+   "salida": {
+    "tipo": "formula",
+    "titulo": "Fórmula médica",
+    "membrete": {
+     "nombre": "Hospital General",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Juan"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "Masculino"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "5 de enero de 2026, 12:15 a. m."
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Patología"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "No hay medicamentos en el plan de esta consulta.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Patología",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [],
+    "pie": "Hospital General · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": true
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-01-05T00:15",
+    "org": {
+     "name": "Hospital General"
+    },
+    "medico": {
+     "nombre": "Ana Pérez",
+     "documento": "43123456",
+     "registro": "RM-4471",
+     "especialidad": "Patología",
+     "honorifico": "Dra",
+     "responsable": "MÉDICO GENERAL"
+    },
+    "paciente": {
+     "nombre": "Juan",
+     "edad": 0,
+     "sexo": "M"
+    },
+    "nota": {
+     "summary": "",
+     "sections": [],
+     "discharge": null
+    },
+    "codigos": [
+     {
+      "sistema": "CIE-10",
+      "codigo": "R51",
+      "descripcion": "Cefalea"
+     }
+    ],
+    "adendas": [
+     {
+      "autor": "Dr. X",
+      "fecha": "2026-01-06T09:30",
+      "contenido": "Se agrega resultado."
+     }
+    ],
+    "demo": true,
+    "tipo": "indicaciones"
+   },
+   "salida": {
+    "tipo": "indicaciones",
+    "titulo": "Indicaciones para el paciente",
+    "membrete": {
+     "nombre": "Hospital General",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Juan"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "Masculino"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "5 de enero de 2026, 12:15 a. m."
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Ana Pérez"
+     },
+     {
+      "etiqueta": "Especialidad",
+      "valor": "Patología"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "Esta consulta no dejó indicaciones registradas.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "Ana Pérez",
+     "lineas": [
+      "Patología",
+      "CC 43123456",
+      "Registro médico RM-4471"
+     ]
+    },
+    "sello": [],
+    "pie": "Hospital General · Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": true
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "",
+    "org": {},
+    "medico": {},
+    "paciente": {},
+    "nota": {},
+    "tipo": "nota"
+   },
+   "salida": {
+    "tipo": "nota",
+    "titulo": "Nota clínica",
+    "membrete": {
+     "nombre": "",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Paciente sin identificar"
+     }
+    ],
+    "bloques": [],
+    "firma": {
+     "nombre": "",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "",
+    "org": {},
+    "medico": {},
+    "paciente": {},
+    "nota": {},
+    "tipo": "formula"
+   },
+   "salida": {
+    "tipo": "formula",
+    "titulo": "Fórmula médica",
+    "membrete": {
+     "nombre": "",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Paciente sin identificar"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "No hay medicamentos en el plan de esta consulta.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "",
+    "org": {},
+    "medico": {},
+    "paciente": {},
+    "nota": {},
+    "tipo": "indicaciones"
+   },
+   "salida": {
+    "tipo": "indicaciones",
+    "titulo": "Indicaciones para el paciente",
+    "membrete": {
+     "nombre": "",
+     "lineas": []
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Paciente sin identificar"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "Esta consulta no dejó indicaciones registradas.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-12-31T12:00",
+    "org": {
+     "city": "Bogotá"
+    },
+    "medico": {
+     "nombre": "Luis"
+    },
+    "paciente": {
+     "nombre": "Ana",
+     "sexo": "X"
+    },
+    "nota": {
+     "discharge": {
+      "plan": {
+       "medications": [],
+       "non_pharmacological": [],
+       "follow_up": []
+      },
+      "recommendations": [],
+      "alarm_signs": []
+     }
+    },
+    "tipo": "nota"
+   },
+   "salida": {
+    "tipo": "nota",
+    "titulo": "Nota clínica",
+    "membrete": {
+     "nombre": "",
+     "lineas": [
+      "Bogotá"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Ana"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "X"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "31 de diciembre de 2026, 12:00 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Bogotá"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Luis"
+     }
+    ],
+    "bloques": [],
+    "firma": {
+     "nombre": "Luis",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-12-31T12:00",
+    "org": {
+     "city": "Bogotá"
+    },
+    "medico": {
+     "nombre": "Luis"
+    },
+    "paciente": {
+     "nombre": "Ana",
+     "sexo": "X"
+    },
+    "nota": {
+     "discharge": {
+      "plan": {
+       "medications": [],
+       "non_pharmacological": [],
+       "follow_up": []
+      },
+      "recommendations": [],
+      "alarm_signs": []
+     }
+    },
+    "tipo": "formula"
+   },
+   "salida": {
+    "tipo": "formula",
+    "titulo": "Fórmula médica",
+    "membrete": {
+     "nombre": "",
+     "lineas": [
+      "Bogotá"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Ana"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "X"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "31 de diciembre de 2026, 12:00 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Bogotá"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Luis"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "No hay medicamentos en el plan de esta consulta.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "Luis",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  },
+  {
+   "entrada": {
+    "fecha": "2026-12-31T12:00",
+    "org": {
+     "city": "Bogotá"
+    },
+    "medico": {
+     "nombre": "Luis"
+    },
+    "paciente": {
+     "nombre": "Ana",
+     "sexo": "X"
+    },
+    "nota": {
+     "discharge": {
+      "plan": {
+       "medications": [],
+       "non_pharmacological": [],
+       "follow_up": []
+      },
+      "recommendations": [],
+      "alarm_signs": []
+     }
+    },
+    "tipo": "indicaciones"
+   },
+   "salida": {
+    "tipo": "indicaciones",
+    "titulo": "Indicaciones para el paciente",
+    "membrete": {
+     "nombre": "",
+     "lineas": [
+      "Bogotá"
+     ]
+    },
+    "datos": [
+     {
+      "etiqueta": "Paciente",
+      "valor": "Ana"
+     },
+     {
+      "etiqueta": "Edad y sexo",
+      "valor": "X"
+     },
+     {
+      "etiqueta": "Fecha",
+      "valor": "31 de diciembre de 2026, 12:00 p. m."
+     },
+     {
+      "etiqueta": "Lugar",
+      "valor": "Bogotá"
+     },
+     {
+      "etiqueta": "Profesional",
+      "valor": "Luis"
+     }
+    ],
+    "bloques": [
+     {
+      "titulo": "",
+      "texto": "Esta consulta no dejó indicaciones registradas.",
+      "items": [],
+      "numero": 0,
+      "nombre": "",
+      "campos": [],
+      "nivel": "",
+      "columnas": [],
+      "filas": [],
+      "tipo": "aviso"
+     }
+    ],
+    "firma": {
+     "nombre": "Luis",
+     "lineas": []
+    },
+    "sello": [],
+    "pie": "Documento generado con asistencia de IA y revisado por el profesional de salud. Generado con Miracle.",
+    "demo": false
+   }
+  }
+ ],
+ "letras": [
+  {
+   "entrada": 0,
+   "salida": "cero"
+  },
+  {
+   "entrada": 1,
+   "salida": "uno"
+  },
+  {
+   "entrada": 7,
+   "salida": "siete"
+  },
+  {
+   "entrada": 15,
+   "salida": "quince"
+  },
+  {
+   "entrada": 16,
+   "salida": "dieciséis"
+  },
+  {
+   "entrada": 20,
+   "salida": "veinte"
+  },
+  {
+   "entrada": 21,
+   "salida": "veintiuno"
+  },
+  {
+   "entrada": 22,
+   "salida": "veintidós"
+  },
+  {
+   "entrada": 29,
+   "salida": "veintinueve"
+  },
+  {
+   "entrada": 30,
+   "salida": "treinta"
+  },
+  {
+   "entrada": 31,
+   "salida": "treinta y uno"
+  },
+  {
+   "entrada": 45,
+   "salida": "cuarenta y cinco"
+  },
+  {
+   "entrada": 99,
+   "salida": "noventa y nueve"
+  },
+  {
+   "entrada": 100,
+   "salida": "cien"
+  },
+  {
+   "entrada": 101,
+   "salida": "ciento uno"
+  },
+  {
+   "entrada": 110,
+   "salida": "ciento diez"
+  },
+  {
+   "entrada": 199,
+   "salida": "ciento noventa y nueve"
+  },
+  {
+   "entrada": 200,
+   "salida": "doscientos"
+  },
+  {
+   "entrada": 555,
+   "salida": "quinientos cincuenta y cinco"
+  },
+  {
+   "entrada": 999,
+   "salida": "novecientos noventa y nueve"
+  },
+  {
+   "entrada": 1000,
+   "salida": "mil"
+  },
+  {
+   "entrada": 1001,
+   "salida": "mil uno"
+  },
+  {
+   "entrada": 1100,
+   "salida": "mil cien"
+  },
+  {
+   "entrada": 2000,
+   "salida": "dos mil"
+  },
+  {
+   "entrada": 2500,
+   "salida": "dos mil quinientos"
+  },
+  {
+   "entrada": 15000,
+   "salida": "quince mil"
+  },
+  {
+   "entrada": 21000,
+   "salida": "veintiuno mil"
+  },
+  {
+   "entrada": 100000,
+   "salida": "cien mil"
+  },
+  {
+   "entrada": 999999,
+   "salida": "novecientos noventa y nueve mil novecientos noventa y nueve"
+  },
+  {
+   "entrada": 1000000,
+   "salida": ""
+  },
+  {
+   "entrada": -1,
+   "salida": ""
+  }
+ ],
+ "cantidades": [
+  {
+   "entrada": "15 tabletas",
+   "salida": "15 tabletas (quince)"
+  },
+  {
+   "entrada": "1 frasco",
+   "salida": "1 frasco (uno)"
+  },
+  {
+   "entrada": "30",
+   "salida": "30 (treinta)"
+  },
+  {
+   "entrada": "caja",
+   "salida": "caja"
+  },
+  {
+   "entrada": "",
+   "salida": ""
+  },
+  {
+   "entrada": "  12 sobres",
+   "salida": "12 sobres (doce)"
+  },
+  {
+   "entrada": "2 cajas x 10",
+   "salida": "2 cajas x 10 (dos)"
+  },
+  {
+   "entrada": "1234567 unidades",
+   "salida": "1234567 unidades"
   }
  ]
 }

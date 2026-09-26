@@ -28,6 +28,7 @@ const plantillas = await import(`${WEB}/lib/clinical/template-preferences.ts`);
 const texto = await import(`${WEB}/lib/clinical/note-plain-text.ts`);
 const borradores = await import(`${WEB}/lib/clinical/section-drafts.ts`);
 const clinica = await import(`${WEB}/lib/api/clinical.ts`);
+const papeles = await import(`${WEB}/lib/pdf/patient-documents.ts`);
 
 // ── notas de ejemplo ─────────────────────────────────────────────────────────
 
@@ -317,6 +318,51 @@ const egresos = [
   cierreCompleto,
 ].map((d) => ({ entrada: d === undefined ? "__ausente__" : d, salida: clinica.ensureClinicalDischarge(d as never) }));
 
+// ── los papeles del paciente (spec 059) ──────────────────────────────────────
+
+const orgCompleta = { name: "Consultorio Dra. Pérez", nit: "900.123.456-7", address: "Cra 43A # 1-50", city: "Medellín", phone: "604 444 0000" };
+const medicoCompleto = { nombre: "Ana Pérez", documento: "43123456", registro: "RM-4471", especialidad: "Medicina general" };
+const pacienteCompleto = { nombre: "María Gómez", documento: "CC 1035421987", edad: 34, sexo: "F", eps: "Sura" };
+const notaConPlan = {
+  summary: "Cefalea tensional sin signos de alarma.",
+  sections: [{ label: "Motivo de consulta", content: "Dolor de cabeza de tres días" }, { label: "Examen físico", content: "  " }, { label: "", content: "Sin título" }],
+  discharge: {
+    plan: {
+      medications: [
+        { name: "Acetaminofén", concentration: "500 mg/tableta", dose: "1 tableta", route: "oral", frequency: "cada 8 horas", duration: "5 días", quantity: "15 tabletas", instructions: "después de comer" },
+        { name: "Ibuprofeno", dose: "400 mg", quantity: "caja" },
+        { name: "  ", dose: "x" },
+      ],
+      non_pharmacological: [{ text: "Reposo relativo" }, { text: " " }],
+      follow_up: [{ text: "Control en 8 días" }],
+    },
+    recommendations: [{ text: "Hidratación abundante" }],
+    alarm_signs: [
+      { text: "Fiebre", urgency: "priority" },
+      { text: "Pérdida de fuerza", urgency: "emergency" },
+      { text: "Dolor que no cede" },
+      { text: "Mareo", urgency: "monitor" },
+      { text: "Vómito", urgency: "rara" },
+    ],
+  },
+};
+const entradasDePapeles = [
+  { fecha: "2026-09-26T14:05", org: orgCompleta, medico: medicoCompleto, paciente: pacienteCompleto, nota: notaConPlan },
+  { fecha: "2026-01-05T00:15", org: { name: "Hospital General" }, medico: { ...medicoCompleto, honorifico: "Dra", responsable: "MÉDICO GENERAL", especialidad: "Patología" }, paciente: { nombre: "Juan", edad: 0, sexo: "M" }, nota: { summary: "", sections: [], discharge: null }, codigos: [{ sistema: "CIE-10", codigo: "R51", descripcion: "Cefalea" }], adendas: [{ autor: "Dr. X", fecha: "2026-01-06T09:30", contenido: "Se agrega resultado." }], demo: true },
+  { fecha: "", org: {}, medico: {}, paciente: {}, nota: {} },
+  { fecha: "2026-12-31T12:00", org: { city: "Bogotá" }, medico: { nombre: "Luis" }, paciente: { nombre: "Ana", sexo: "X" }, nota: { discharge: { plan: { medications: [], non_pharmacological: [], follow_up: [] }, recommendations: [], alarm_signs: [] } } },
+];
+const documentos = entradasDePapeles.flatMap((e) =>
+  (["nota", "formula", "indicaciones"] as const).map((tipo) => {
+    const entrada = { ...e, tipo };
+    return { entrada, salida: papeles.construirDocumento(entrada) };
+  }),
+);
+const letras = [0, 1, 7, 15, 16, 20, 21, 22, 29, 30, 31, 45, 99, 100, 101, 110, 199, 200, 555, 999, 1000, 1001, 1100, 2000, 2500, 15000, 21000, 100000, 999999, 1000000, -1]
+  .map((n) => ({ entrada: n, salida: papeles.numeroEnLetras(n) }));
+const cantidades = ["15 tabletas", "1 frasco", "30", "caja", "", "  12 sobres", "2 cajas x 10", "1234567 unidades"]
+  .map((c) => ({ entrada: c, salida: papeles.cantidadEnNumerosYLetras(c) }));
+
 const commit = execSync("git rev-parse --short HEAD", { cwd: WEB }).toString().trim();
 process.stdout.write(JSON.stringify({
   generado: new Date().toISOString().slice(0, 10),
@@ -324,4 +370,5 @@ process.stdout.write(JSON.stringify({
   revisiones, vitales, voces, literales, barras, huecos: huecosV, inserciones,
   catalogoDeAtajos: catalogo, filtros, normalizados, listasDePlantillas: listas, plantillas: plantillaV, textosPlanos,
   borradores: bloquesDeBorradores, egresos,
+  documentos, letras, cantidades,
 }, null, 1));

@@ -116,6 +116,27 @@ public sealed partial class ConsultaWindow
         };
         acciones.Children.Add(copiar);
 
+        // LOS PAPELES DEL PACIENTE (spec 059): el mismo modelo que la web, impreso con el diálogo
+        // de Windows («Microsoft Print to PDF» da el PDF).
+        var imprimir = Estudio.BotonSecundario("Imprimir", "printer", 34);
+        imprimir.Margin = new Thickness(6, 0, 0, 0);
+        var menu = new ContextMenu { FontFamily = Estudio.FuenteCuerpo };
+        foreach (var (tipo, rotulo) in new[] { ("nota", "Nota clínica"), ("formula", "Fórmula médica"), ("indicaciones", "Indicaciones para el paciente") })
+        {
+            var item = new MenuItem { Header = rotulo };
+            item.Click += async (_, e) => { e.Handled = true; await ImprimirAsync(tipo); };
+            menu.Items.Add(item);
+        }
+        imprimir.ContextMenu = menu;
+        imprimir.Click += (_, e) =>
+        {
+            e.Handled = true;
+            menu.PlacementTarget = imprimir;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+        };
+        acciones.Children.Add(imprimir);
+
         string id = EncounterEnPantalla();
         if (id.Length > 0)
         {
@@ -140,6 +161,28 @@ public sealed partial class ConsultaWindow
         titulo.Children.Add(chip);
         fila.Children.Add(titulo);
         return fila;
+    }
+
+    /// <summary>
+    /// Arma el papel con la nota GUARDADA que se ve (no una propuesta sin aprobar), el paciente y el
+    /// médico, y abre el diálogo de imprimir.
+    /// </summary>
+    private async Task ImprimirAsync(string tipo)
+    {
+        var nota = _notaEnPantalla;
+        if (nota == null) { Estado("No hay nota que imprimir."); return; }
+        Estado("Preparando el papel…");
+        try
+        {
+            var entrada = await DatosDelPapel.EntradaAsync(_sesion, tipo, nota, _paciente, DateTime.Now);
+            var papel = DocumentosDelPaciente.Construir(entrada);
+            Estado(PapelesDelPaciente.Imprimir(papel) ? $"«{papel.Titulo}» enviado a imprimir." : "Impresión cancelada.");
+        }
+        catch (Exception e)
+        {
+            Estado($"No se pudo imprimir: {e.Message}");
+            LogBus.Log("papeles", $"no se pudo imprimir: {e.GetType().Name}: {e.Message}");
+        }
     }
 
     // ── el paciente ──────────────────────────────────────────────────────────
