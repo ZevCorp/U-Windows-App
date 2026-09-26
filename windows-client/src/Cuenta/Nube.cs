@@ -19,6 +19,13 @@ public static class Nube
         Ambiente("MIRACLE_SUPABASE_KEY") ?? "sb_publishable_qroW231Ts7UYAEgr_f5cnQ_3SrW2ZrI";
 
     /// <summary>
+    /// El portal de Miracle Notes, para «Abrir en la web» (spec 055): el mismo dominio que la web
+    /// declara en `lib/site.ts`. Se pisa con <c>MIRACLE_PORTAL_URL</c> para apuntar a una preview.
+    /// </summary>
+    public static string PortalUrl =>
+        (Ambiente("MIRACLE_PORTAL_URL") ?? "https://itsmiracleai.com.co").TrimEnd('/');
+
+    /// <summary>
     /// La referencia del proyecto, sacada de la propia URL en vez de escrita otra vez.
     ///
     /// Hace falta suelta porque Realtime no vive en <c>https://…</c> sino en

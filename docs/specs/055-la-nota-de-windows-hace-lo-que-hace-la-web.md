@@ -138,7 +138,45 @@ una consulta corregida en la web; ajuste escrito y por voz; atajo «/» con huec
 
 ## Hallazgos
 
+1. **El PUT de Windows borraba el cierre de la nota** (`discharge`, `confidence` y todo campo que
+   `NotaClinica` no modelaba). Llevaba así desde la spec 053: cada corrección hecha en Windows dejaba
+   la nota más pobre que la de la web, sin error. Lo descubrió la promesa 461 al escribirse, antes del
+   código. Arreglo: `NotaClinica.Crudo` viaja entero y solo se sustituye lo corregido.
+2. **La estrella de la web no servía de nada con el modo por defecto.** La web arrancaba en «la
+   última que usé», y en ese modo `pickPreselectedTemplate` ignora los pines: el médico fijaba su
+   predeterminada y no pasaba nada. Arreglado en la web (rama `claude/admiring-brahmagupta-fghedd`,
+   modo por defecto `fixed` y fijar deja el modo en `fixed`), y aquí la 459 lo exige.
+   **La migración que cambia el por defecto de la columna NO está aplicada en producción.**
+3. **Los avisos del backend se pintaban dos veces de forma distinta**: la tarjeta «Avisos» los listaba
+   en crudo y la web los mete en la revisión con severidad. La tarjeta se retiró; entran en el panel.
+4. **`ReglaDeLaPlantilla` quedó sin nadie que la llame** al retirarse la 440 (la sustituye la 458).
+   Se borró en vez de dejarla viva al lado de la nueva cadena (patrón nº6).
+
+## La fase 8, en la pantalla
+
+- **Arriba de la nota**: «Nota clínica» con el estado del portal, *Copiar nota* (el texto de la 460) y
+  *Abrir en Miracle web* (`MIRACLE_PORTAL_URL`, por defecto `https://itsmiracleai.com.co`,
+  `/app/consultas/{id}`).
+- **El paciente**: buscar por nombre o documento y asociar (464); se ven alergias en ámbar,
+  antecedentes y medicamentos.
+- **Los avisos** (450) con los textos exactos de la web, recalculados cada vez que se guarda algo.
+  La plantilla congelada y la transcripción se traen detrás: la nota se pinta primero.
+- **Ajustar**: una barra (escribir + Enter, o dictar la instrucción a la barra y revisarla) y un
+  micrófono en cada sección (452/453). Todo llega como **una propuesta**: se marcan las secciones que
+  cambió, la nota no se edita mientras tanto, y se acepta con *Guardar* o **Ctrl+S**, o se descarta.
+- **«/» en el editor** (455-457): la lista sale bajo el cursor; flechas, Enter o Tab insertan; Tab
+  salta de hueco en hueco. Lo insertado es texto normal y se edita como cualquier otro.
+- **Plantilla** (458/459): la cadena de la web con el modo del médico; en «manual», grabar abre el
+  selector; la estrella fija la predeterminada en las dos apps; la última usada se anota al grabar.
+- **La lista** enseña el paciente; abrir una consulta trae la versión del portal si se corrigió allí
+  (462) y su paciente.
+
 ## Cierre
 
-- [ ] 450-465 verdes, sabotaje comprobado
-- [ ] Nivel 4 en el PC real, con log y horas
+- [x] 450-465 verdes en Linux salvo la 447, que necesita WPF (2026-09-26). Sabotaje 16/16
+      comprobado, y el contrato entero sin ninguna roja nueva frente a la base.
+- [ ] 447 en Windows (`contrato-del-grafo.ps1`).
+- [ ] Nivel 4 en el PC real, con log y horas: grabar → parar → avisos; corregir una sección y verla
+      en la web; ajuste escrito; ajuste por voz (literal, «agrega que…» y una instrucción); «/» con
+      un atajo que tenga huecos; asociar paciente; abrir una consulta corregida en la web; fijar la
+      estrella y ver que la web arranca con ella; capturas lado a lado con la web.

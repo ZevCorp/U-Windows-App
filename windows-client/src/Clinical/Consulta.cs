@@ -324,6 +324,44 @@ public sealed class Consulta
     }
 
     /// <summary>
+    /// Guarda la nota ENTERA que el médico aceptó —una propuesta del asistente o un literal dictado—.
+    /// Mismo camino y mismo orden que <see cref="CorregirSeccionAsync"/>: backend y después espejo.
+    /// </summary>
+    /// <remarks>
+    /// Existe por la spec 055: un ajuste puede cambiar varias secciones a la vez, y guardarlas una a
+    /// una serían varios `PUT` y varios espejos por un solo gesto del médico.
+    /// </remarks>
+    public async Task<bool> GuardarNotaAsync(NotaClinica nueva, CancellationToken ct = default)
+    {
+        if (Nota == null || EncounterId.Length == 0)
+        {
+            Motivo = "no hay ninguna nota que guardar";
+            return false;
+        }
+        try
+        {
+            Nota = await _clinica.GuardarNotaEditadaAsync(EncounterId, nueva, ct);
+            await EspejarAsync(yaExiste: true);
+            Motivo = "";
+            CodigoDeFallo = "";
+            LogBus.Log("consulta", "nota ajustada guardada por el médico");
+            return true;
+        }
+        catch (ErrorClinico e)
+        {
+            Motivo = e.Message;
+            CodigoDeFallo = e.Codigo;
+            LogBus.Log("consulta", $"no se pudo guardar el ajuste · {e.Codigo}");
+            return false;
+        }
+        catch (Exception e)
+        {
+            Motivo = $"no se pudo guardar el ajuste: {e.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Corrige el RESUMEN de la nota. Mismo camino que una sección: backend y después espejo.
     /// </summary>
     /// <remarks>

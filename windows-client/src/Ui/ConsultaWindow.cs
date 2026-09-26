@@ -688,7 +688,17 @@ public sealed partial class ConsultaWindow : Window
 
         // Sin barra de título, arrastrar es cosa nuestra. Los botones se tragan su propio clic.
         MouseLeftButtonDown += (_, e) => { if (e.ButtonState == MouseButtonState.Pressed) DragMove(); };
-        KeyDown += (_, e) => { if (e.Key == Key.Escape) WindowState = WindowState.Minimized; };
+        KeyDown += async (_, e) =>
+        {
+            if (e.Key == Key.Escape) WindowState = WindowState.Minimized;
+            // CTRL+S ACEPTA EL AJUSTE PROPUESTO (spec 055): el mismo atajo que guarda una sección, para
+            // que aprobar lo que propuso la IA no pida buscar el botón.
+            else if (e.Key == Key.S && (Keyboard.Modifiers & ModifierKeys.Control) != 0 && _propuesta != null)
+            {
+                e.Handled = true;
+                await GuardarPropuestaAsync();
+            }
+        };
         // NO HAY MAXIMIZAR, y no basta con no dibujar el botón: Win+↑ maximiza igual y la pastilla
         // se convertiría en una pantalla completa con las esquinas flotando.
         StateChanged += (_, __) => { if (WindowState == WindowState.Maximized) WindowState = WindowState.Normal; };
@@ -696,6 +706,10 @@ public sealed partial class ConsultaWindow : Window
         _cronometro.Tick += (_, __) => PintarCronometro();
         _dictado.Parcial += t => Dispatcher.BeginInvoke(() =>
         {
+            // DICTAR UN CAMBIO NO ES GRABAR UNA CONSULTA: el mismo dictado sirve a los dos, pero lo que
+            // se dice al micrófono de una sección no es transcripción de la consulta y no se pinta
+            // como tal. Lo oído se enseña en la barra de estado para saber que está escuchando.
+            if (_dictandoA != null) { Estado("Te escucho: «" + (t.Length > 90 ? "…" + t[^90..] : t) + "»"); return; }
             _vivo.Text = t;
             _tarjetaVivo.Visibility = t.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             _vacioNota.Visibility = t.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -1388,6 +1402,8 @@ public sealed partial class ConsultaWindow : Window
     {
         _quien.Text = _sesion.MedicoNombre.Length > 0 ? _sesion.MedicoNombre : _sesion.MedicoEmail;
         Estado("Preparando…");
+        // Las preferencias ANTES que la plantilla: el modo y los pines deciden con cuál se graba.
+        await CargarLoDelMedicoAsync();
         await ResolverPlantillaAsync();
     }
 
@@ -1516,7 +1532,7 @@ public sealed partial class ConsultaWindow : Window
             TextTrimming = TextTrimming.CharacterEllipsis,
         });
         string bajo = p.Especialidad.Replace('_', ' ');
-        if (esLaSugerida) bajo += "  ·  tu sugerida";
+        if (esLaSugerida) bajo += "  ·  tu predeterminada";
         else if (p.EsLaPorDefecto) bajo += "  ·  la del hospital";
         texto.Children.Add(new TextBlock
         {
@@ -1545,14 +1561,20 @@ public sealed partial class ConsultaWindow : Window
             // FIJARLA Y ELEGIRLA SON DOS COSAS: sin esto, el clic subiria a la fila y ademas la
             // seleccionaria, que no es lo que pidio quien toco la estrella.
             e.Handled = true;
-            if (await SugeridaDelMedico.GuardarAsync(_sesion, _http, p.Especialidad, p.Id))
+            // FIJARLA ES PEDIR QUE MANDE (promesa 459): escribe el pin y deja el modo en «fixed», en
+            // las mismas tablas que la web — fijarla aquí cambia con qué empieza la web, y al revés.
+            string especialidad = _especialidad.Length > 0 ? _especialidad : p.Especialidad;
+            if (await PreferenciasDelMedico.FijarPredeterminadaAsync(_sesion, especialidad, p.Id))
             {
                 _sugeridaId = p.Id;
+                _modoDePlantilla = "fixed";
+                _pines = new[] { new Predeterminada(PlantillaPredeterminada.NormalizarEspecialidad(especialidad), p.Id,
+                                     DateTimeOffset.UtcNow.ToString("O")) }.Concat(_pines).ToList();
                 PintarPlantilla();
                 PintarMenuDePlantilla();
-                Estado($"«{p.Nombre}» es tu sugerida a partir de ahora.");
+                Estado($"«{p.Nombre}» es tu predeterminada, aquí y en la web.");
             }
-            else Estado("No se pudo fijar tu sugerida. Se sigue pudiendo elegir a mano.");
+            else Estado("No se pudo fijar tu predeterminada. Se sigue pudiendo elegir a mano.");
         };
 
         var dentro = new DockPanel();
@@ -1600,9 +1622,26 @@ public sealed partial class ConsultaWindow : Window
             if (_especialidad.Length == 0) _especialidad = await _sesion.EspecialidadAsync();
 
             _catalogo = await _clinica.PlantillasAsync();
-            _sugeridaId = await SugeridaDelMedico.LeerAsync(_sesion, _http, _especialidad);
 
-            var elegida = ReglaDeLaPlantilla.Elegir(_catalogo, _elegidaId, _sugeridaId);
+            // LA MISMA CADENA QUE LA WEB (promesa 458): lo tocado en esta consulta, la predeterminada
+            // que fijó el médico, la última usada o la de su especialidad, según su modo.
+            var decision = PlantillaPredeterminada.ParaGrabar(_catalogo, _pines,
+                PreferenciasDelMedico.UltimaUsada(_sesion.MedicoId), _especialidad, _modoDePlantilla, _elegidaId);
+            _sugeridaId = PlantillaPredeterminada.Elegir(_catalogo, _pines, null, null, "fixed") is { Length: > 0 } fijada
+                          && _pines.Any(x => x.PlantillaId == fijada) ? fijada : "";
+
+            if (decision.HayQuePreguntar)
+            {
+                // «LA ELIJO CADA VEZ»: no se elige por el médico. El botón de grabar abre el selector.
+                _plantillaId = "";
+                _plantillaNombre = "";
+                _rotuloPlantilla.Text = "Elige la plantilla";
+                LogBus.Log("plantilla", $"modo «manual» · {_catalogo.Count} disponible(s) · se pregunta al grabar");
+                Estado("Elige con qué plantilla grabar.");
+                return;
+            }
+
+            var elegida = decision.Plantilla;
 
             // NINGUN ESLABON RESOLVIO: se CREA la abierta, que es lo que la promesa 94 exige desde
             // el 2026-09-01. Caer en una cualquiera del catalogo -hoy son 204- seria elegir por el
@@ -1617,11 +1656,11 @@ public sealed partial class ConsultaWindow : Window
             _plantillaId = elegida.Id;
             _plantillaNombre = elegida.Nombre;
             PintarPlantilla();
-            LogBus.Log("plantilla", $"se grabara con «{_plantillaNombre}» · {_catalogo.Count} disponible(s) · "
-                                  + (_elegidaId.Length > 0 ? "la elegiste tu"
-                                     : _sugeridaId.Length > 0 && _sugeridaId == _plantillaId ? "es tu sugerida"
-                                     : ReglaDeLaPlantilla.EsDeUrgencias(elegida.Especialidad) ? "es la de urgencias"
-                                     : "es la abierta"));
+            LogBus.Log("plantilla", $"se grabara con «{_plantillaNombre}» · {_catalogo.Count} disponible(s) · modo «{_modoDePlantilla}» · "
+                                  + (_elegidaId.Length > 0 && _elegidaId == _plantillaId ? "la elegiste tu"
+                                     : _sugeridaId.Length > 0 && _sugeridaId == _plantillaId ? "es tu predeterminada"
+                                     : elegida.Nombre == PlantillaAbierta.Nombre ? "es la abierta"
+                                     : "la eligio la cadena de la web"));
             Estado("Listo.");
         }
         catch (ErrorClinico e) { Estado(e.Message); }
@@ -2322,10 +2361,19 @@ public sealed partial class ConsultaWindow : Window
             // DNS—, la plantilla se quedaba sin resolver y el botón contestaba «todavía no está
             // lista» PARA SIEMPRE: la única salida era cerrar y volver a abrir. Un fallo pasajero
             // no puede dejar la app inservible hasta el siguiente arranque.
+            if (_dictandoA != null) { Estado("Termina de dictar el cambio antes de grabar."); return; }
+
             if (_plantillaId.Length == 0)
             {
                 Estado("Reintentando la conexión…");
                 await ResolverPlantillaAsync();
+                if (_plantillaId.Length == 0 && _modoDePlantilla == "manual" && _catalogo.Count > 0)
+                {
+                    PintarMenuDePlantilla();
+                    _menuPlantilla.IsOpen = true;
+                    Estado("Elige con qué plantilla grabar y vuelve a pulsar grabar.");
+                    return;
+                }
                 if (_plantillaId.Length == 0) return;   // ResolverPlantilla ya dijo por qué
             }
 
@@ -2335,6 +2383,12 @@ public sealed partial class ConsultaWindow : Window
             _abiertaEstado = "";
             _abiertaNota = null;
             _notaEnPantalla = null;
+            // Lo de la nota anterior —su propuesta, su paciente, su plantilla congelada— no es de esta.
+            _propuesta = null;
+            _paciente = null;
+            _contextoDe = "";
+            _contextoPlantilla = default;
+            _contextoTranscripcion = "";
 
             Mostrar(nota: true);
             _nota.Children.Clear();
@@ -2356,6 +2410,8 @@ public sealed partial class ConsultaWindow : Window
                 Estado("Abriendo la consulta…");
 
             if (!await _consulta.EmpezarAsync(_plantillaId)) Estado(_consulta.Motivo);
+            // LA ÚLTIMA USADA SE ANOTA AL GRABAR, no al mirar el selector: es lo que hace la web.
+            else PreferenciasDelMedico.RecordarUltima(_sesion.MedicoId, _plantillaId);
         }
         finally { _grabar.IsEnabled = true; }
     }
@@ -2448,7 +2504,9 @@ public sealed partial class ConsultaWindow : Window
         return caja;
     }
 
-    private void PintarNota()
+    private void PintarNota() => PintarNota(anunciar: true);
+
+    private void PintarNota(bool anunciar)
     {
         var nota = _consulta.Nota;
         _nota.Children.Clear();
@@ -2457,9 +2515,14 @@ public sealed partial class ConsultaWindow : Window
         if (nota == null) { Estado("La nota volvió vacía."); return; }
 
         // SE DICE SI SE VIO O NO EN EL PORTAL, no se supone (promesa 93).
-        Estado(_consulta.VisibleEnElPortal
-            ? "Nota lista. Ya se ve en el portal."
-            : "Nota guardada, pero no se pudo espejar al portal. Está en el log.");
+        if (anunciar)
+            Estado(_consulta.VisibleEnElPortal
+                ? "Nota lista. Ya se ve en el portal."
+                : "Nota guardada, pero no se pudo espejar al portal. Está en el log.");
+
+        // Los avisos necesitan la plantilla congelada y lo que se habló: se traen detrás, y la nota
+        // se repinta una vez al llegar. La nota ya se ve; esperar no cuesta nada al médico.
+        _ = CargarContextoDeLaNotaAsync();
 
         // La nota recién generada SE PUEDE CORREGIR (spec 053). Hasta el 2026-09-07 esto era texto
         // muerto: la IA organizaba y el médico solo podía mirar lo que iba a quedar en la historia
@@ -2508,7 +2571,19 @@ public sealed partial class ConsultaWindow : Window
         _estadoDeSeccion.Clear();
         _notaEnPantalla = nota;
 
+        // CON UN AJUSTE PENDIENTE SE VE LA PROPUESTA y no se edita nada: dos cambios a medio aprobar
+        // sobre la misma nota no se pueden revisar. La nota guardada sigue siendo _notaEnPantalla.
+        var vista = _propuesta?.Nota ?? nota;
+        bool sePuedeEscribir = editable;
+        editable = editable && _propuesta == null;
+
+        _nota.Children.Add(CabeceraDeLaNota(vista, _abiertaId.Length > 0 ? _abiertaEstado : "borrador"));
         if (cinta.Length > 0) _nota.Children.Add(Cinta(cinta));
+        _nota.Children.Add(FilaDelPaciente(sePuedeEscribir));
+        _nota.Children.Add(PanelDeAvisos(vista));
+        if (_propuesta != null) _nota.Children.Add(BandaDePropuesta(_propuesta));
+        else if (editable) _nota.Children.Add(BarraDeAjuste());
+        nota = vista;
 
         // EL PAPEL (spec 054): las secciones van dentro de UN documento con el filete cálido de la
         // web y el blanco de U, separadas por un hilo. Es lo que hace que la nota se lea como
@@ -2554,8 +2629,8 @@ public sealed partial class ConsultaWindow : Window
         _nota.Children.Add(Estudio.Elevar(papel, Estudio.Sombra2));
 
         if (conTexto.Count > 1 && MostrarElEnvioASap()) _nota.Children.Add(BotonTodoASap(conTexto));
-        if (nota.Avisos.Count > 0)
-            _nota.Children.Add(TarjetaDeTexto("Avisos", string.Join("\n", nota.Avisos)));
+        // LA TARJETA «AVISOS» SE VA: los avisos del backend (note_json.warnings) ya entran en el panel
+        // de revisión de arriba, como en la web, con su severidad y en su orden.
         _superficie.ScrollToHome();
     }
 
@@ -2661,7 +2736,9 @@ public sealed partial class ConsultaWindow : Window
                 cancelar.IsEnabled = false;
                 guardarBtn.Content = Estudio.ConIcono("loader-circle", "Guardando…", Brushes.White);
                 bool ok = await guardar(s.Clave, nuevo);
-                if (ok) { contenido = nuevo; Leer(); }
+                // SE REPINTA LA NOTA ENTERA y no solo la sección: los avisos se recalculan con lo
+                // corregido, y el ajuste siguiente parte de la nota guardada, no de la de antes.
+                if (ok) { contenido = nuevo; Leer(); RepintarLaNota(); }
                 else
                 {
                     // NO SE CIERRA EL EDITOR SI NO SE GUARDÓ: lo escrito se queda donde está para
@@ -2673,11 +2750,16 @@ public sealed partial class ConsultaWindow : Window
             }
             guardarBtn.Click += async (_, __) => await Guardar();
 
+            // LOS ATAJOS «/» VAN ANTES que el teclado del editor: con el menú abierto, Enter y Esc son
+            // suyos. Lo insertado es texto normal de la sección y se edita como cualquier otro.
+            EngancharAtajos(caja, s.Clave);
+
             // EL TECLADO PRIMERO, que es lo que hace a Windows más rápido que la web: Ctrl+Enter o
             // Ctrl+S guardan, Esc deja la sección como estaba. Esc se atiende AQUÍ porque la ventana
             // entera lo usa para minimizarse, y sin marcarlo se minimizaría con el texto a medias.
             caja.PreviewKeyDown += async (_, e) =>
             {
+                if (e.Handled) return;
                 bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
                 if (ctrl && (e.Key == Key.Enter || e.Key == Key.S)) { e.Handled = true; await Guardar(); }
                 else if (e.Key == Key.Escape) { e.Handled = true; Leer(); }
@@ -2685,7 +2767,7 @@ public sealed partial class ConsultaWindow : Window
 
             var ayuda = new TextBlock
             {
-                Text = "Ctrl+Enter guarda · Esc cancela",
+                Text = _atajos.Count > 0 ? "/ atajos · Ctrl+Enter guarda · Esc cancela" : "Ctrl+Enter guarda · Esc cancela",
                 Foreground = Estudio.TintaTenue,
                 FontSize = 11.5,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -2768,6 +2850,18 @@ public sealed partial class ConsultaWindow : Window
             lapiz.Margin = new Thickness(2, 0, 0, 0);
             lapiz.Click += (_, e) => { e.Handled = true; Editar(); };
             acciones.Children.Add(lapiz);
+
+            // AJUSTAR EN VOZ ALTA (promesa 452): «quiero que diga…» se escribe tal cual, «agrega que…»
+            // se redacta dentro, y lo demás es una instrucción. Una pulsación escucha, otra decide.
+            var micro = Estudio.BotonIcono("mic", "Dictar un cambio a esta sección", 30, 15, Estudio.TintaTenue);
+            micro.Margin = new Thickness(2, 0, 0, 0);
+            micro.Click += async (_, e) =>
+            {
+                e.Handled = true;
+                await DictarCambioAsync(new SeccionDeNota(s.Clave, s.Titulo, contenido), micro);
+            };
+            if (_dictandoA == s.Clave) PintarMicroDeDictado(micro, true);
+            acciones.Children.Add(micro);
         }
 
         if (conEnvioASap && MostrarElEnvioASap())
@@ -2791,7 +2885,20 @@ public sealed partial class ConsultaWindow : Window
         pila.Children.Add(cabecera);
         pila.Children.Add(cuerpo);
         pila.Children.Add(estado);
-        return pila;
+        if (!LaCambioLaPropuesta(s.Clave)) return pila;
+
+        // LO QUE CAMBIÓ LA PROPUESTA SE VE SIN BUSCARLO: una banda azul a la izquierda y el hielo de
+        // fondo, como la web marca las secciones sin guardar.
+        pila.Margin = new Thickness(0);
+        return new Border
+        {
+            Child = pila,
+            Background = Estudio.HieloSuave,
+            BorderBrush = Estudio.Acento,
+            BorderThickness = new Thickness(3, 0, 0, 0),
+            Padding = new Thickness(14, 14, 10, 16),
+            Margin = new Thickness(-17, 0, -12, 0),
+        };
     }
 
     /// <summary>
@@ -3096,6 +3203,14 @@ public sealed partial class ConsultaWindow : Window
             Foreground = Estudio.TintaFuerte, FontSize = 14.5, FontWeight = FontWeights.SemiBold, LineHeight = 21,
             TextWrapping = TextWrapping.Wrap, MaxHeight = 64, TextTrimming = TextTrimming.CharacterEllipsis,
         });
+        // DE QUIÉN ES, como la tarjeta de la web: el paciente antes que la plantilla.
+        string quien = string.Join(" · ", new[] { c.Paciente, c.Documento }.Where(x => x.Length > 0));
+        if (quien.Length > 0)
+            pila.Children.Add(new TextBlock
+            {
+                Text = quien, Foreground = Estudio.TintaSuave, FontSize = 12.5, FontWeight = FontWeights.Medium,
+                Margin = new Thickness(0, 4, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis,
+            });
         if (c.Plantilla.Length > 0)
             pila.Children.Add(new TextBlock
             {
@@ -3157,21 +3272,31 @@ public sealed partial class ConsultaWindow : Window
                 return;
             }
 
+            // LO QUE SE CORRIGIÓ EN LA WEB MANDA (promesa 462): el detalle web escribe en el espejo,
+            // no en el backend clínico, y abrir aquí la de Graph enseñaría la nota de antes.
+            var fila = await EspejoDeConsulta.LeerFilaAsync(_sesion, c.Id);
+            var nota = NotaDelPortal.Fusionar(enc.Nota, fila);
+            string pacienteId = enc.PacienteId.Length > 0 ? enc.PacienteId
+                : fila.ValueKind == System.Text.Json.JsonValueKind.Object && fila.TryGetProperty("patient_id", out var pid)
+                  && pid.ValueKind == System.Text.Json.JsonValueKind.String ? pid.GetString() ?? "" : "";
+
             _abiertaId = c.Id;
             _abiertaEstado = c.Estado;
-            _abiertaNota = enc.Nota;
+            _abiertaNota = nota;
+            _propuesta = null;
+            _contextoDe = c.Id;
+            _contextoPlantilla = enc.PlantillaCongelada;
+            _contextoTranscripcion = enc.Transcripcion;
+            _paciente = await PacientesDelMedico.LeerAsync(_sesion, pacienteId);
 
             bool sePuede = ReglaDeLaEdicion.SePuedeEditar(c.Estado);
-            PintarSecciones(enc.Nota, sePuede,
-                guardar: GuardarCorreccionDeLaAbiertaAsync,
-                guardarResumen: GuardarResumenDeLaAbiertaAsync,
-                cinta: sePuede ? "" : ReglaDeLaEdicion.PorQueNo(c.Estado));
+            PintarLaAbierta();
 
             Estado(sePuede
                 ? "Toca cualquier sección para corregirla. El ✓ la manda a SAP."
                 : "Solo lectura. El ✓ sigue mandando a SAP.");
             LogBus.Log("consulta-ui", $"consulta abierta · estado «{c.Estado}» · "
-                                    + $"{enc.Nota.Secciones.Count} sección(es) · "
+                                    + $"{nota.Secciones.Count} sección(es) · "
                                     + (sePuede ? "editable" : "solo lectura"));
         }
         catch (ErrorClinico e) { Estado(e.Message); }
@@ -3258,6 +3383,9 @@ public sealed partial class ConsultaWindow : Window
         _abiertaId = "";
         _abiertaEstado = "";
         _abiertaNota = null;
+        _propuesta = null;
+        _paciente = null;
+        _contextoDe = "";
 
         // Se repinta lo que corresponda: la nota en curso si la hay, y si no la pantalla de empezar.
         _nota.Children.Clear();
@@ -3269,5 +3397,16 @@ public sealed partial class ConsultaWindow : Window
             _vacioNota.Visibility = Visibility.Visible;
             Estado(_plantillaId.Length > 0 ? "Listo." : "");
         }
+    }
+
+    /// <summary>Pinta la consulta abierta desde la lista con lo que haya ahora (tras abrirla o guardarla).</summary>
+    private void PintarLaAbierta()
+    {
+        if (_abiertaNota == null) return;
+        bool sePuede = ReglaDeLaEdicion.SePuedeEditar(_abiertaEstado);
+        PintarSecciones(_abiertaNota, sePuede,
+            guardar: GuardarCorreccionDeLaAbiertaAsync,
+            guardarResumen: GuardarResumenDeLaAbiertaAsync,
+            cinta: sePuede ? "" : ReglaDeLaEdicion.PorQueNo(_abiertaEstado));
     }
 }
