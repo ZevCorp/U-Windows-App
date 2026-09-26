@@ -30,6 +30,13 @@ namespace U.WindowsClient.Ui;
 /// desplazamiento— y al pulsarlo baja. Es la única animación de la interfaz y cuenta lo que hace
 /// falta: esto se puede tocar.
 ///
+/// LOS VALORES SON LOS DE MIRACLE DESDE EL 2026-09-26 (spec 054). Cada color sale de <see cref="Marca"/>,
+/// que los copia de la web con los blancos de U y un azul un punto más claro: «que el Notes de Windows
+/// y el de la web se entiendan como el mismo». Aquí ya no se escribe un hexadecimal — se escribe en
+/// Marca, que el contrato juzga sin pantalla (446), y la promesa 447 comprueba que esto la obedece.
+/// Lo que sigue siendo de U y no de la web es la SOMBRA: tres niveles, luz de arriba, la placa
+/// aparte. Es la base de U que el dueño pidió conservar.
+///
 /// EL CONTRASTE ESTÁ MEDIDO, no elegido a ojo. Sobre blanco: <see cref="Tinta"/> 17:1,
 /// <see cref="TintaMedia"/> 5,9:1 y <see cref="TintaTenue"/> 4,2:1 — las tres por encima del 4,5:1
 /// que pide WCAG AA para texto normal (la tenue se reserva a rótulos en negrita). El azul y el rojo
@@ -50,25 +57,25 @@ public static class Estudio
     // lo elevado se lee por su SOMBRA y su filete, que es lo que ya hacía el trabajo pesado. Si en
     // alguna pantalla una tarjeta deja de distinguirse, el arreglo es subirle la sombra un nivel,
     // no devolver el gris a hurtadillas.
-    public static readonly Brush Fondo = Congelado(0xFF, 0xFF, 0xFF);
+    public static readonly Brush Fondo = Desde(Marca.Fondo);
 
     /// <summary>Lo ELEVADO: tarjetas, botones, la pestaña activa. Blanco de verdad.</summary>
-    public static readonly Brush Superficie = Congelado(0xFF, 0xFF, 0xFF);
+    public static readonly Brush Superficie = Desde(Marca.Superficie);
 
     /// <summary>Un escalón por debajo de lo elevado: rellenos suaves, el carril del segmentado.</summary>
-    public static readonly Brush SuperficieSuave = Congelado(0xE4, 0xE8, 0xEF);
+    public static readonly Brush SuperficieSuave = Desde(Marca.SuperficieSuave);
 
     /// <summary>Texto principal. Casi negro con una gota de azul, para que no sea un negro plano.</summary>
-    public static readonly Brush Tinta = Congelado(0x0F, 0x15, 0x24);
+    public static readonly Brush Tinta = Desde(Marca.Tinta);
 
     /// <summary>Texto secundario.</summary>
-    public static readonly Brush TintaMedia = Congelado(0x5A, 0x64, 0x78);
+    public static readonly Brush TintaMedia = Desde(Marca.TintaMedia);
 
     /// <summary>Rótulos y metadatos. El más claro que sigue siendo legible.</summary>
-    public static readonly Brush TintaTenue = Congelado(0x7C, 0x86, 0x97);
+    public static readonly Brush TintaTenue = Desde(Marca.TintaTenue);
 
     /// <summary>Filetes de un píxel. Casi no se ven, y esa es la idea.</summary>
-    public static readonly Brush Borde = Congelado(0xE3, 0xE7, 0xEE);
+    public static readonly Brush Borde = Desde(Marca.Linea);
 
     /// <summary>
     /// El suelo de la BARRA de Ü: blanco con una gota de azul frío, no blanco puro.
@@ -85,7 +92,7 @@ public static class Estudio
     /// luminosidad. Lo que hace el trabajo de verdad es <see cref="BordeDeLaBarra"/>; esto solo
     /// impide que la pieza se funda con un fondo blanco.
     /// </remarks>
-    public static readonly Brush SuperficieDeLaBarra = Congelado(0xF7, 0xF9, 0xFD);
+    public static readonly Brush SuperficieDeLaBarra = Desde(Marca.SuperficieDeLaBarra);
 
     /// <summary>
     /// El filete de la barra: el de <see cref="Borde"/> subido hasta que se vea sobre cualquier cosa.
@@ -107,10 +114,10 @@ public static class Estudio
     /// significado»— y aquí no hay significado nuevo: el mismo azul, la luminosidad que exige el
     /// contraste sobre blanco. Si algún día cambia el azul de la marca, cambian LOS DOS.
     /// </remarks>
-    public static readonly Brush Acento = Congelado(0x2E, 0x6B, 0xE6);
+    public static readonly Brush Acento = Desde(Marca.Acento);
 
     /// <summary>El azul en su versión de fondo, para chips y estados.</summary>
-    public static readonly Brush AcentoSuave = Congelado(0xEA, 0xF1, 0xFE);
+    public static readonly Brush AcentoSuave = Desde(Marca.AcentoSuave);
 
     /// <summary>
     /// Rojo de grabación y de fallo sobre superficie clara. 5,1:1 con blanco encima.
@@ -122,9 +129,9 @@ public static class Estudio
     /// UiPalette (rojo = «se rompió» y «te estoy grabando») se hereda tal cual: aquí también se
     /// distinguen por lo que las acompaña, nunca por el color a secas.
     /// </remarks>
-    public static readonly Brush Alerta = Congelado(0xD3, 0x2F, 0x45);
+    public static readonly Brush Alerta = Desde(Marca.Alerta);
 
-    public static readonly Brush AlertaSuave = Congelado(0xFD, 0xEC, 0xEF);
+    public static readonly Brush AlertaSuave = Desde(Marca.AlertaSuave);
 
     /// <summary>
     /// Verde de «esto está entregando», sobre superficie clara. 4,6:1 con blanco encima.
@@ -142,10 +149,10 @@ public static class Estudio
     /// Lo que este verde promete es ESTRECHO: no «conectado», sino «llegó audio hace poco». La
     /// diferencia costó 56 minutos de demo el 2026-08-25 y vive en <c>Omi.Vigia</c>.
     /// </remarks>
-    public static readonly Brush Ok = Congelado(0x1B, 0x8A, 0x5A);
+    public static readonly Brush Ok = Desde(Marca.Ok);
 
     /// <summary>El verde en su versión de fondo, para chips y estados.</summary>
-    public static readonly Brush OkSuave = Congelado(0xE4, 0xF4, 0xEC);
+    public static readonly Brush OkSuave = Desde(Marca.OkSuave);
 
     /// <summary>
     /// Ámbar de «está en pie pero todavía no entrega»: enlazado esperando, o conectado y mudo.
@@ -155,10 +162,140 @@ public static class Estudio
     /// El collar recordado que aún no aparece no es un fallo — es el estado normal de los primeros
     /// segundos — y pintarlo de rojo enseñaría a ignorar el rojo.
     /// </remarks>
-    public static readonly Brush Espera = Congelado(0xB4, 0x6A, 0x0C);
+    public static readonly Brush Espera = Desde(Marca.Espera);
 
     /// <summary>El ámbar en su versión de fondo.</summary>
-    public static readonly Brush EsperaSuave = Congelado(0xFB, 0xF0, 0xDE);
+    public static readonly Brush EsperaSuave = Desde(Marca.EsperaSuave);
+
+    // ── lo que trae la web (spec 054) ────────────────────────────────────────
+
+    /// <summary>Títulos y lo que tiene que pesar (deep de la web).</summary>
+    public static readonly Brush TintaFuerte = Desde(Marca.TintaFuerte);
+
+    /// <summary>Texto de apoyo con peso (ink-soft).</summary>
+    public static readonly Brush TintaSuave = Desde(Marca.TintaSuave);
+
+    /// <summary>El filete que tiene que verse: bordes de campos y botones secundarios.</summary>
+    public static readonly Brush BordeFuerte = Desde(Marca.LineaFuerte);
+
+    /// <summary>Gris neutro: la pista de lo vacío, el borde secundario bajo el ratón.</summary>
+    public static readonly Brush Niebla = Desde(Marca.Niebla);
+
+    /// <summary>Superficie azulada suave.</summary>
+    public static readonly Brush Hielo = Desde(Marca.Hielo);
+
+    /// <summary>El fondo de lo que está bajo el ratón.</summary>
+    public static readonly Brush HieloSuave = Desde(Marca.HieloSuave);
+
+    /// <summary>El azul de un enlace o icono bajo el ratón.</summary>
+    public static readonly Brush AcentoEncima = Desde(Marca.AcentoEncima);
+
+    /// <summary>Texto azul sobre <see cref="AcentoSuave"/>.</summary>
+    public static readonly Brush AcentoTinta = Desde(Marca.AcentoTinta);
+
+    public static readonly Brush OkTinta = Desde(Marca.OkTinta);
+    public static readonly Brush EsperaTinta = Desde(Marca.EsperaTinta);
+    public static readonly Brush AlertaTinta = Desde(Marca.AlertaTinta);
+
+    /// <summary>El filete de la nota, cálido: lo que queda del papel de la web sobre el blanco de U.</summary>
+    public static readonly Brush DocLinea = Desde(Marca.DocLinea);
+
+    /// <summary>El filete entre secciones de la nota.</summary>
+    public static readonly Brush DocLineaSuave = Desde(Marca.DocLineaSuave);
+
+    /// <summary>El cuerpo de la nota.</summary>
+    public static readonly Brush DocTinta = Desde(Marca.DocTinta);
+
+    /// <summary>El rótulo de cada sección de la nota.</summary>
+    public static readonly Brush DocTenue = Desde(Marca.DocTenue);
+
+    /// <summary>
+    /// El fondo del botón primario: el degradado de arriba abajo de la web (<c>--grad-accent</c>),
+    /// con el azul un punto más claro que pidió el dueño.
+    /// </summary>
+    public static readonly Brush AcentoDegradado = Degradado(Marca.AcentoArriba, Marca.AcentoAbajo);
+
+    /// <summary>El mismo degradado al pasar el ratón: sube un punto de luz, como el hover de la web.</summary>
+    public static readonly Brush AcentoDegradadoEncima = Degradado("#4584EE", "#3470DF");
+
+    // ── letra (spec 054, promesa 445) ────────────────────────────────────────
+
+    /// <summary>Inter: toda la interfaz.</summary>
+    public static readonly FontFamily FuenteCuerpo = Familia(Marca.FuenteCuerpo);
+
+    /// <summary>Schibsted Grotesk: títulos.</summary>
+    public static readonly FontFamily FuenteTitulo = Familia(Marca.FuenteTitulo);
+
+    /// <summary>Source Serif 4: el cuerpo de la nota.</summary>
+    public static readonly FontFamily FuenteDocumento = Familia(Marca.FuenteDocumento);
+
+    /// <summary>Geist Mono: el cronómetro y los números tabulares.</summary>
+    public static readonly FontFamily FuenteMono = Familia(Marca.FuenteMono);
+
+    /// <summary>
+    /// Una familia pedida al ENSAMBLADO. La ruta base va aparte y la familia como «./#Nombre»: es la
+    /// forma que WPF documenta para fuentes empaquetadas, y la lista de respaldo que sigue a la coma
+    /// («, Segoe UI») se resuelve contra el sistema, que es lo que se quiere para los glifos sueltos.
+    /// </summary>
+    private static FontFamily Familia(string marca)
+    {
+        string resto = marca.Substring(Marca.RutaDeFuentes.Length);
+        return new FontFamily(new Uri(Marca.RutaDeFuentes), "./" + resto);
+    }
+
+    // ── iconos (spec 054, promesa 449) ───────────────────────────────────────
+
+    private static readonly Dictionary<string, Geometry> _geometrias = new();
+
+    /// <summary>
+    /// Un icono de Lucide, como lo pinta la web: trazo de 2 en su rejilla de 24, extremos y
+    /// uniones redondos, sin relleno, escalado a <paramref name="tamano"/>.
+    /// </summary>
+    /// <remarks>
+    /// EL GROSOR SE ESCALA CON EL ICONO, igual que en la web: un icono de 16 lleva un trazo de 1,33.
+    /// Por eso el Path vive dentro de un Viewbox y no se le cambia el grosor a mano.
+    /// Un nombre que no está en el catálogo es un error de programación y se dice por su nombre,
+    /// no se pinta un hueco.
+    /// </remarks>
+    public static FrameworkElement Icono(string nombre, double tamano, Brush color, double grosor = 2)
+    {
+        if (!_geometrias.TryGetValue(nombre, out var geometria))
+        {
+            if (!Iconos.Trazos.TryGetValue(nombre, out var trazo))
+                throw new ArgumentException($"no hay icono «{nombre}» en Iconos.Trazos", nameof(nombre));
+            geometria = Geometry.Parse(trazo);
+            geometria.Freeze();
+            _geometrias[nombre] = geometria;
+        }
+        var path = new System.Windows.Shapes.Path
+        {
+            Data = geometria,
+            Stroke = color,
+            StrokeThickness = grosor,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+        };
+        var lienzo = new Canvas { Width = 24, Height = 24 };
+        lienzo.Children.Add(path);
+        return new Viewbox
+        {
+            Width = tamano,
+            Height = tamano,
+            Child = lienzo,
+            SnapsToDevicePixels = true,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+    }
+
+    /// <summary>Cambia el color de un icono ya pintado (el del micrófono cambia según entra voz o no).</summary>
+    public static void Colorear(FrameworkElement icono, Brush color)
+    {
+        if (icono is Viewbox { Child: Canvas lienzo })
+            foreach (var hijo in lienzo.Children)
+                if (hijo is System.Windows.Shapes.Path p) p.Stroke = color;
+    }
 
     // ── la rampa FLOTANTE ────────────────────────────────────────────────────
     //
@@ -200,13 +337,13 @@ public static class Estudio
     // criterio: siete radios son siete decisiones que nadie tomó.
 
     /// <summary>Lo pequeño: chips, botones de icono.</summary>
-    public const double RadioChico = 10;
+    public const double RadioChico = Marca.RadioChico;
 
     /// <summary>Lo mediano: botones de texto, campos.</summary>
-    public const double RadioMedio = 14;
+    public const double RadioMedio = Marca.RadioMedio;
 
     /// <summary>Un panel.</summary>
-    public const double RadioPanel = 20;
+    public const double RadioPanel = Marca.RadioPanel;
 
     // ── sombra ───────────────────────────────────────────────────────────────
 
@@ -522,13 +659,58 @@ public static class Estudio
     // ── texto ────────────────────────────────────────────────────────────────
 
     /// <summary>Un rótulo pequeño en versalitas: encabeza secciones sin robarles protagonismo.</summary>
+    /// <remarks>
+    /// Como el de la web desde el 2026-09-26: Inter 11, seminegrita, mayúsculas CON AIRE entre
+    /// letras (<see cref="Marca.Rotulo"/>). Sin ese aire era lo primero que delataba otra app.
+    /// </remarks>
     public static TextBlock Rotulo(string texto) => new()
     {
-        Text = texto.ToUpperInvariant(),
+        Text = Marca.Rotulo(texto),
         Foreground = TintaTenue,
-        FontSize = 10,
-        FontWeight = FontWeights.Bold,
+        FontFamily = FuenteCuerpo,
+        FontSize = 11,
+        FontWeight = FontWeights.SemiBold,
         Margin = new Thickness(0, 0, 0, 7),
+    };
+
+    /// <summary>El rótulo de una sección de la NOTA: el mismo, en el gris tostado del documento.</summary>
+    public static TextBlock RotuloDeDocumento(string texto)
+    {
+        var r = Rotulo(texto);
+        r.Foreground = DocTenue;
+        r.FontSize = 11.2;
+        r.Margin = new Thickness(0);
+        return r;
+    }
+
+    /// <summary>
+    /// El cuerpo de la nota como en la web: Source Serif 4, 17 con interlineado 1,62, tinta del
+    /// documento y cifras tabulares. Es lo que hace que la nota se lea como registro y no como control.
+    /// </summary>
+    public static TextBlock Documento(string texto)
+    {
+        var t = new TextBlock
+        {
+            Text = texto,
+            Foreground = DocTinta,
+            FontFamily = FuenteDocumento,
+            FontSize = Marca.TamanoDocumento,
+            LineHeight = Marca.TamanoDocumento * Marca.InterlineadoDocumento,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        System.Windows.Documents.Typography.SetNumeralAlignment(t, FontNumeralAlignment.Tabular);
+        return t;
+    }
+
+    /// <summary>Un título de vista o de tarjeta: Schibsted Grotesk, seminegrita, la tinta fuerte.</summary>
+    public static TextBlock Titulo(string texto, double tamano = 17) => new()
+    {
+        Text = texto,
+        Foreground = TintaFuerte,
+        FontFamily = FuenteTitulo,
+        FontSize = tamano,
+        FontWeight = FontWeights.SemiBold,
+        TextWrapping = TextWrapping.Wrap,
     };
 
     /// <summary>Texto de lectura, con el interlineado holgado que pide un párrafo clínico.</summary>
@@ -536,10 +718,29 @@ public static class Estudio
     {
         Text = texto,
         Foreground = Tinta,
+        FontFamily = FuenteCuerpo,
         FontSize = tamano,
         LineHeight = tamano * 1.55,
         TextWrapping = TextWrapping.Wrap,
     };
+
+    /// <summary>Una brocha congelada desde un «#RRGGBB» de <see cref="Marca"/>.</summary>
+    private static SolidColorBrush Desde(string hex)
+    {
+        var brocha = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+        brocha.Freeze();
+        return brocha;
+    }
+
+    private static LinearGradientBrush Degradado(string arriba, string abajo)
+    {
+        var d = new LinearGradientBrush(
+            (Color)ColorConverter.ConvertFromString(arriba),
+            (Color)ColorConverter.ConvertFromString(abajo),
+            new Point(0, 0), new Point(0, 1));
+        d.Freeze();
+        return d;
+    }
 
     private static SolidColorBrush Congelado(byte r, byte g, byte b)
     {

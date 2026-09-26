@@ -879,6 +879,17 @@ internal static class Contrato
         Prueba("443. una nota firmada no se edita desde Windows: se ve, se sigue pudiendo mandar a SAP, y el editor no aparece", LaNotaFirmadaNoSeEdita);
         Prueba("444. al re-escribir una consulta que ya existe, el espejo no manda estado ni firma: lo que el portal avanzó sobrevive a una edición hecha en Windows", CorregirNoDegradaLaConsulta);
 
+        // ── MIRACLE SE VE IGUAL EN WINDOWS (spec 054, 2026-09-26) ──
+        //
+        // «Que el Notes de Windows y el de la web se entiendan como el mismo»: la misma letra, los
+        // mismos colores —con el blanco de U y un azul un poco más claro— y los mismos iconos. Los
+        // valores viven en Marca, que es puro, para que esto se juzgue sin pantalla.
+        Prueba("445. las cuatro familias de Miracle —Inter, Schibsted Grotesk, Source Serif 4 y Geist Mono— viajan DENTRO de U.exe, con cada peso que la nota usa, y Marca las pide al ensamblado y nunca a las fuentes instaladas del sistema", LasFuentesDeMiracleViajanDentro);
+        Prueba("446. los colores de Miracle Notes son los de la web —tinta, línea, estados y sus fondos, tinta del azul— con los blancos de U, y el azul es MÁS CLARO que el de la web sin bajar de 4,5:1 con texto blanco", LosColoresSonLosDeLaWeb);
+        Prueba("447. Estudio pinta con los valores de Marca: cada brocha que la nota usa es exactamente su color de Marca", ElEstudioPintaConLaMarca);
+        Prueba("448. un rótulo de sección se escribe como en la web —en mayúsculas y con espaciado entre letras— y quitar el espaciado devuelve el texto en mayúsculas sin perder ni una letra ni un espacio", ElRotuloLlevaEspaciado);
+        Prueba("449. los iconos de la nota son los de la web: el catálogo trae cada icono que la nota usa, con el trazo del SVG de Lucide convertido a instrucciones que WPF lee, y ninguno vacío", LosIconosSonLosDeLaWeb);
+
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
         // bloque —en una máquina sin WPF, las promesas puras de una spec—, y por eso aquí no se
@@ -4667,6 +4678,196 @@ internal static class Contrato
             lista.Add(Activator.CreateInstance(tPlantilla, "mia-9", "Nota abierta (Ü)",
                 "medicina_general", false)!);
         return lista;
+    }
+
+    // ── Miracle se ve igual en Windows (spec 054) ───────────────────────────
+
+    private static Type? Marca() => Capacidad("U.WindowsClient.Ui.Marca");
+
+    private static string? CampoDeTexto(Type t, string nombre) =>
+        (t.GetField(nombre, BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
+         ?? t.GetProperty(nombre, BindingFlags.Public | BindingFlags.Static)?.GetValue(null)) as string;
+
+    /// <summary>Luminancia relativa WCAG 2.x de un «#RRGGBB». Se calcula AQUÍ: el código juzgado no se juzga a sí mismo.</summary>
+    private static double Luminancia(string hex)
+    {
+        double Canal(int i)
+        {
+            double c = Convert.ToInt32(hex.Substring(i, 2), 16) / 255.0;
+            return c <= 0.03928 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * Canal(1) + 0.7152 * Canal(3) + 0.0722 * Canal(5);
+    }
+
+    private static double Contraste(string a, string b)
+    {
+        double la = Luminancia(a), lb = Luminancia(b);
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    /// <summary>Los TTF que la nota usa, uno por peso. Si falta uno, WPF sintetiza la negrita y se ve.</summary>
+    private static readonly string[] FuentesDeMiracle =
+    {
+        "inter-extralight.ttf", "inter-regular.ttf", "inter-medium.ttf", "inter-semibold.ttf", "inter-bold.ttf",
+        "schibstedgrotesk-semibold.ttf", "schibstedgrotesk-bold.ttf",
+        "sourceserif4-regular.ttf", "sourceserif4-semibold.ttf",
+        "geistmono-medium.ttf", "geistmono-semibold.ttf",
+    };
+
+    private static void LasFuentesDeMiracleViajanDentro()
+    {
+        var marca = Marca();
+        if (marca == null) { Pendiente("Ui.Marca", "445", "054"); return; }
+
+        // Los recursos de WPF viven en «U.g.resources» con la ruta en minúsculas. Se leen con el
+        // lector de recursos de .NET, sin WPF: así esto se juzga en cualquier máquina.
+        var claves = new HashSet<string>();
+        using (var flujo = Cliente.GetManifestResourceStream("U.g.resources"))
+        {
+            Debe(flujo != null, "U.exe no lleva recursos de WPF: no hay dónde buscar las fuentes");
+            if (flujo == null) return;
+            using var lector = new System.Resources.ResourceReader(flujo);
+            foreach (System.Collections.DictionaryEntry e in lector) claves.Add(((string)e.Key).Replace('\\', '/'));
+        }
+        foreach (var f in FuentesDeMiracle)
+            Debe(claves.Contains("assets/fuentes/" + f), $"falta «assets/fuentes/{f}» dentro de U.exe");
+
+        foreach (var (campo, familia) in new[] { ("FuenteCuerpo", "Inter"), ("FuenteTitulo", "Schibsted Grotesk"),
+                                                 ("FuenteDocumento", "Source Serif 4"), ("FuenteMono", "Geist Mono") })
+        {
+            string? valor = CampoDeTexto(marca, campo);
+            Debe(valor != null, $"Marca.{campo} no existe");
+            if (valor == null) continue;
+            Debe(valor.StartsWith("pack://application:,,,/U;component/assets/fuentes/", StringComparison.Ordinal),
+                $"Marca.{campo} se pide al sistema y no al ensamblado: «{valor}»");
+            Debe(valor.Contains("#" + familia, StringComparison.Ordinal),
+                $"Marca.{campo} no nombra la familia «{familia}»: «{valor}»");
+        }
+    }
+
+    private static void LosColoresSonLosDeLaWeb()
+    {
+        var marca = Marca();
+        if (marca == null) { Pendiente("Ui.Marca", "446", "054"); return; }
+
+        // Los de la web, copiados de app/globals.css (2026-09-26). Si la web cambia uno, esta tabla
+        // es la que dice que Windows se quedó atrás.
+        var deLaWeb = new (string Campo, string Hex)[]
+        {
+            ("Tinta", "#0E1726"), ("TintaFuerte", "#0C1424"), ("TintaSuave", "#44546B"), ("TintaMedia", "#5D6B80"),
+            ("Linea", "#E6EAF0"), ("LineaFuerte", "#D4DBE6"), ("Niebla", "#CBD5E1"),
+            ("Hielo", "#E7F0FE"), ("HieloSuave", "#F1F6FE"),
+            ("AcentoSuave", "#EEF4FE"), ("AcentoTinta", "#1A4FA0"),
+            ("Ok", "#13795B"), ("OkSuave", "#DCF4EA"), ("OkTinta", "#0D6249"),
+            ("Espera", "#A34A06"), ("EsperaSuave", "#FDEECF"), ("EsperaTinta", "#7C3A05"),
+            ("Alerta", "#B33224"), ("AlertaSuave", "#FBE3DF"), ("AlertaTinta", "#8F281E"),
+            ("DocTinta", "#191F28"), ("DocTenue", "#6D6A62"),
+        };
+        foreach (var (campo, hex) in deLaWeb)
+        {
+            string? valor = CampoDeTexto(marca, campo);
+            Debe(string.Equals(valor, hex, StringComparison.OrdinalIgnoreCase),
+                $"Marca.{campo} debe ser {hex} como en la web (es «{valor ?? "nada"}»)");
+        }
+
+        // Los blancos son los de U, no los de la web (#fbfcfe, papel #fdfcf9): lo pidió el dueño.
+        foreach (var (campo, hex) in new[] { ("Fondo", "#FFFFFF"), ("Superficie", "#FFFFFF"), ("SuperficieDeLaBarra", "#F7F9FD") })
+        {
+            string? valor = CampoDeTexto(marca, campo);
+            Debe(string.Equals(valor, hex, StringComparison.OrdinalIgnoreCase),
+                $"Marca.{campo} debe ser el blanco de U {hex} (es «{valor ?? "nada"}»)");
+        }
+
+        // El azul: más claro que el de la web, y todavía legible con texto blanco encima.
+        const string azulDeLaWeb = "#2F6FE0";
+        string? acento = CampoDeTexto(marca, "Acento");
+        Debe(acento != null, "Marca.Acento no existe");
+        if (acento == null) return;
+        Debe(Luminancia(acento) > Luminancia(azulDeLaWeb),
+            $"el azul {acento} no es más claro que el de la web {azulDeLaWeb}");
+        Debe(Contraste(acento, "#FFFFFF") >= 4.5,
+            $"el azul {acento} da {Contraste(acento, "#FFFFFF"):0.00}:1 con blanco: por debajo de AA");
+        foreach (var campo in new[] { "AcentoArriba", "AcentoAbajo" })
+        {
+            string? tono = CampoDeTexto(marca, campo);
+            Debe(tono != null, $"Marca.{campo} (el degradado del botón primario) no existe");
+            if (tono != null && campo == "AcentoArriba")
+                Debe(Luminancia(tono) > Luminancia(azulDeLaWeb), $"el degradado empieza en {tono}, que no es más claro que la web");
+        }
+        string? arriba = CampoDeTexto(marca, "AcentoArriba"), abajo = CampoDeTexto(marca, "AcentoAbajo");
+        if (arriba != null && abajo != null)
+            Debe((Contraste(arriba, "#FFFFFF") + Contraste(abajo, "#FFFFFF")) / 2 >= 4.5,
+                "el texto blanco sobre el degradado del botón queda por debajo de AA en promedio");
+    }
+
+    private static void ElEstudioPintaConLaMarca()
+    {
+        // ESTA SOLO CORRE EN WINDOWS: toca brochas de WPF. En una máquina sin WPF cae con
+        // FileNotFound de PresentationCore, que no es un veredicto sobre la marca.
+        var marca = Marca();
+        if (marca == null) { Pendiente("Ui.Marca", "447", "054"); return; }
+        var estudio = Capacidad("U.WindowsClient.Ui.Estudio");
+        Debe(estudio != null, "no existe Ui.Estudio");
+        if (estudio == null) return;
+
+        foreach (var (brocha, campo) in new[]
+                 {
+                     ("Fondo", "Fondo"), ("Superficie", "Superficie"), ("SuperficieDeLaBarra", "SuperficieDeLaBarra"),
+                     ("Tinta", "Tinta"), ("TintaMedia", "TintaMedia"), ("Borde", "Linea"),
+                     ("Acento", "Acento"), ("AcentoSuave", "AcentoSuave"),
+                     ("Alerta", "Alerta"), ("AlertaSuave", "AlertaSuave"),
+                     ("Ok", "Ok"), ("OkSuave", "OkSuave"), ("Espera", "Espera"), ("EsperaSuave", "EsperaSuave"),
+                 })
+        {
+            var b = estudio.GetField(brocha, BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
+                    as System.Windows.Media.SolidColorBrush;
+            string? hex = CampoDeTexto(marca, campo);
+            Debe(b != null && hex != null, $"Estudio.{brocha} o Marca.{campo} no existen");
+            if (b == null || hex == null) continue;
+            string pintado = $"#{b.Color.R:X2}{b.Color.G:X2}{b.Color.B:X2}";
+            Debe(string.Equals(pintado, hex, StringComparison.OrdinalIgnoreCase),
+                $"Estudio.{brocha} pinta {pintado} y Marca.{campo} dice {hex}");
+        }
+    }
+
+    private static void ElRotuloLlevaEspaciado()
+    {
+        var marca = Marca();
+        var rotulo = marca?.GetMethod("Rotulo", BindingFlags.Public | BindingFlags.Static, new[] { typeof(string) });
+        if (rotulo == null) { Pendiente("Ui.Marca.Rotulo", "448", "054"); return; }
+
+        string salida = (string)rotulo.Invoke(null, new object[] { "Plan y recomendaciones" })!;
+        Debe(salida.Contains('\u200A'), $"el rótulo no lleva espaciado entre letras: «{salida}»");
+        Debe(salida.Replace("\u200A", "") == "PLAN Y RECOMENDACIONES",
+            $"quitar el espaciado no devuelve el texto en mayúsculas: «{salida.Replace("\u200A", "·")}»");
+        Debe(!salida.StartsWith('\u200A') && !salida.EndsWith('\u200A'), "el espaciado no puede sobrar por los bordes");
+        Debe((string)rotulo.Invoke(null, new object[] { "" })! == "", "un rótulo vacío sale vacío");
+    }
+
+    /// <summary>Los iconos que la nota pinta. Nombres de Lucide, los mismos que importa la web.</summary>
+    private static readonly string[] IconosDeLaNota =
+    {
+        "mic", "square", "pause", "play", "sparkles", "send", "clipboard-copy", "copy", "check", "circle-check",
+        "triangle-alert", "circle-alert", "lightbulb", "chevron-down", "x", "minus", "zap", "file-text",
+        "layout-template", "user-round", "user-plus", "search", "refresh-cw", "save", "star", "external-link",
+        "info", "loader-circle", "log-out", "plus", "pencil", "bluetooth", "smartphone", "laptop",
+    };
+
+    private static void LosIconosSonLosDeLaWeb()
+    {
+        var iconos = Capacidad("U.WindowsClient.Ui.Iconos");
+        var trazos = iconos?.GetField("Trazos", BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
+                     ?? iconos?.GetProperty("Trazos", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        if (trazos is not IReadOnlyDictionary<string, string> catalogo) { Pendiente("Ui.Iconos.Trazos", "449", "054"); return; }
+
+        var gramatica = new System.Text.RegularExpressions.Regex(@"^M[\sMmLlHhVvCcSsQqTtAaZz0-9.eE+-]*$");
+        foreach (var nombre in IconosDeLaNota)
+        {
+            Debe(catalogo.TryGetValue(nombre, out var trazo), $"falta el icono «{nombre}»");
+            if (trazo == null) continue;
+            Debe(trazo.Trim().Length > 0, $"el icono «{nombre}» está vacío");
+            Debe(gramatica.IsMatch(trazo.Trim()), $"el trazo de «{nombre}» no es un trazo que WPF lea: «{trazo}»");
+        }
     }
 
     private static void LaPlantillaSaleDeUnaCadenaConOrden()

@@ -98,6 +98,11 @@
          activar el micrÃ³fono con doble clic. Van embebidos como recurso WPF y se cargan por stream. -->
     <Resource Include="assets\tick.wav" />
     <Resource Include="assets\mic_chime.wav" />
+    <!-- LA LETRA DE MIRACLE (spec 054, promesa 445): instancias estáticas por peso, recortadas a
+         latín, de Inter, Schibsted Grotesk, Source Serif 4 y Geist Mono (OFL; la licencia va al
+         lado). Dentro del ensamblado y no instaladas: un médico no tiene Inter, y una familia que
+         no existe cae a Segoe UI sin avisar. -->
+    <Resource Include="assets\fuentes\*.ttf" />
   </ItemGroup>
 
   <ItemGroup>
