@@ -920,6 +920,10 @@ internal static class Contrato
         Prueba("469. guardar un borrador escribe en encounter_section_drafts con upsert por encounter_id,section_key, sin user_id ni doctor_id; vaciarlo borra su fila; y un fallo de red devuelve «no guardado» sin lanzar", ElBorradorSeGuardaComoEnLaWeb);
         Prueba("470. al terminar de grabar, lo que viaja a /transcript es lo dicho MÁS el bloque de lo escrito; y si no se dijo nada pero sí se escribió, la nota se genera igual", LoEscritoViajaConLoDicho);
         Prueba("471. las secciones salen del template_snapshot congelado del encounter, en su orden; y al combinar la copia local con la de la nube, gana la local sección por sección y la nube llena lo que falta", LosBorradoresSeCombinanComoEnLaWeb);
+        // Spec 058: plan y egreso se ven y se corrigen en U (2026-09-26).
+        Prueba("472. el plan y el egreso se leen de la nota como en la web: las mismas listas, vacías cuando faltan o no son listas, con los mismos medicamentos, textos y urgencias", ElEgresoSeLeeComoEnLaWeb);
+        Prueba("473. corregir un campo del plan cambia SOLO ese campo: la vía sobrevive a corregir la dosis, la duración a corregir la frecuencia, la evidencia y el resto de la nota viajan igual, y concentración y cantidad se guardan como campos propios", CorregirElPlanNoBorraElVecino);
+        Prueba("474. con el plan, el seguimiento, las recomendaciones y los signos de alarma llenos desde U, la revisión deja de decir que falta el cierre", ElCierreLlenoCallaElAviso);
 
         Console.WriteLine();
         // UN JUICIO PARCIAL NO ES UN VEREDICTO (2026-09-26). Con U_CONTRATO_SOLO se juzga solo un
@@ -5457,6 +5461,144 @@ internal static class Contrato
         Debe((string?)r["examen"] == "Local: alerta.", "la copia local gana: es lo que pudo no haber alcanzado a subir");
         Debe((string?)r["plan"] == "Control en 8 días", "una sección local vacía no borra lo que hay en la nube");
         Debe((string?)r["motivo"] == "Cefalea" && r.Count == 3, "lo que solo está en la nube se conserva");
+    }
+
+    // ── spec 058 ──────────────────────────────────────────────────────────────
+
+    private static object NotaDesde(string json)
+    {
+        using var d = JsonDocument.Parse(json);
+        return Clin("NotaClinica")!.GetMethod("Leer")!.Invoke(null, new object?[] { d.RootElement.Clone() })!;
+    }
+
+    private static JsonElement CrudoDe(object nota) => (JsonElement)Leer(nota, "Crudo")!;
+
+    private static void ElEgresoSeLeeComoEnLaWeb()
+    {
+        var leer = Clin("EgresoDeLaNota")?.GetMethod("Leer");
+        if (leer == null) { Pendiente("Clinical.EgresoDeLaNota.Leer", "472", "058"); return; }
+        var casos = Vectores("egresos");
+        if (casos == null) return;
+
+        foreach (var caso in casos.Value.EnumerateArray())
+        {
+            var e = caso.GetProperty("entrada");
+            var w = caso.GetProperty("salida");
+            string notaJson = e.ValueKind == JsonValueKind.String && e.GetString() == "__ausente__"
+                ? "{\"summary\":\"\",\"sections\":[]}"
+                : "{\"summary\":\"\",\"sections\":[],\"discharge\":" + e.GetRawText() + "}";
+            using var d = JsonDocument.Parse(notaJson);
+            var eg = leer.Invoke(null, new object?[] { d.RootElement })!;
+
+            var meds = ((System.Collections.IEnumerable)Leer(eg, "Medicamentos")!).Cast<object>().ToList();
+            var wMeds = w.GetProperty("plan").GetProperty("medications").EnumerateArray().ToList();
+            string caso1 = e.GetRawText();
+            caso1 = caso1.Length > 60 ? caso1[..60] + "…" : caso1;
+            Debe(meds.Count == wMeds.Count, $"medicamentos de {caso1}: Windows {meds.Count}, la web {wMeds.Count}");
+            for (int i = 0; i < Math.Min(meds.Count, wMeds.Count); i++)
+                Debe((string?)Leer(meds[i], "Nombre") == (Cad(wMeds[i], "name") ?? "")
+                     && (string?)Leer(meds[i], "Dosis") == (Cad(wMeds[i], "dose") ?? "")
+                     && (string?)Leer(meds[i], "Via") == (Cad(wMeds[i], "route") ?? "")
+                     && (string?)Leer(meds[i], "Duracion") == (Cad(wMeds[i], "duration") ?? ""),
+                    $"el medicamento {i} de {caso1} no se lee como en la web");
+
+            string Textos(string prop) => string.Join("|", ((System.Collections.IEnumerable)Leer(eg, prop)!).Cast<object>().Select(x => x as string ?? (string?)Leer(x, "Texto")));
+            string TextosW(JsonElement arr) => string.Join("|", arr.EnumerateArray().Select(x => Cad(x, "text")));
+            Debe(Textos("NoFarmacologicas") == TextosW(w.GetProperty("plan").GetProperty("non_pharmacological")), $"medidas no farmacológicas de {caso1}");
+            Debe(Textos("Seguimiento") == TextosW(w.GetProperty("plan").GetProperty("follow_up")), $"seguimiento de {caso1}");
+            Debe(Textos("Recomendaciones") == TextosW(w.GetProperty("recommendations")), $"recomendaciones de {caso1}");
+            Debe(Textos("SignosDeAlarma") == TextosW(w.GetProperty("alarm_signs")), $"signos de alarma de {caso1}");
+            var alarmas = ((System.Collections.IEnumerable)Leer(eg, "SignosDeAlarma")!).Cast<object>().ToList();
+            var wAlarmas = w.GetProperty("alarm_signs").EnumerateArray().ToList();
+            for (int i = 0; i < Math.Min(alarmas.Count, wAlarmas.Count); i++)
+                Debe((string?)Leer(alarmas[i], "Urgencia") == (Cad(wAlarmas[i], "urgency") ?? ""), $"la urgencia del signo {i} de {caso1}");
+        }
+    }
+
+    private static void CorregirElPlanNoBorraElVecino()
+    {
+        var t = Clin("EgresoDeLaNota");
+        var cambiar = t?.GetMethod("CambiarMedicamento");
+        var agregarItem = t?.GetMethod("AgregarItem");
+        var cambiarItem = t?.GetMethod("CambiarItem");
+        var agregarMed = t?.GetMethod("AgregarMedicamento");
+        var quitarMed = t?.GetMethod("QuitarMedicamento");
+        if (cambiar == null || agregarItem == null || cambiarItem == null || agregarMed == null || quitarMed == null)
+        { Pendiente("Clinical.EgresoDeLaNota (CambiarMedicamento, AgregarMedicamento, QuitarMedicamento, CambiarItem, AgregarItem)", "473", "058"); return; }
+
+        var nota = NotaDesde("{\"summary\":\"Resumen\",\"sections\":[{\"key\":\"motivo\",\"label\":\"Motivo\",\"content\":\"Dolor\",\"confidence\":0.9}],"
+            + "\"discharge\":{\"plan\":{\"medications\":[{\"name\":\"Acetaminofén\",\"dose\":\"500 mg\",\"route\":\"VO\",\"frequency\":\"cada 8 horas\",\"duration\":\"3 días\",\"instructions\":\"\",\"evidence\":\"le doy acetaminofén\"}],"
+            + "\"non_pharmacological\":[],\"follow_up\":[{\"text\":\"Control en 8 días\"}]},\"recommendations\":[],"
+            + "\"alarm_signs\":[{\"text\":\"Fiebre\",\"urgency\":\"priority\",\"evidence\":\"si le da fiebre\"}]},"
+            + "\"warnings\":[],\"missing_required_sections\":[],\"campo_futuro\":{\"x\":1}}");
+
+        var n1 = cambiar.Invoke(null, new object?[] { nota, 0, "dose", "1 g" })!;
+        var med = CrudoDe(n1).GetProperty("discharge").GetProperty("plan").GetProperty("medications")[0];
+        Debe(Cad(med, "dose") == "1 g", "la dosis corregida queda escrita");
+        Debe(Cad(med, "route") == "VO", "LA VÍA SOBREVIVE a corregir la dosis (en la web se borraba)");
+        Debe(Cad(med, "evidence") == "le doy acetaminofén", "la evidencia del medicamento viaja igual");
+
+        var n2 = cambiar.Invoke(null, new object?[] { n1, 0, "frequency", "cada 6 horas" })!;
+        med = CrudoDe(n2).GetProperty("discharge").GetProperty("plan").GetProperty("medications")[0];
+        Debe(Cad(med, "frequency") == "cada 6 horas" && Cad(med, "duration") == "3 días",
+            "LA DURACIÓN SOBREVIVE a corregir la frecuencia (en la web se borraba)");
+
+        var n3 = cambiar.Invoke(null, new object?[] { n2, 0, "concentration", "500 mg/tableta" })!;
+        var n4 = cambiar.Invoke(null, new object?[] { n3, 0, "quantity", "12 tabletas" })!;
+        med = CrudoDe(n4).GetProperty("discharge").GetProperty("plan").GetProperty("medications")[0];
+        Debe(Cad(med, "concentration") == "500 mg/tableta" && Cad(med, "quantity") == "12 tabletas",
+            "concentración y cantidad se guardan como campos propios del medicamento");
+        var n5 = cambiar.Invoke(null, new object?[] { n4, 0, "user_id", "x" })!;
+        Debe(!CrudoDe(n5).GetProperty("discharge").GetProperty("plan").GetProperty("medications")[0].TryGetProperty("user_id", out _),
+            "un campo que no es del medicamento no se escribe");
+
+        var raiz = CrudoDe(n4);
+        Debe(raiz.TryGetProperty("campo_futuro", out _) && Cad(raiz, "summary") == "Resumen"
+             && raiz.GetProperty("sections")[0].GetProperty("confidence").GetDouble() == 0.9,
+            "el resto de la nota —resumen, secciones con su confianza, campos que U no entiende— viaja igual");
+
+        var n6 = cambiarItem.Invoke(null, new object?[] { n4, "alarm_signs", 0, "Fiebre mayor de 38,5" })!;
+        var alarma = CrudoDe(n6).GetProperty("discharge").GetProperty("alarm_signs")[0];
+        Debe(Cad(alarma, "text") == "Fiebre mayor de 38,5" && Cad(alarma, "urgency") == "priority" && Cad(alarma, "evidence") == "si le da fiebre",
+            "corregir el texto de un signo de alarma conserva su urgencia y su evidencia");
+
+        var n7 = quitarMed.Invoke(null, new object?[] { agregarMed.Invoke(null, new object?[] { n6 })!, 1 })!;
+        Debe(CrudoDe(n7).GetProperty("discharge").GetProperty("plan").GetProperty("medications").GetArrayLength() == 1,
+            "agregar y quitar un medicamento deja la lista como estaba");
+
+        var sinCierre = NotaDesde("{\"summary\":\"s\",\"sections\":[],\"warnings\":[],\"missing_required_sections\":[]}");
+        var n8 = agregarItem.Invoke(null, new object?[] { sinCierre, "follow_up", "Control en un mes" })!;
+        var dis = CrudoDe(n8).GetProperty("discharge");
+        Debe(dis.GetProperty("plan").GetProperty("follow_up")[0].GetProperty("text").GetString() == "Control en un mes"
+             && dis.GetProperty("plan").GetProperty("medications").ValueKind == JsonValueKind.Array
+             && dis.GetProperty("alarm_signs").ValueKind == JsonValueKind.Array
+             && dis.GetProperty("recommendations").ValueKind == JsonValueKind.Array,
+            "sin cierre previo, añadir crea el cierre ENTERO con todas sus listas, como ensureClinicalDischarge");
+    }
+
+    private static void ElCierreLlenoCallaElAviso()
+    {
+        var t = Clin("EgresoDeLaNota");
+        var revisar = Clin("RevisionDeLaNota")?.GetMethod("Revisar");
+        if (t?.GetMethod("AgregarItem") == null || t.GetMethod("AgregarMedicamento") == null || t.GetMethod("CambiarMedicamento") == null || revisar == null)
+        { Pendiente("Clinical.EgresoDeLaNota (AgregarMedicamento, CambiarMedicamento, AgregarItem)", "474", "058"); return; }
+
+        bool FaltaCierre(object nota)
+        {
+            var r = revisar.Invoke(null, new object?[] { CrudoDe(nota), default(JsonElement), "" })!;
+            return ((System.Collections.IEnumerable)Leer(r, "Hallazgos")!).Cast<object>().Any(h => (string?)Leer(h, "Clave") == "cierre-incompleto");
+        }
+
+        var nota = NotaDesde("{\"summary\":\"Paciente estable.\",\"sections\":[{\"key\":\"motivo\",\"label\":\"Motivo\",\"content\":\"Cefalea\",\"confidence\":0.9}],\"warnings\":[],\"missing_required_sections\":[]}");
+        Debe(FaltaCierre(nota), "una nota sin plan ni alarma tiene que decir que falta el cierre (si no, esta promesa no prueba nada)");
+
+        var n = t.GetMethod("AgregarMedicamento")!.Invoke(null, new object?[] { nota })!;
+        n = t.GetMethod("CambiarMedicamento")!.Invoke(null, new object?[] { n, 0, "name", "Ibuprofeno" })!;
+        n = t.GetMethod("AgregarItem")!.Invoke(null, new object?[] { n, "follow_up", "Control en 8 días" })!;
+        n = t.GetMethod("AgregarItem")!.Invoke(null, new object?[] { n, "alarm_signs", "Pérdida de fuerza" })!;
+        Debe(FaltaCierre(n), "sin recomendaciones el cierre sigue incompleto, como en la web");
+        n = t.GetMethod("AgregarItem")!.Invoke(null, new object?[] { n, "recommendations", "Hidratación abundante" })!;
+        Debe(!FaltaCierre(n), "llenado el cierre desde U, la revisión deja de pedirlo");
     }
 
     private static void LosAtajosSeOrdenanComoEnLaWeb()

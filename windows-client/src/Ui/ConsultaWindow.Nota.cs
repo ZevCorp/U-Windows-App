@@ -646,25 +646,7 @@ public sealed partial class ConsultaWindow
         if (_propuesta == null) return;
         var nota = _propuesta.Nota;
         Estado("Guardando el ajuste…");
-        bool ok;
-        if (_abiertaId.Length > 0)
-        {
-            try
-            {
-                var guardada = await _clinica.GuardarNotaEditadaAsync(_abiertaId, nota);
-                _abiertaNota = guardada;
-                _notaEnPantalla = guardada;
-                await EspejoDeConsulta.EscribirAsync(_sesion, _http, EspejoDeConsulta.FilaDeCorreccion(_abiertaId, guardada));
-                ok = true;
-            }
-            catch (ErrorClinico e) { Estado(e.Message); ok = false; }
-            catch (Exception e) { Estado($"No se pudo guardar el ajuste: {e.Message}"); ok = false; }
-        }
-        else
-        {
-            ok = await _consulta.GuardarNotaAsync(nota);
-            if (!ok) Estado(_consulta.Motivo);
-        }
+        bool ok = await GuardarNotaEnteraAsync(nota);
         if (!ok) return;   // la propuesta se queda: nada de lo que el médico aprobó se pierde
         _propuesta = null;
         RepintarLaNota();

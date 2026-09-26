@@ -2636,6 +2636,8 @@ public sealed partial class ConsultaWindow : Window
         };
         _nota.Children.Add(Estudio.Elevar(papel, Estudio.Sombra2));
 
+        // EL PLAN Y EL EGRESO bajo el papel (spec 058): lo que el paciente se lleva.
+        _nota.Children.Add(PlanYEgreso(nota, editable));
         if (conTexto.Count > 1 && MostrarElEnvioASap()) _nota.Children.Add(BotonTodoASap(conTexto));
         // LA TARJETA «AVISOS» SE VA: los avisos del backend (note_json.warnings) ya entran en el panel
         // de revisión de arriba, como en la web, con su severidad y en su orden.
